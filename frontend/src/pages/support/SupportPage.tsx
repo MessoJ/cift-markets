@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-solid';
-import { apiClient, SupportTicket, FAQItem } from '../../lib/api/client';
+import { apiClient } from '../../lib/api/client';
+import type { SupportTicket, FAQItem } from '../../lib/api/client';
 
 type TabType = 'faq' | 'tickets' | 'contact';
 
