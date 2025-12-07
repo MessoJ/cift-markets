@@ -1,0 +1,159 @@
+# syntax=docker/dockerfile:1.4
+# CIFT Markets - Production Dockerfile with Rust Caching
+# Uses multi-stage builds with aggressive caching to avoid rebuilding Rust
+
+ARG PYTHON_VERSION=3.11
+
+# ============================================================================
+# Stage 1: Rust Dependencies (Cached Separately)
+# This stage ONLY builds Rust deps - rarely changes
+# ============================================================================
+FROM rust:1.75-slim AS rust-deps
+
+WORKDIR /rust
+
+# Install build deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-dev \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy ONLY Cargo files for dependency caching
+COPY rust_core/Cargo.toml rust_core/Cargo.lock* ./
+
+# Create dummy lib.rs to compile dependencies
+RUN mkdir -p src && \
+    echo '#![allow(unused)] pub fn dummy() {}' > src/lib.rs
+
+# Build ONLY dependencies (cached unless Cargo.toml changes)
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/rust/target,id=rust-target \
+    cargo build --release --lib 2>/dev/null || true && \
+    rm -rf src
+
+# ============================================================================
+# Stage 2: Rust Build (Uses cached deps)
+# ============================================================================
+FROM rust-deps AS rust-builder
+
+# Copy actual Rust source
+COPY rust_core/src ./src/
+COPY rust_core/Cargo.toml rust_core/Cargo.lock* ./
+
+# Build with cached dependencies
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/rust/target,id=rust-target \
+    cargo build --release --lib && \
+    mkdir -p /out && \
+    cp target/release/libcift_core.so /out/ 2>/dev/null || \
+    cp target/release/*.rlib /out/ 2>/dev/null || \
+    echo "Rust library built"
+
+# ============================================================================
+# Stage 3: Python Dependencies (Cached Separately)
+# ============================================================================
+FROM python:${PYTHON_VERSION}-slim AS python-deps
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust for maturin (PyO3 bindings)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Create venv
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel maturin
+
+# Copy ONLY dependency files
+WORKDIR /build
+COPY pyproject.toml README.md ./
+RUN mkdir -p cift && touch cift/__init__.py
+
+# Install Python dependencies (cached until pyproject.toml changes)
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache \
+    pip install -e .
+
+# ============================================================================
+# Stage 4: Build PyO3 Wheels (Combines Rust + Python)
+# ============================================================================
+FROM python-deps AS pyo3-builder
+
+# Copy Rust source for PyO3
+COPY rust_core/ /build/rust_core/
+
+# Build maturin wheel with caching
+WORKDIR /build/rust_core
+RUN --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/build/rust_core/target,id=maturin-target \
+    if [ -f "Cargo.toml" ] && grep -q "pyo3" Cargo.toml 2>/dev/null; then \
+        maturin build --release -o /wheels && \
+        pip install /wheels/*.whl; \
+    else \
+        echo "No PyO3 bindings to build"; \
+    fi
+
+# ============================================================================
+# Stage 5: Final Application
+# ============================================================================
+FROM python-deps AS app-builder
+
+# Copy PyO3 wheels if they exist
+COPY --from=pyo3-builder /wheels/*.whl /wheels/ 2>/dev/null || true
+RUN pip install /wheels/*.whl 2>/dev/null || true
+
+# Copy application code
+WORKDIR /build
+COPY cift/ ./cift/
+
+# Compile Python bytecode
+RUN python -m compileall -q cift/
+
+# ============================================================================
+# Stage 6: Production Runtime (Minimal)
+# ============================================================================
+FROM python:${PYTHON_VERSION}-slim AS runtime
+
+# Runtime deps only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    ca-certificates \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -g 1000 cift && \
+    useradd -r -u 1000 -g cift -m -d /app cift && \
+    mkdir -p /app/logs && chown -R cift:cift /app
+
+# Copy venv from builder
+COPY --from=app-builder --chown=cift:cift /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+# Copy app
+COPY --from=app-builder --chown=cift:cift /build/cift ./cift
+COPY --from=app-builder --chown=cift:cift /build/pyproject.toml /build/README.md ./
+
+USER cift
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["uvicorn", "cift.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

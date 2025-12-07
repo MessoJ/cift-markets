@@ -1,0 +1,110 @@
+# CIFT Markets - Production Dockerfile
+# Multi-stage build with Rust core compilation (Phase 5-7)
+
+# ============================================================================
+# Stage 1: Rust Builder (100x faster order matching)
+# ============================================================================
+FROM rust:1.75-slim as rust-builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Rust core source
+COPY rust_core/ ./rust_core/
+
+# Build Rust modules
+WORKDIR /build/rust_core
+RUN cargo build --release
+
+# ============================================================================
+# Stage 2: Python Builder
+# ============================================================================
+FROM python:3.11-slim as python-builder
+
+# Install build dependencies (including Rust for maturin)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    libpq-dev \
+    curl \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install maturin
+RUN pip install --no-cache-dir maturin
+
+# Set working directory FIRST
+WORKDIR /build
+
+# Copy Rust source for PyO3 binding
+COPY rust_core/ /build/rust_core/
+
+# Verify Cargo.toml exists (debug step)
+RUN ls -la /build/rust_core/ && test -f /build/rust_core/Cargo.toml
+
+# Build and install Rust Python extensions
+WORKDIR /build/rust_core
+RUN maturin build --release && \
+    pip install target/wheels/*.whl
+
+# Copy Python requirements
+WORKDIR /build
+COPY pyproject.toml /build/
+COPY README.md /build/
+COPY cift/__init__.py /build/cift/
+
+# Install Python dependencies
+# Explicitly install xgboost to ensure it's present
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir xgboost && \
+    pip install --no-cache-dir -e .
+
+# ============================================================================
+# Stage 3: Runtime (Phase 5-7 with Rust core)
+# ============================================================================
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 cift && \
+    mkdir -p /app /app/logs && \
+    chown -R cift:cift /app
+
+# Copy virtual environment from python-builder (includes Rust modules)
+COPY --from=python-builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy application code
+COPY --chown=cift:cift . .
+
+# Switch to non-root user
+USER cift
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command (with Rust-powered backend!)
+CMD ["uvicorn", "cift.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

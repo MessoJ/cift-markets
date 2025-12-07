@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation (keep README.md for build)
+# *.md  # Commented out - README.md needed for pyproject.toml
+docs/
+archive/
+
+# Logs
+logs/
+*.log
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# Rust build artifacts (will be built in Docker)
+rust_core/target/
+rust_core/.cargo/
+*.rlib
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Config templates
+.env.example
+*.example
+
+# Temporary files
+tmp/
+temp/
+*.tmp

@@ -1,0 +1,342 @@
+version: '3.8'
+
+services:
+  # QuestDB - High-performance time-series database
+  questdb:
+    image: questdb/questdb:7.3.4
+    container_name: cift-questdb
+    ports:
+      - "9000:9000"    # Web console
+      - "9009:9009"    # InfluxDB line protocol
+      - "8812:8812"    # PostgreSQL wire protocol
+      - "9003:9003"    # Health check
+    volumes:
+      - questdb-data:/var/lib/questdb
+    environment:
+      - QDB_CAIRO_MAX_UNCOMMITTED_ROWS=1000000
+      - QDB_SHARED_WORKER_COUNT=4
+      - QDB_LINE_TCP_MAINTENANCE_JOB_INTERVAL=30000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9003/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+  # PostgreSQL - Relational database for user data, configs
+  postgres:
+    image: postgres:16-alpine
+    container_name: cift-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_DB=cift_markets
+      - POSTGRES_USER=cift_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme123}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cift_user -d cift_markets"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+  # Dragonfly - 25x faster than Redis
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: cift-dragonfly
+    ports:
+      - "6379:6379"
+    volumes:
+      - dragonfly-data:/data
+    command: >
+      dragonfly
+      --logtostderr
+      --maxmemory=4gb
+      --cache_mode=true
+      --proactor_threads=4
+      --dbfilename=dump
+      --dir=/data
+      --snapshot_cron="0 */6 * * *"
+      --nodf_snapshot_format
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cift-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  # NATS JetStream - 5-10x lower latency than Kafka
+  nats:
+    image: nats:2.10-alpine
+    container_name: cift-nats
+    ports:
+      - "4222:4222"    # Client connections
+      - "8222:8222"    # HTTP management
+      - "6222:6222"    # Cluster routing
+    volumes:
+      - nats-data:/data
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+      - "-m"
+      - "8222"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cift-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # ClickHouse - 100x faster analytics (Phase 5-7)
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.12-alpine
+    container_name: cift-clickhouse
+    ports:
+      - "8123:8123"    # HTTP interface
+      - "9001:9000"    # Native protocol (QuestDB uses 9000, we use 9001)
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./database/clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - CLICKHOUSE_DB=cift_analytics
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cift-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: cift-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: cift-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+  # Jaeger - Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: cift-jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"  # Web UI
+      - "14268:14268"  # Collector
+      - "14250:14250"  # gRPC
+      - "9411:9411"    # Zipkin compatible
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:14269/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+  # MLflow - ML experiment tracking
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.8.1
+    container_name: cift-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    command: mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --host 0.0.0.0 --port 5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+  # CIFT API - FastAPI application (Phase 1+)
+  # Use Dockerfile.dev for fast builds (no Rust) or Dockerfile.prod for optimized production
+  api:
+    build:
+      context: .
+      dockerfile: ${API_DOCKERFILE:-Dockerfile.dev}
+      # Enable BuildKit caching for faster rebuilds
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: cift-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cift:/app/cift
+      - ./logs:/app/logs
+      - ./scripts:/app/scripts
+    environment:
+      - APP_ENV=development
+      - APP_DEBUG=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=cift_markets
+      - POSTGRES_USER=cift_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme123}
+      - QUESTDB_HOST=questdb
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - DRAGONFLY_HOST=dragonfly
+      - REDIS_HOST=dragonfly
+      - NATS_URL=nats://nats:4222
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - POLYGON_API_KEY=${POLYGON_API_KEY:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-to-a-random-secret-key-min-32-chars-jwt}
+      - SECRET_KEY=${SECRET_KEY:-change-this-to-a-random-secret-key-min-32-chars-app}
+      # News API Keys
+      - NEWSAPI_KEY=${NEWSAPI_KEY:-}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY:-}
+    depends_on:
+      - postgres
+      - questdb
+      - clickhouse
+      - dragonfly
+      - nats
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - cift-network
+    command: uvicorn cift.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend - SolidJS Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api/v1
+        - VITE_WS_URL=/api/v1/ws
+    container_name: cift-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - cift-network
+
+volumes:
+  questdb-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  clickhouse-logs:
+    driver: local
+  postgres-data:
+    driver: local
+  dragonfly-data:
+    driver: local
+  nats-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  mlflow-data:
+    driver: local
+
+networks:
+  cift-network:
+    driver: bridge
+    name: cift-network
