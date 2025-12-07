@@ -1,0 +1,6 @@
+{
+  "note": "This file will be populated with simplified GeoJSON country boundaries",
+  "source": "Natural Earth Data - simplified for web performance",
+  "license": "Public Domain",
+  "countries": []
+}

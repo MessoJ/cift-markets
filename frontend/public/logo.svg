@@ -1,0 +1,54 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Modern C with integrated chart lines -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main C Letter -->
+  <path d="M 140 40 
+           C 160 40, 180 60, 180 80
+           L 180 120
+           C 180 140, 160 160, 140 160
+           L 80 160
+           C 60 160, 40 140, 40 120
+           L 40 80
+           C 40 60, 60 40, 80 40
+           L 120 40
+           L 120 60
+           L 80 60
+           C 70 60, 60 70, 60 80
+           L 60 120
+           C 60 130, 70 140, 80 140
+           L 140 140
+           C 150 140, 160 130, 160 120
+           L 160 80
+           C 160 70, 150 60, 140 60
+           L 140 40 Z" 
+        fill="#3b82f6" 
+        stroke="none"/>
+  
+  <!-- Integrated Chart Lines (Trading Pattern) -->
+  <polyline points="75,95 85,85 95,90 105,75 115,80 125,70" 
+            stroke="#22c55e" 
+            stroke-width="3" 
+            fill="none" 
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+  
+  <polyline points="75,110 85,120 95,115 105,130 115,125 125,135" 
+            stroke="#ef4444" 
+            stroke-width="3" 
+            fill="none" 
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            opacity="0.6"/>
+  
+  <!-- Accent Dots (Data Points) -->
+  <circle cx="75" cy="95" r="2.5" fill="#22c55e"/>
+  <circle cx="95" cy="90" r="2.5" fill="#22c55e"/>
+  <circle cx="115" cy="80" r="2.5" fill="#22c55e"/>
+  <circle cx="125" cy="70" r="2.5" fill="#22c55e"/>
+</svg>

@@ -1,0 +1,43 @@
+# CIFT Markets - Fast Development Dockerfile
+# Optimized for quick rebuilds (no Rust compilation)
+
+FROM python:3.11-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 cift && \
+    mkdir -p /app /app/logs && \
+    chown -R cift:cift /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy only dependency files first (layer caching)
+COPY pyproject.toml README.md ./
+RUN mkdir -p cift && touch cift/__init__.py
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e .
+
+# Copy application code (this layer changes most often)
+COPY --chown=cift:cift cift/ ./cift/
+
+# Switch to non-root user
+USER cift
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Development command with hot-reload
+CMD ["uvicorn", "cift.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
