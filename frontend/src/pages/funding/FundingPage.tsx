@@ -18,7 +18,7 @@ import {
   Landmark,
   FileText
 } from 'lucide-solid';
-import { apiClient, FundingTransaction, PaymentMethod, TransferLimit } from '../../lib/api/client';
+import { apiClient, FundingTransaction, PaymentMethod, TransferLimit, PortfolioSummary } from '../../lib/api/client';
 import { formatCurrency } from '../../lib/utils';
 import { DepositTab } from './tabs/DepositTab';
 import { WithdrawTab } from './tabs/WithdrawTab';
@@ -68,7 +68,7 @@ export default function FundingPage() {
   const [transactions, setTransactions] = createSignal<FundingTransaction[]>([]);
   const [paymentMethods, setPaymentMethods] = createSignal<PaymentMethod[]>([]);
   const [limits, setLimits] = createSignal<TransferLimit | null>(null);
-  const [portfolio, setPortfolio] = createSignal<any>(null);
+  const [portfolio, setPortfolio] = createSignal<PortfolioSummary | null>(null);
 
   createEffect(() => {
     loadData();
@@ -117,10 +117,10 @@ export default function FundingPage() {
   };
 
   return (
-    <div class="h-full flex flex-col gap-4 p-4 bg-black text-white overflow-hidden">
+    <div class="flex flex-col gap-4 p-2 md:p-4 bg-black text-white overflow-hidden md:h-full min-h-0">
       {/* Header Section */}
       <div class="flex flex-col gap-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-accent-500/10 rounded-sm flex items-center justify-center border border-accent-500/20">
               <DollarSign class="text-accent-500" size={20} />
@@ -199,7 +199,7 @@ export default function FundingPage() {
       {/* Main Content Area */}
       <div class="flex-1 flex flex-col min-h-0 bg-terminal-900 border border-terminal-750 rounded-sm overflow-hidden">
         {/* Tabs */}
-        <div class="flex border-b border-terminal-750 bg-terminal-900">
+        <div class="flex border-b border-terminal-750 bg-terminal-900 overflow-x-auto">
           <For each={[
             { id: 'deposit', label: 'DEPOSIT FUNDS', icon: ArrowDownRight },
             { id: 'withdraw', label: 'WITHDRAW FUNDS', icon: ArrowUpRight },
@@ -211,7 +211,7 @@ export default function FundingPage() {
               <button
                 onClick={() => setActiveTab(tab.id as TabType)}
                 class={`
-                  flex items-center gap-2 px-6 py-4 text-xs font-bold font-mono tracking-wider transition-colors border-r border-terminal-750
+                  flex items-center gap-2 px-6 py-4 text-xs font-bold font-mono tracking-wider transition-colors border-r border-terminal-750 shrink-0
                   ${activeTab() === tab.id 
                     ? 'bg-terminal-800 text-accent-400 border-b-2 border-b-accent-500' 
                     : 'text-gray-500 hover:text-gray-300 hover:bg-terminal-800/50 border-b-2 border-b-transparent'}
@@ -227,7 +227,7 @@ export default function FundingPage() {
         {/* Tab Content */}
         <div class="flex-1 overflow-hidden p-0 relative">
           <Show when={activeTab() === 'deposit'}>
-            <div class="h-full overflow-auto p-6">
+            <div class="h-full overflow-auto p-3 md:p-6">
               <DepositTab 
                 paymentMethods={paymentMethods()} 
                 limits={limits()} 
@@ -237,7 +237,7 @@ export default function FundingPage() {
           </Show>
           
           <Show when={activeTab() === 'withdraw'}>
-            <div class="h-full overflow-auto p-6">
+            <div class="h-full overflow-auto p-3 md:p-6">
               <WithdrawTab 
                 paymentMethods={paymentMethods()} 
                 portfolio={portfolio()} 
@@ -247,7 +247,7 @@ export default function FundingPage() {
           </Show>
           
           <Show when={activeTab() === 'methods'}>
-            <div class="h-full overflow-auto p-6">
+            <div class="h-full overflow-auto p-3 md:p-6">
               <PaymentMethodsTab 
                 paymentMethods={paymentMethods()} 
                 onUpdate={loadData} 
@@ -262,7 +262,7 @@ export default function FundingPage() {
           </Show>
 
           <Show when={activeTab() === 'statements'}>
-            <div class="h-full overflow-hidden p-6">
+            <div class="h-full overflow-hidden p-3 md:p-6">
               <StatementsTab />
             </div>
           </Show>

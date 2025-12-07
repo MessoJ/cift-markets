@@ -251,7 +251,7 @@ export function Sidebar(props: SidebarProps) {
                   href={item.href}
                   onClick={() => props.onMobileClose?.()}
                   class={twMerge(
-                    'flex items-center gap-3 py-2 rounded-md transition-all duration-200 group relative',
+                    'flex items-center gap-3 py-3 md:py-2 rounded-md transition-all duration-200 group relative',
                     props.collapsed ? 'justify-center mx-2 px-2' : 'mx-1 px-3',
                     isActive(item.href)
                       ? 'bg-accent-500/15 text-accent-400'
@@ -316,7 +316,7 @@ export function Sidebar(props: SidebarProps) {
                           href={item.href}
                           onClick={() => props.onMobileClose?.()}
                           class={twMerge(
-                            'flex items-center gap-3 py-2 rounded-md transition-all duration-200 relative',
+                            'flex items-center gap-3 py-3 md:py-2 rounded-md transition-all duration-200 relative',
                             props.collapsed ? 'justify-center px-2' : 'px-3',
                             isActive(item.href)
                               ? 'bg-accent-500/15 text-accent-400'
@@ -397,7 +397,7 @@ export function Sidebar(props: SidebarProps) {
           href="/support"
           onClick={() => props.onMobileClose?.()}
           class={twMerge(
-            'flex items-center gap-3 py-2 rounded-md transition-all duration-200 relative',
+            'flex items-center gap-3 py-3 md:py-2 rounded-md transition-all duration-200 relative',
             props.collapsed ? 'justify-center mx-2 px-2' : 'mx-2 px-3',
             isActive('/support')
               ? 'bg-accent-500/15 text-accent-400'
@@ -425,7 +425,7 @@ export function Sidebar(props: SidebarProps) {
           href="/settings"
           onClick={() => props.onMobileClose?.()}
           class={twMerge(
-            'flex items-center gap-3 py-2 rounded-md transition-all duration-200 relative',
+            'flex items-center gap-3 py-3 md:py-2 rounded-md transition-all duration-200 relative',
             props.collapsed ? 'justify-center mx-2 px-2' : 'mx-2 px-3',
             isActive('/settings')
               ? 'bg-accent-500/15 text-accent-400'
@@ -452,9 +452,10 @@ export function Sidebar(props: SidebarProps) {
         <button
           onClick={handleLogout}
           class={twMerge(
-            'flex items-center gap-3 py-2 rounded-md text-gray-400 hover:text-danger-400 hover:bg-danger-500/10 transition-all duration-200',
+            'flex items-center gap-3 py-3 md:py-2 rounded-md text-gray-400 hover:text-danger-400 hover:bg-danger-500/10 transition-all duration-200',
             props.collapsed ? 'justify-center mx-2 px-2 w-12' : 'mx-2 px-3 w-[calc(100%-16px)]'
           )}
+          aria-label="Logout"
           onMouseEnter={() => props.collapsed && setHoveredItem('/logout')}
           onMouseLeave={() => setHoveredItem(null)}
         >
@@ -495,6 +496,7 @@ export function Sidebar(props: SidebarProps) {
           onClick={props.onToggleCollapse}
           class="h-11 flex items-center justify-center border-t border-terminal-750/50 text-gray-500 hover:text-white hover:bg-terminal-800/50 transition-all duration-200 group"
           title={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <Show when={props.collapsed} fallback={
             <div class="flex items-center gap-2">

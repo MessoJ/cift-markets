@@ -282,7 +282,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div class="h-full flex flex-col gap-2 min-h-0 bg-terminal-950">
+    <div class="flex flex-col gap-2 min-h-0 bg-terminal-950 md:h-full">
       {/* 1. Market Ticker */}
       <Show when={tickerData().length > 0}>
         <MarketTicker items={tickerData()} speed={30} />
@@ -394,13 +394,13 @@ export default function DashboardPage() {
       </div>
 
       {/* 3. Main Content Grid */}
-      <div class="flex-1 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-2 min-h-0 overflow-hidden">
+      <div class="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-2 md:flex-1 md:min-h-0 md:overflow-hidden">
         
         {/* Left Column: Positions & Activity */}
-        <div class="flex flex-col gap-2 min-h-0 overflow-hidden">
+        <div class="flex flex-col gap-2 md:min-h-0 md:overflow-hidden">
           
           {/* Active Positions Table */}
-          <div class="flex-1 bg-terminal-900 border border-terminal-800 rounded-sm flex flex-col min-h-0">
+          <div class="bg-terminal-900 border border-terminal-800 rounded-sm flex flex-col h-[400px] md:h-auto md:flex-1 md:min-h-0">
             <div class="px-4 py-3 border-b border-terminal-800 flex items-center justify-between flex-shrink-0">
               <div class="flex items-center gap-2">
                 <Briefcase class="w-4 h-4 text-accent-500" />
@@ -461,7 +461,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Right Column: Widgets */}
-        <div class="flex flex-col gap-2 min-h-0 overflow-y-auto pr-1">
+        <div class="flex flex-col gap-2 md:min-h-0 md:overflow-y-auto md:pr-1">
           
           {/* Today's Performance Card */}
           <div class="bg-terminal-900 border border-terminal-800 p-4 rounded-sm flex-shrink-0">
