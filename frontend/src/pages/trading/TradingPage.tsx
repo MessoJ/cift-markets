@@ -545,10 +545,10 @@ export default function TradingPage() {
       </header>
 
       {/* 2. Main Workspace Grid */}
-      <div class="flex-1 flex min-h-0">
+      <div class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
         
         {/* LEFT PANEL: Market Depth (20%) */}
-        <div class="w-72 flex flex-col border-r border-terminal-800 bg-terminal-900 shrink-0">
+        <div class="w-full lg:w-72 flex flex-col border-r-0 lg:border-r border-b lg:border-b-0 border-terminal-800 bg-terminal-900 shrink-0 h-[400px] lg:h-auto">
           {/* Order Book */}
           <div class="flex-1 flex flex-col min-h-0 border-b border-terminal-800">
             <OrderBook 
@@ -567,7 +567,7 @@ export default function TradingPage() {
         </div>
 
         {/* CENTER PANEL: Chart & Management (60%) */}
-        <div class="flex-1 flex flex-col min-w-0 bg-terminal-950">
+        <div class="flex-1 flex flex-col min-w-0 bg-terminal-950 min-h-[500px] lg:min-h-0">
           
           {/* Chart Area - REAL CHART, not placeholder! */}
           <div class="flex-1 border-b border-terminal-800 relative bg-terminal-950 flex flex-col min-h-[300px]">
@@ -793,7 +793,7 @@ export default function TradingPage() {
         </div>
 
         {/* RIGHT PANEL: Order Entry & Watchlist (20%) */}
-        <div class="w-80 flex flex-col border-l border-terminal-800 bg-terminal-900 shrink-0 overflow-hidden">
+        <div class="w-full lg:w-80 flex flex-col border-l-0 lg:border-l border-t lg:border-t-0 border-terminal-800 bg-terminal-900 shrink-0 overflow-hidden h-[600px] lg:h-auto">
           
           {/* Order Entry Form - Scrollable */}
           <div class="flex-1 overflow-auto p-4">

@@ -1,33 +1,73 @@
 /**
- * Login Page
+ * Registration Page
  * 
- * Professional login interface with secure authentication flow.
+ * Professional sign-up interface with real-time validation and security checks.
  */
 
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, createEffect } from 'solid-js';
 import { useNavigate, A } from '@solidjs/router';
-import { Mail, Lock, AlertCircle, ArrowRight, ShieldCheck, Globe, BarChart2 } from 'lucide-solid';
+import { 
+  Mail, 
+  Lock, 
+  User, 
+  AlertCircle, 
+  CheckCircle2, 
+  ArrowRight, 
+  ShieldCheck,
+  Globe,
+  Terminal
+} from 'lucide-solid';
 import { Logo } from '~/components/layout/Logo';
 import { authStore } from '~/stores/auth.store';
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const navigate = useNavigate();
   
+  // Form State
+  const [fullName, setFullName] = createSignal('');
+  const [username, setUsername] = createSignal('');
   const [email, setEmail] = createSignal('');
   const [password, setPassword] = createSignal('');
-  const [error, setError] = createSignal('');
+  const [confirmPassword, setConfirmPassword] = createSignal('');
+  const [termsAccepted, setTermsAccepted] = createSignal(false);
+  
+  // UI State
   const [loading, setLoading] = createSignal(false);
+  const [error, setError] = createSignal('');
+  const [passwordStrength, setPasswordStrength] = createSignal(0);
+
+  // Password Strength Calculation
+  createEffect(() => {
+    const pwd = password();
+    let score = 0;
+    if (pwd.length > 8) score++;
+    if (/[A-Z]/.test(pwd)) score++;
+    if (/[0-9]/.test(pwd)) score++;
+    if (/[^A-Za-z0-9]/.test(pwd)) score++;
+    setPasswordStrength(score);
+  });
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
     setError('');
+
+    if (password() !== confirmPassword()) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (!termsAccepted()) {
+      setError('You must accept the Terms of Service');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await authStore.login(email(), password());
+      await authStore.register(email(), username(), password(), fullName());
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -44,11 +84,11 @@ export default function LoginPage() {
           <Logo size="lg" showText />
           <div class="mt-12 space-y-6">
             <h1 class="text-5xl font-bold tracking-tight leading-tight">
-              Institutional Grade<br />
-              <span class="text-accent-500">Execution</span> & Analytics.
+              Join the <span class="text-accent-500">Future</span> of<br />
+              Institutional Trading.
             </h1>
             <p class="text-xl text-gray-400 max-w-lg">
-              Experience the next generation of trading infrastructure. Built for speed, reliability, and precision.
+              Access Phase 5-7 tech stack, sub-10ms execution, and real-time global market analytics.
             </p>
           </div>
         </div>
@@ -56,21 +96,21 @@ export default function LoginPage() {
         <div class="space-y-6">
           <div class="flex items-center gap-4 p-4 bg-terminal-900/50 border border-terminal-800 rounded-lg backdrop-blur-md">
             <div class="p-3 bg-accent-500/10 rounded-lg text-accent-400">
-              <BarChart2 size={24} />
+              <ShieldCheck size={24} />
             </div>
             <div>
-              <h3 class="font-bold font-mono text-white">Real-Time Analytics</h3>
-              <p class="text-sm text-gray-400">Advanced charting & technical indicators</p>
+              <h3 class="font-bold font-mono text-white">Bank-Grade Security</h3>
+              <p class="text-sm text-gray-400">256-bit encryption & cold storage</p>
             </div>
           </div>
           
           <div class="flex items-center gap-4 p-4 bg-terminal-900/50 border border-terminal-800 rounded-lg backdrop-blur-md">
             <div class="p-3 bg-accent-500/10 rounded-lg text-accent-400">
-              <ShieldCheck size={24} />
+              <Globe size={24} />
             </div>
             <div>
-              <h3 class="font-bold font-mono text-white">Secure Infrastructure</h3>
-              <p class="text-sm text-gray-400">Enterprise-grade security protocols</p>
+              <h3 class="font-bold font-mono text-white">Global Access</h3>
+              <p class="text-sm text-gray-400">Trade across 50+ markets worldwide</p>
             </div>
           </div>
         </div>
@@ -89,8 +129,8 @@ export default function LoginPage() {
           </div>
 
           <div class="text-center lg:text-left">
-            <h2 class="text-3xl font-bold tracking-tight">Welcome Back</h2>
-            <p class="mt-2 text-gray-400">Sign in to access your trading terminal.</p>
+            <h2 class="text-3xl font-bold tracking-tight">Create Account</h2>
+            <p class="mt-2 text-gray-400">Enter your details to get started.</p>
           </div>
 
           <Show when={error()}>
@@ -101,6 +141,36 @@ export default function LoginPage() {
           </Show>
 
           <form onSubmit={handleSubmit} class="space-y-5">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono font-bold text-gray-400 uppercase">Full Name</label>
+                <div class="relative">
+                  <User class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                  <input
+                    type="text"
+                    value={fullName()}
+                    onInput={(e) => setFullName(e.currentTarget.value)}
+                    class="w-full bg-terminal-900 border border-terminal-800 rounded-lg py-2.5 pl-10 pr-4 text-white placeholder:text-gray-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none transition-all font-mono text-sm"
+                    placeholder="John Doe"
+                  />
+                </div>
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono font-bold text-gray-400 uppercase">Username</label>
+                <div class="relative">
+                  <Terminal class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                  <input
+                    type="text"
+                    value={username()}
+                    onInput={(e) => setUsername(e.currentTarget.value)}
+                    class="w-full bg-terminal-900 border border-terminal-800 rounded-lg py-2.5 pl-10 pr-4 text-white placeholder:text-gray-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none transition-all font-mono text-sm"
+                    placeholder="johndoe"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
             <div class="space-y-1.5">
               <label class="text-xs font-mono font-bold text-gray-400 uppercase">Email Address</label>
               <div class="relative">
@@ -117,10 +187,7 @@ export default function LoginPage() {
             </div>
 
             <div class="space-y-1.5">
-              <div class="flex justify-between items-center">
-                <label class="text-xs font-mono font-bold text-gray-400 uppercase">Password</label>
-                <a href="#" class="text-xs text-accent-400 hover:text-accent-300 font-medium">Forgot password?</a>
-              </div>
+              <label class="text-xs font-mono font-bold text-gray-400 uppercase">Password</label>
               <div class="relative">
                 <Lock class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                 <input
@@ -132,6 +199,43 @@ export default function LoginPage() {
                   required
                 />
               </div>
+              {/* Password Strength Meter */}
+              <div class="flex gap-1 h-1 mt-2">
+                <div class={`flex-1 rounded-full transition-colors ${passwordStrength() >= 1 ? 'bg-danger-500' : 'bg-terminal-800'}`} />
+                <div class={`flex-1 rounded-full transition-colors ${passwordStrength() >= 2 ? 'bg-warning-500' : 'bg-terminal-800'}`} />
+                <div class={`flex-1 rounded-full transition-colors ${passwordStrength() >= 3 ? 'bg-success-500' : 'bg-terminal-800'}`} />
+                <div class={`flex-1 rounded-full transition-colors ${passwordStrength() >= 4 ? 'bg-accent-500' : 'bg-terminal-800'}`} />
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="text-xs font-mono font-bold text-gray-400 uppercase">Confirm Password</label>
+              <div class="relative">
+                <Lock class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                <input
+                  type="password"
+                  value={confirmPassword()}
+                  onInput={(e) => setConfirmPassword(e.currentTarget.value)}
+                  class="w-full bg-terminal-900 border border-terminal-800 rounded-lg py-2.5 pl-10 pr-4 text-white placeholder:text-gray-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500 outline-none transition-all font-mono text-sm"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 pt-2">
+              <div class="flex items-center h-5">
+                <input
+                  id="terms"
+                  type="checkbox"
+                  checked={termsAccepted()}
+                  onChange={(e) => setTermsAccepted(e.currentTarget.checked)}
+                  class="w-4 h-4 rounded border-terminal-700 bg-terminal-900 text-accent-500 focus:ring-accent-500 focus:ring-offset-terminal-950"
+                />
+              </div>
+              <label for="terms" class="text-sm text-gray-400">
+                I agree to the <a href="#" class="text-accent-400 hover:text-accent-300">Terms of Service</a> and <a href="#" class="text-accent-400 hover:text-accent-300">Privacy Policy</a>.
+              </label>
             </div>
 
             <button
@@ -141,7 +245,7 @@ export default function LoginPage() {
             >
               <Show when={loading()} fallback={
                 <>
-                  Sign In
+                  Create Account
                   <ArrowRight size={18} class="group-hover:translate-x-1 transition-transform" />
                 </>
               }>
@@ -181,9 +285,9 @@ export default function LoginPage() {
 
           <div class="text-center">
             <p class="text-sm text-gray-400">
-              Don't have an account?{' '}
-              <A href="/auth/register" class="text-accent-400 hover:text-accent-300 font-bold transition-colors">
-                Create account
+              Already have an account?{' '}
+              <A href="/auth/login" class="text-accent-400 hover:text-accent-300 font-bold transition-colors">
+                Sign in
               </A>
             </p>
           </div>

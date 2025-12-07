@@ -12,6 +12,8 @@ import KeyboardShortcutsProvider, { registerShortcuts } from '~/components/ui/Ke
 
 // Lazy load pages for code splitting
 const LoginPage = lazy(() => import('~/pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('~/pages/auth/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('~/pages/auth/ForgotPasswordPage'));
 const DashboardPage = lazy(() => import('~/pages/dashboard/DashboardPage'));
 const TradingPage = lazy(() => import('~/pages/trading/TradingPage'));
 const PortfolioPage = lazy(() => import('~/pages/portfolio/PortfolioPage'));
@@ -130,6 +132,22 @@ export default function App() {
           component={() => (
             <PublicRoute>
               <LoginPage />
+            </PublicRoute>
+          )}
+        />
+        <Route
+          path="/auth/register"
+          component={() => (
+            <PublicRoute>
+              <RegisterPage />
+            </PublicRoute>
+          )}
+        />
+        <Route
+          path="/auth/forgot-password"
+          component={() => (
+            <PublicRoute>
+              <ForgotPasswordPage />
             </PublicRoute>
           )}
         />
