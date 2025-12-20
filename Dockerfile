@@ -96,6 +96,9 @@ WORKDIR /app
 # Copy application code
 COPY --chown=cift:cift . .
 
+# Ensure logs directory exists with correct permissions
+RUN mkdir -p /app/logs && chown -R cift:cift /app/logs
+
 # Switch to non-root user
 USER cift
 
