@@ -35,7 +35,7 @@ import torch.nn as nn
 from loguru import logger
 
 # Import model types for type hints
-from cift.ml.hawkes import HawkesOrderFlowModel, HawkesPrediction
+from cift.ml.hawkes import HawkesEvent, HawkesOrderFlowModel, HawkesPrediction
 from cift.ml.transformer import OrderFlowTransformer, TransformerPrediction
 from cift.ml.hmm import MarketRegimeHMM, MarketRegime, RegimePrediction
 from cift.ml.gnn import CrossAssetGNN, CrossAssetPrediction
@@ -228,7 +228,7 @@ class EnsembleMetaModel:
         self,
         # Data for different models
         hawkes_events: Optional[np.ndarray] = None,
-        transformer_features: Optional[np.ndarray] = None,
+        transformer_features: Optional[Any] = None,
         hmm_features: Optional[np.ndarray] = None,
         gnn_node_features: Optional[np.ndarray] = None,
         gnn_edge_index: Optional[np.ndarray] = None,
@@ -264,7 +264,22 @@ class EnsembleMetaModel:
         # ============ Hawkes ============
         if hawkes_events is not None:
             try:
-                predictions.hawkes = self.hawkes.predict(hawkes_events)
+                # Treat `hawkes_events` as the full recent window. Rebuild history each call
+                # to avoid double-counting if upstream re-sends the same window.
+                self.hawkes.clear_history()
+                he = np.asarray(hawkes_events)
+                if he.ndim == 2 and he.shape[1] >= 3:
+                    for row in he[-(self.hawkes.max_history or len(he)) :]:
+                        self.hawkes.add_event(
+                            HawkesEvent(
+                                timestamp=float(row[0]),
+                                event_type=int(row[1]),
+                                size=float(row[2]),
+                            )
+                        )
+
+                hawkes_features = self._derive_hawkes_features(transformer_features)
+                predictions.hawkes = self.hawkes.predict(hawkes_features, float(timestamp))
                 
                 # Convert to direction
                 direction_signal = predictions.hawkes.buy_intensity - predictions.hawkes.sell_intensity
@@ -284,10 +299,18 @@ class EnsembleMetaModel:
         # ============ Transformer ============
         if transformer_features is not None:
             try:
-                predictions.transformer = self.transformer.predict(transformer_features, timestamp)
-                
-                direction = predictions.transformer.direction  # 1 for up, -1 for down
-                model_directions.append(direction * abs(predictions.transformer.direction_probability - 0.5) * 2)
+                tick_f, sec_f, min_f = self._coerce_transformer_inputs(transformer_features)
+                predictions.transformer = self.transformer.predict(
+                    tick_f,
+                    sec_f,
+                    min_f,
+                    timestamp,
+                )
+
+                # Transformer outputs P(up). Convert to signed directional signal.
+                up_prob = float(predictions.transformer.direction_prob)
+                direction = 1 if up_prob > 0.5 else -1 if up_prob < 0.5 else 0
+                model_directions.append(direction * abs(up_prob - 0.5) * 2)
                 model_confidences.append(predictions.transformer.confidence)
                 model_available.append("transformer")
             except Exception as e:
@@ -474,6 +497,90 @@ class EnsembleMetaModel:
         logit = np.log(prob / (1 - prob + 1e-10) + 1e-10)
         calibrated_logit = self._calibration_a * logit + self._calibration_b
         return 1 / (1 + np.exp(-calibrated_logit))
+
+    def _coerce_transformer_inputs(
+        self,
+        transformer_features: Any,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Coerce various upstream formats into (tick, second, minute) arrays.
+
+        Upstream currently passes a dict like:
+          {"tick": [seq, d], "second": [seq, d], "minute": [seq, d]}
+
+        The transformer expects the *same* feature_dim across timeframes.
+        We pad/truncate to `self.transformer.feature_dim`.
+        """
+        if isinstance(transformer_features, dict):
+            tick_raw = transformer_features.get("tick")
+            sec_raw = transformer_features.get("second")
+            minute_raw = transformer_features.get("minute")
+
+            tick = (
+                np.asarray(tick_raw, dtype=np.float32)
+                if tick_raw is not None
+                else np.zeros((50, 1), dtype=np.float32)
+            )
+            sec = (
+                np.asarray(sec_raw, dtype=np.float32)
+                if sec_raw is not None
+                else np.zeros((60, 1), dtype=np.float32)
+            )
+            minute = (
+                np.asarray(minute_raw, dtype=np.float32)
+                if minute_raw is not None
+                else np.zeros((30, 1), dtype=np.float32)
+            )
+        else:
+            tick = np.asarray(transformer_features, dtype=np.float32)
+            sec = np.zeros((60, 1), dtype=np.float32)
+            minute = np.zeros((30, 1), dtype=np.float32)
+
+        tick = self._pad_or_truncate_2d(tick, self.transformer.feature_dim)
+        sec = self._pad_or_truncate_2d(sec, self.transformer.feature_dim)
+        minute = self._pad_or_truncate_2d(minute, self.transformer.feature_dim)
+        return tick, sec, minute
+
+    def _derive_hawkes_features(self, transformer_features: Any) -> np.ndarray:
+        """Build a feature vector for the Hawkes model.
+
+        Hawkes expects a 1D vector of length `self.hawkes.feature_dim`.
+        We attempt to take the latest tick feature row; otherwise zeros.
+        """
+        feature_dim = int(getattr(self.hawkes, "feature_dim", 20))
+        tick = None
+        if isinstance(transformer_features, dict) and transformer_features.get("tick") is not None:
+            tick = np.asarray(transformer_features.get("tick"), dtype=np.float32)
+        elif transformer_features is not None and not isinstance(transformer_features, dict):
+            tick = np.asarray(transformer_features, dtype=np.float32)
+
+        if tick is None or tick.size == 0:
+            return np.zeros(feature_dim, dtype=np.float32)
+
+        if tick.ndim == 1:
+            row = tick
+        else:
+            row = tick[-1]
+
+        row = np.asarray(row, dtype=np.float32).reshape(-1)
+        if row.shape[0] >= feature_dim:
+            return row[:feature_dim]
+        out = np.zeros(feature_dim, dtype=np.float32)
+        out[: row.shape[0]] = row
+        return out
+
+    @staticmethod
+    def _pad_or_truncate_2d(arr: np.ndarray, feature_dim: int) -> np.ndarray:
+        arr = np.asarray(arr, dtype=np.float32)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        if arr.ndim != 2:
+            raise ValueError(f"Expected 2D array, got shape={arr.shape}")
+        if arr.shape[1] == feature_dim:
+            return arr
+        if arr.shape[1] > feature_dim:
+            return arr[:, :feature_dim]
+        pad = np.zeros((arr.shape[0], feature_dim - arr.shape[1]), dtype=np.float32)
+        return np.concatenate([arr, pad], axis=1)
     
     def calibrate(self, probs: np.ndarray, labels: np.ndarray):
         """

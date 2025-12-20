@@ -406,6 +406,8 @@ def run_vectorized_backtest(
     signal_column: str = "signal",
     initial_capital: float = 100000.0,
     commission_bps: float = 1.0,
+    risk_free_rate_annual: float = 0.0,
+    periods_per_year: int = 252,
 ) -> Tuple[pl.DataFrame, dict]:
     """
     Run vectorized backtest using Polars (10x faster than Pandas).
@@ -468,9 +470,13 @@ def run_vectorized_backtest(
     total_return = (df["portfolio_value"][-1] / initial_capital - 1) if len(df) > 0 else 0
     max_drawdown = df["drawdown"].min() if len(df) > 0 else 0
     
-    # Sharpe ratio (assuming 252 trading days)
-    returns_std = df["strategy_returns"].std()
-    sharpe = (df["strategy_returns"].mean() * 252 / returns_std) if returns_std > 0 else 0
+    # Sharpe ratio (annualized, using excess returns)
+    from cift.metrics.performance import annualized_sharpe
+    sharpe = annualized_sharpe(
+        np.asarray(df["strategy_returns"].to_numpy(), dtype=np.float64),
+        risk_free_rate_annual=risk_free_rate_annual,
+        periods_per_year=periods_per_year,
+    )
     
     # Win rate
     winning_trades = df.filter(pl.col("strategy_returns") > 0).height
