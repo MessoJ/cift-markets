@@ -52,24 +52,76 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Execution engine failed to start: {e}")
     
-    # Start market data simulator (for testing real-time WebSocket)
-    simulator_task = None
+    # Start market data source - use REAL Polygon data if API key is available
+    market_data_task = None
+    use_real_data = bool(settings.polygon_api_key)
+    
     try:
-        from cift.core.market_simulator import simulator
         from cift.api.routes.market_data import publish_price_update
         
-        async def broadcast_tick(tick_data):
-            """Broadcast simulated tick to WebSocket subscribers."""
-            await publish_price_update(
-                symbol=tick_data["symbol"],
-                price=tick_data["price"],
-                bid=tick_data.get("bid"),
-                ask=tick_data.get("ask"),
-            )
-        
-        # Start simulator in background
-        simulator_task = asyncio.create_task(simulator.generate_updates(broadcast_tick))
-        logger.info("✅ Market data simulator started (WebSocket real-time updates active)")
+        if use_real_data:
+            # USE REAL POLYGON DATA
+            from cift.services.polygon_realtime_service import PolygonRealtimeService
+            
+            polygon_service = PolygonRealtimeService()
+            await polygon_service.initialize()
+            
+            async def fetch_and_broadcast_real_data():
+                """Fetch real market data from Polygon and broadcast."""
+                symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "AMD"]
+                while True:
+                    try:
+                        quotes = await polygon_service.get_quotes_batch(symbols[:3])  # Rate limited
+                        for symbol, quote in quotes.items():
+                            await publish_price_update(
+                                symbol=symbol,
+                                price=quote["price"],
+                                bid=quote["price"] * 0.9999,
+                                ask=quote["price"] * 1.0001,
+                            )
+                            # Also update the database cache
+                            from cift.core.database import get_postgres_pool
+                            pool = await get_postgres_pool()
+                            async with pool.acquire() as conn:
+                                await conn.execute("""
+                                    INSERT INTO market_data_cache (symbol, price, bid, ask, volume, change, change_pct, high, low, open)
+                                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                    ON CONFLICT (symbol) DO UPDATE SET
+                                        price = EXCLUDED.price,
+                                        volume = EXCLUDED.volume,
+                                        change = EXCLUDED.change,
+                                        change_pct = EXCLUDED.change_pct,
+                                        high = EXCLUDED.high,
+                                        low = EXCLUDED.low,
+                                        open = EXCLUDED.open,
+                                        updated_at = CURRENT_TIMESTAMP
+                                """, symbol, quote["price"], quote["price"]*0.9999, quote["price"]*1.0001,
+                                    quote.get("volume", 0), quote.get("change", 0), quote.get("change_percent", 0),
+                                    quote.get("high", quote["price"]), quote.get("low", quote["price"]), quote.get("open", quote["price"]))
+                        await asyncio.sleep(60)  # Update every minute (rate limit friendly)
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.error(f"Real data fetch error: {e}")
+                        await asyncio.sleep(30)
+            
+            market_data_task = asyncio.create_task(fetch_and_broadcast_real_data())
+            logger.info("✅ REAL Polygon market data started (live prices from polygon.io)")
+        else:
+            # FALLBACK TO SIMULATOR
+            from cift.core.market_simulator import simulator
+            
+            async def broadcast_tick(tick_data):
+                """Broadcast simulated tick to WebSocket subscribers."""
+                await publish_price_update(
+                    symbol=tick_data["symbol"],
+                    price=tick_data["price"],
+                    bid=tick_data.get("bid"),
+                    ask=tick_data.get("ask"),
+                )
+            
+            market_data_task = asyncio.create_task(simulator.generate_updates(broadcast_tick))
+            logger.warning("⚠️ Market data SIMULATOR started (no Polygon API key - using fake data)")
     except Exception as e:
         logger.warning(f"⚠️ Market simulator failed to start: {e}")
     
@@ -87,14 +139,20 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown simulator
-    if simulator_task:
+    # Shutdown market data source
+    if market_data_task:
         try:
-            from cift.core.market_simulator import simulator
-            simulator.stop()
-            simulator_task.cancel()
+            market_data_task.cancel()
+            try:
+                await market_data_task
+            except asyncio.CancelledError:
+                pass
+            if not use_real_data:
+                from cift.core.market_simulator import simulator
+                simulator.stop()
+            logger.info("Market data source stopped")
         except Exception as e:
-            logger.warning(f"⚠️ Failed to stop simulator: {e}")
+            logger.warning(f"⚠️ Failed to stop market data: {e}")
     
     # Shutdown background tasks
     try:

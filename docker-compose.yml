@@ -268,6 +268,7 @@ services:
       - NATS_URL=nats://nats:4222
       - ALPACA_API_KEY=${ALPACA_API_KEY:-}
       - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - ALPACA_BASE_URL=${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}
       - POLYGON_API_KEY=${POLYGON_API_KEY:-}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-to-a-random-secret-key-min-32-chars-jwt}
       - SECRET_KEY=${SECRET_KEY:-change-this-to-a-random-secret-key-min-32-chars-app}
