@@ -76,8 +76,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '1.5'
+          memory: 4G
 
   # NATS JetStream - 5-10x lower latency than Kafka
   nats:
@@ -106,8 +106,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 4G
+          cpus: '1'
+          memory: 2G
 
   # ClickHouse - 100x faster analytics (Phase 5-7)
   clickhouse:
@@ -139,8 +139,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '1.5'
+          memory: 4G
 
   # Prometheus - Metrics collection
   prometheus:
