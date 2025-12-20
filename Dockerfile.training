@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy project files
+COPY pyproject.toml .
+COPY cift/ cift/
+COPY scripts/ scripts/
+COPY README.md .
+
+# Install dependencies
+RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir azure-ai-ml azure-identity
+
+# Default command (can be overridden by Azure ML)
+CMD ["python", "-m", "cift.cli", "info"]

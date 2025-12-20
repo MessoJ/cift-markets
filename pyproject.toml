@@ -146,7 +146,7 @@ python-source = "cift"
 module-name = "cift.cift_core"
 
 [tool.setuptools]
-packages = ["cift"]
+packages = {find = {include = ["cift*"]}}
 
 [tool.black]
 line-length = 100
