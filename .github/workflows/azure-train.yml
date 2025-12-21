@@ -18,7 +18,10 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     - name: Install Azure ML SDK
-      run: pip install azure-ai-ml azure-identity
+      run: pip install azure-ai-ml azure-identity pandas numpy
+
+    - name: Generate Sample Data
+      run: python scripts/generate_data.py
 
     - name: Submit Training Job
       run: |
