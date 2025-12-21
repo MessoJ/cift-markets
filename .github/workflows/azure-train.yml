@@ -1,0 +1,29 @@
+name: Train on Azure ML
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Install Azure ML SDK
+      run: pip install azure-ai-ml azure-identity
+
+    - name: Submit Training Job
+      run: |
+        python scripts/submit_azure_job.py \
+          --subscription-id "${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+          --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+          --workspace-name "${{ secrets.AZURE_WORKSPACE_NAME }}" \
+          --data-path "${{ secrets.AZURE_DATA_PATH }}"
