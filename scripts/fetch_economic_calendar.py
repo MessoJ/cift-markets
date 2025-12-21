@@ -4,10 +4,10 @@ Uses real economic calendar APIs to get upcoming events.
 """
 
 import asyncio
-import asyncpg
-from datetime import datetime, timedelta
-from typing import List, Dict
 import uuid
+from datetime import datetime, timedelta
+
+import asyncpg
 
 # Sample economic events - Replace with real API calls
 # Free APIs: https://tradingeconomics.com/api, https://www.alphavantage.co/documentation/
@@ -124,7 +124,7 @@ SAMPLE_ECONOMIC_EVENTS = [
 
 async def populate_economic_calendar():
     """Populate economic calendar with real upcoming events"""
-    
+
     # Connect to PostgreSQL (use environment or defaults)
     import os
     conn = await asyncpg.connect(
@@ -134,31 +134,31 @@ async def populate_economic_calendar():
         password=os.getenv('POSTGRES_PASSWORD', 'cift_password'),
         database=os.getenv('POSTGRES_DB', 'cift_markets')
     )
-    
+
     try:
         print("🗓️  Clearing old economic calendar data...")
         # Clear existing future events
         await conn.execute("""
-            DELETE FROM economic_events 
+            DELETE FROM economic_events
             WHERE event_date > NOW()
         """)
-        
+
         print("📅 Inserting upcoming economic events...")
         now = datetime.utcnow()
-        
+
         for event in SAMPLE_ECONOMIC_EVENTS:
             event_date = now + timedelta(days=event['days_from_now'])
             # Set to 8:30 AM EST (13:30 UTC) - typical economic release time
             event_date = event_date.replace(hour=13, minute=30, second=0, microsecond=0)
-            
+
             event_id = str(uuid.uuid4())
-            
+
             await conn.execute("""
                 INSERT INTO economic_events (
                     id, title, country, event_date, impact,
                     forecast, previous, actual, currency
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            """, 
+            """,
                 event_id,
                 event['title'],
                 event['country'],
@@ -169,9 +169,9 @@ async def populate_economic_calendar():
                 None,  # actual - not yet happened
                 event['currency']
             )
-            
+
             print(f"  ✓ {event['title']} - {event_date.strftime('%Y-%m-%d %H:%M')}")
-        
+
         # Also add a few past events for history
         print("\n📊 Adding recent past events...")
         past_events = [
@@ -196,13 +196,13 @@ async def populate_economic_calendar():
                 "days_ago": 2
             },
         ]
-        
+
         for event in past_events:
             event_date = now - timedelta(days=event['days_ago'])
             event_date = event_date.replace(hour=13, minute=30, second=0, microsecond=0)
-            
+
             event_id = str(uuid.uuid4())
-            
+
             await conn.execute("""
                 INSERT INTO economic_events (
                     id, title, country, event_date, impact,
@@ -219,17 +219,17 @@ async def populate_economic_calendar():
                 event.get('actual'),
                 event['currency']
             )
-            
+
             print(f"  ✓ {event['title']} - {event_date.strftime('%Y-%m-%d %H:%M')}")
-        
+
         # Show summary
         total_count = await conn.fetchval("SELECT COUNT(*) FROM economic_events")
         future_count = await conn.fetchval("SELECT COUNT(*) FROM economic_events WHERE event_date >= NOW()")
-        
-        print(f"\n✅ Economic calendar populated successfully!")
+
+        print("\n✅ Economic calendar populated successfully!")
         print(f"   Total events: {total_count}")
         print(f"   Upcoming events: {future_count}")
-        
+
     finally:
         await conn.close()
 
@@ -239,9 +239,9 @@ if __name__ == "__main__":
     print("  CIFT Markets - Economic Calendar Population")
     print("=" * 60)
     print()
-    
+
     asyncio.run(populate_economic_calendar())
-    
+
     print()
     print("🎉 Done! Economic calendar is ready.")
     print()

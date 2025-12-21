@@ -6,7 +6,6 @@ All drawings persist to PostgreSQL database.
 """
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,8 +33,8 @@ class DrawingStyle(BaseModel):
     color: str = "#3b82f6"
     lineWidth: int = 2
     lineType: str = "solid"
-    fillColor: Optional[str] = None
-    fillOpacity: Optional[float] = None
+    fillColor: str | None = None
+    fillOpacity: float | None = None
 
 
 class DrawingCreate(BaseModel):
@@ -54,10 +53,10 @@ class DrawingCreate(BaseModel):
 
 class DrawingUpdate(BaseModel):
     """Update an existing drawing."""
-    drawing_data: Optional[dict] = None
-    style: Optional[DrawingStyle] = None
-    locked: Optional[bool] = None
-    visible: Optional[bool] = None
+    drawing_data: dict | None = None
+    style: DrawingStyle | None = None
+    locked: bool | None = None
+    visible: bool | None = None
 
 
 class DrawingResponse(BaseModel):
@@ -79,22 +78,22 @@ class DrawingResponse(BaseModel):
 # ENDPOINTS
 # ============================================================================
 
-@router.get("", response_model=List[DrawingResponse])
+@router.get("", response_model=list[DrawingResponse])
 async def get_drawings(
     symbol: str,
-    timeframe: Optional[str] = None,
+    timeframe: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Get all drawings for a symbol (and optionally timeframe).
-    
+
     Performance: ~5-10ms for typical user (< 100 drawings)
     """
     pool = await get_postgres_pool()
-    
+
     if timeframe:
         query = """
-            SELECT 
+            SELECT
                 id::text,
                 user_id::text,
                 symbol,
@@ -113,7 +112,7 @@ async def get_drawings(
         rows = await pool.fetch(query, user_id, symbol, timeframe)
     else:
         query = """
-            SELECT 
+            SELECT
                 id::text,
                 user_id::text,
                 symbol,
@@ -130,7 +129,7 @@ async def get_drawings(
             ORDER BY created_at DESC
         """
         rows = await pool.fetch(query, user_id, symbol)
-    
+
     return [dict(row) for row in rows]
 
 
@@ -141,17 +140,17 @@ async def create_drawing(
 ):
     """
     Create a new drawing.
-    
+
     Performance: ~5ms (single INSERT with RETURNING)
     """
     pool = await get_postgres_pool()
-    
+
     query = """
         INSERT INTO chart_drawings (
             user_id, symbol, timeframe, drawing_type,
             drawing_data, style, locked, visible
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING 
+        RETURNING
             id::text,
             user_id::text,
             symbol,
@@ -164,7 +163,7 @@ async def create_drawing(
             created_at,
             updated_at
     """
-    
+
     try:
         row = await pool.fetchrow(
             query,
@@ -177,10 +176,10 @@ async def create_drawing(
             drawing.locked,
             drawing.visible,
         )
-        
+
         logger.info(f"Drawing created: {drawing.drawing_type} on {drawing.symbol} by user {user_id}")
         return dict(row)
-    
+
     except Exception as e:
         logger.error(f"Failed to create drawing: {e}")
         raise HTTPException(status_code=500, detail="Failed to create drawing")
@@ -194,51 +193,51 @@ async def update_drawing(
 ):
     """
     Update an existing drawing.
-    
+
     Performance: ~5ms
     """
     pool = await get_postgres_pool()
-    
+
     # Check ownership
     check_query = "SELECT id FROM chart_drawings WHERE id = $1 AND user_id = $2"
     exists = await pool.fetchrow(check_query, drawing_id, user_id)
-    
+
     if not exists:
         raise HTTPException(status_code=404, detail="Drawing not found or not owned by user")
-    
+
     # Build update query dynamically
     updates = []
     params = [drawing_id, user_id]
     param_idx = 3
-    
+
     if update.drawing_data is not None:
         updates.append(f"drawing_data = ${param_idx}")
         params.append(update.drawing_data)
         param_idx += 1
-    
+
     if update.style is not None:
         updates.append(f"style = ${param_idx}")
         params.append(update.style.dict())
         param_idx += 1
-    
+
     if update.locked is not None:
         updates.append(f"locked = ${param_idx}")
         params.append(update.locked)
         param_idx += 1
-    
+
     if update.visible is not None:
         updates.append(f"visible = ${param_idx}")
         params.append(update.visible)
         param_idx += 1
-    
+
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
-    
+
     query = f"""
         UPDATE chart_drawings
         SET {', '.join(updates)}
         WHERE id = $1 AND user_id = $2
-        RETURNING 
+        RETURNING
             id::text,
             user_id::text,
             symbol,
@@ -251,12 +250,12 @@ async def update_drawing(
             created_at,
             updated_at
     """
-    
+
     try:
         row = await pool.fetchrow(query, *params)
         logger.info(f"Drawing updated: {drawing_id} by user {user_id}")
         return dict(row)
-    
+
     except Exception as e:
         logger.error(f"Failed to update drawing: {e}")
         raise HTTPException(status_code=500, detail="Failed to update drawing")
@@ -269,23 +268,23 @@ async def delete_drawing(
 ):
     """
     Delete a drawing (soft delete by setting visible=false).
-    
+
     Performance: ~3ms
     """
     pool = await get_postgres_pool()
-    
+
     query = """
         UPDATE chart_drawings
         SET visible = FALSE
         WHERE id = $1 AND user_id = $2
         RETURNING id
     """
-    
+
     row = await pool.fetchrow(query, drawing_id, user_id)
-    
+
     if not row:
         raise HTTPException(status_code=404, detail="Drawing not found or not owned by user")
-    
+
     logger.info(f"Drawing deleted: {drawing_id} by user {user_id}")
     return {"status": "success", "id": str(drawing_id)}
 
@@ -293,16 +292,16 @@ async def delete_drawing(
 @router.delete("/symbol/{symbol}")
 async def delete_all_drawings(
     symbol: str,
-    timeframe: Optional[str] = None,
+    timeframe: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Delete all drawings for a symbol (soft delete).
-    
+
     Performance: ~5-10ms
     """
     pool = await get_postgres_pool()
-    
+
     if timeframe:
         query = """
             UPDATE chart_drawings
@@ -319,10 +318,10 @@ async def delete_all_drawings(
             RETURNING id
         """
         rows = await pool.fetch(query, user_id, symbol)
-    
+
     count = len(rows)
     logger.info(f"Deleted {count} drawings for {symbol} by user {user_id}")
-    
+
     return {"status": "success", "deleted_count": count}
 
 

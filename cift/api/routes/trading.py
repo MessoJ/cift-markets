@@ -11,25 +11,23 @@ Performance optimizations:
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field, validator
 
+from cift.core.nats_manager import get_nats_manager
 from cift.core.trading_queries import (
-    get_user_positions,
-    get_position_quantity,
-    get_buying_power,
-    get_portfolio_value,
     check_risk_limits,
+    get_buying_power,
     get_max_order_size,
     get_open_orders,
+    get_portfolio_value,
+    get_user_positions,
     insert_order_fast,
 )
-from cift.core.nats_manager import get_nats_manager
-
 
 # ============================================================================
 # ROUTER
@@ -48,27 +46,27 @@ class OrderRequest(BaseModel):
     side: str = Field(..., description="Order side (buy/sell)")
     order_type: str = Field(..., description="Order type (market/limit)")
     quantity: float = Field(..., gt=0, description="Order quantity")
-    price: Optional[float] = Field(None, gt=0, description="Limit price (required for limit orders)")
+    price: float | None = Field(None, gt=0, description="Limit price (required for limit orders)")
     time_in_force: str = Field("day", description="Time in force (day/gtc/ioc/fok)")
-    
+
     @validator("side")
     def validate_side(cls, v):
         if v.lower() not in ["buy", "sell"]:
             raise ValueError("Side must be 'buy' or 'sell'")
         return v.lower()
-    
+
     @validator("order_type")
     def validate_order_type(cls, v):
         if v.lower() not in ["market", "limit"]:
             raise ValueError("Order type must be 'market' or 'limit'")
         return v.lower()
-    
+
     @validator("time_in_force")
     def validate_tif(cls, v):
         if v.lower() not in ["day", "gtc", "ioc", "fok"]:
             raise ValueError("Invalid time_in_force")
         return v.lower()
-    
+
     @validator("price")
     def validate_limit_price(cls, v, values):
         if values.get("order_type") == "limit" and v is None:
@@ -83,7 +81,7 @@ class OrderResponse(BaseModel):
     side: str
     order_type: str
     quantity: float
-    price: Optional[float]
+    price: float | None
     status: str
     created_at: datetime
     message: str = "Order submitted successfully"
@@ -139,14 +137,15 @@ class RiskCheckResult(BaseModel):
 # DEPENDENCY INJECTION
 # ============================================================================
 
-from cift.core.auth import get_current_active_user, User
+from cift.core.auth import User, get_current_active_user
+
 
 async def get_current_user_id(
     current_user: User = Depends(get_current_active_user)
 ) -> UUID:
     """
     Get current authenticated user ID.
-    
+
     Requires valid JWT token or API key.
     """
     return current_user.id
@@ -163,9 +162,9 @@ async def submit_order(
 ):
     """
     Submit a new trading order.
-    
+
     Performance target: <10ms for order validation and submission
-    
+
     Steps:
     1. Validate order parameters
     2. Check risk limits (parallel queries)
@@ -173,33 +172,33 @@ async def submit_order(
     4. Return order confirmation
     """
     logger.info(f"Order request: {order.dict()} for user {user_id}")
-    
+
     # Get current price for market orders OR if limit price not provided
     from cift.core.trading_queries import get_latest_price
-    
+
     if order.order_type == "market" or order.price is None:
         current_price = await get_latest_price(order.symbol)
-        
+
         if not current_price:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No market data available for {order.symbol}"
             )
-        
+
         execution_price = current_price
         # For market orders, set the price to current price for display
         if order.order_type == "market":
             order.price = current_price
     else:
         execution_price = order.price
-    
+
     # Ensure we have a valid price for risk calculation
     if execution_price is None or execution_price <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid price for order"
         )
-    
+
     # Check risk limits (critical hot path - ~3ms)
     risk_check = await check_risk_limits(
         user_id=user_id,
@@ -207,7 +206,7 @@ async def submit_order(
         quantity=order.quantity if order.side == "buy" else -order.quantity,
         price=execution_price,
     )
-    
+
     if not risk_check["passed"]:
         # Order fails risk checks
         failed_checks = []
@@ -217,7 +216,7 @@ async def submit_order(
             failed_checks.append("Exceeds position size limit")
         if not risk_check["within_leverage_limit"]:
             failed_checks.append("Exceeds leverage limit")
-        
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -226,7 +225,7 @@ async def submit_order(
                 "risk_metrics": risk_check["metrics"],
             }
         )
-    
+
     # Insert order to database (fast path - ~2ms)
     order_data = {
         "user_id": user_id,
@@ -236,9 +235,9 @@ async def submit_order(
         "quantity": order.quantity,
         "price": order.price,
     }
-    
+
     order_id = await insert_order_fast(order_data)
-    
+
     # Publish order to NATS for execution (5-10x lower latency)
     order_message = {
         "order_id": str(order_id),
@@ -247,7 +246,7 @@ async def submit_order(
         "execution_price": execution_price,
         "created_at": datetime.utcnow().isoformat(),
     }
-    
+
     try:
         nats = await get_nats_manager()
         await nats.publish(f"orders.new.{order.symbol}", order_message)
@@ -261,9 +260,9 @@ async def submit_order(
         await execution_engine.submit_order(order_message)
     except Exception as e:
         logger.error(f"Failed to submit to execution engine: {e}")
-    
+
     logger.info(f"Order submitted successfully: {order_id}")
-    
+
     return OrderResponse(
         order_id=order_id,
         symbol=order.symbol,
@@ -276,51 +275,51 @@ async def submit_order(
     )
 
 
-@router.get("/orders", response_model=List[dict])
+@router.get("/orders", response_model=list[dict])
 async def get_orders(
-    symbol: Optional[str] = None,
-    status: Optional[str] = None,
+    symbol: str | None = None,
+    status: str | None = None,
     sync: bool = False,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Get user's orders.
-    
+
     Args:
         symbol: Filter by symbol
         status: Filter by status (open, closed, all)
         sync: Force sync with broker (Alpaca)
-        
+
     Performance: ~2ms (cached) / ~200ms (sync)
     """
     from cift.core.database import db_manager
-    
+
     # Sync with broker if requested
     if sync:
         try:
             from cift.integrations.alpaca import AlpacaClient
-            
+
             # Initialize Alpaca client
             alpaca = AlpacaClient()
-            
+
             if not alpaca.is_configured:
                 logger.warning("Skipping order sync: Alpaca keys not configured")
             else:
                 await alpaca.initialize()
-                
+
                 # Get account_id
                 account_id = await db_manager.fetchval(
                     "SELECT id FROM accounts WHERE user_id = $1 LIMIT 1",
                     user_id
                 )
-                
+
                 if account_id:
                     # Fetch all orders (open and closed)
                     broker_orders = await alpaca._request("GET", "/v2/orders", params={"status": "all", "limit": 50})
-                    
+
                     if broker_orders:
                         logger.info(f"Syncing {len(broker_orders)} orders from Alpaca for user {user_id}")
-                        
+
                         # Upsert into local DB
                         for bo in broker_orders:
                             # Map status
@@ -333,20 +332,20 @@ async def get_orders(
                                 db_status = 'partial'
                             else:
                                 db_status = alpaca_status
-                            
+
                             # Calculate remaining quantity
                             qty = float(bo['qty'])
                             filled_qty = float(bo['filled_qty'])
                             remaining_qty = qty - filled_qty
-                            
+
                             upsert_query = """
                                 INSERT INTO orders (
-                                    id, user_id, account_id, symbol, side, order_type, quantity, 
-                                    limit_price, status, filled_quantity, remaining_quantity, avg_fill_price, 
+                                    id, user_id, account_id, symbol, side, order_type, quantity,
+                                    limit_price, status, filled_quantity, remaining_quantity, avg_fill_price,
                                     created_at, updated_at
                                 ) VALUES (
-                                    $1, $2, $3, $4, $5, $6, $7, 
-                                    $8, $9, $10, $11, $12, 
+                                    $1, $2, $3, $4, $5, $6, $7,
+                                    $8, $9, $10, $11, $12,
                                     $13, NOW()
                                 )
                                 ON CONFLICT (id) DO UPDATE SET
@@ -356,7 +355,7 @@ async def get_orders(
                                     avg_fill_price = EXCLUDED.avg_fill_price,
                                     updated_at = NOW()
                             """
-                            
+
                             await db_manager.execute(
                                 upsert_query,
                                 bo['id'],
@@ -375,9 +374,9 @@ async def get_orders(
                             )
                 else:
                     logger.warning(f"No account found for user {user_id}, skipping order sync")
-                        
+
                 await alpaca.close()
-            
+
         except Exception as e:
             logger.error(f"Failed to sync orders from broker: {e}")
             # Continue to return local orders even if sync fails
@@ -387,24 +386,24 @@ async def get_orders(
     if status == 'open':
         orders = await get_open_orders(user_id, symbol)
         return orders
-    
+
     # For 'all' (None) or specific status other than 'open'
     query = """
-        SELECT * FROM orders 
-        WHERE user_id = $1 
+        SELECT * FROM orders
+        WHERE user_id = $1
     """
     params = [user_id]
-    
+
     if symbol:
         query += " AND symbol = $2"
         params.append(symbol)
-        
+
     if status and status != 'all':
         query += f" AND status = ${len(params) + 1}"
         params.append(status)
-        
+
     query += " ORDER BY created_at DESC LIMIT 100"
-    
+
     rows = await db_manager.fetch(query, *params)
     return [dict(row) for row in rows]
 
@@ -416,11 +415,11 @@ async def cancel_order(
 ):
     """
     Cancel an open order.
-    
+
     Performance: ~3ms
     """
     from cift.core.trading_queries import cancel_order_fast
-    
+
     # Try to cancel on Alpaca first if configured
     try:
         from cift.integrations.alpaca import AlpacaClient
@@ -441,25 +440,25 @@ async def cancel_order(
         logger.error(f"Error checking Alpaca for cancellation: {e}")
 
     cancelled = await cancel_order_fast(order_id, user_id)
-    
+
     if not cancelled:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found or not cancelable"
         )
-    
+
     # Publish cancellation to NATS
     try:
         nats = await get_nats_manager()
         await nats.publish(
-            f"orders.cancelled",
+            "orders.cancelled",
             {"order_id": str(order_id), "user_id": str(user_id)}
         )
     except Exception as e:
         logger.warning(f"Failed to publish cancellation to NATS: {e}")
-    
+
     logger.info(f"Order cancelled: {order_id} by user {user_id}")
-    
+
     return {
         "message": "Order cancelled successfully",
         "order_id": str(order_id)
@@ -469,28 +468,28 @@ async def cancel_order(
 @router.patch("/orders/{order_id}")
 async def modify_order(
     order_id: UUID,
-    quantity: Optional[float] = None,
-    price: Optional[float] = None,
+    quantity: float | None = None,
+    price: float | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Modify a pending order (quantity or price).
-    
+
     **Limitations:**
     - Can only modify pending or partially filled orders
     - Cannot change order type or symbol
     - Price modification only for limit orders
-    
+
     Performance: ~3ms
     """
     from cift.core.trading_queries import update_order_fast
-    
+
     if not quantity and not price:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Must provide at least one field to update (quantity or price)"
         )
-    
+
     # Build updates dict
     updates = {}
     if quantity is not None:
@@ -500,7 +499,7 @@ async def modify_order(
                 detail="Quantity must be greater than 0"
             )
         updates['quantity'] = quantity
-    
+
     if price is not None:
         if price <= 0:
             raise HTTPException(
@@ -508,18 +507,18 @@ async def modify_order(
                 detail="Price must be greater than 0"
             )
         updates['price'] = price
-    
+
     # Update order
     updated = await update_order_fast(order_id, updates)
-    
+
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found or not modifiable"
         )
-    
+
     logger.info(f"Order modified: {order_id} by user {user_id}, updates: {updates}")
-    
+
     return {
         "message": "Order modified successfully",
         "order_id": str(order_id),
@@ -529,29 +528,29 @@ async def modify_order(
 
 @router.post("/orders/cancel-all")
 async def cancel_all_orders(
-    symbol: Optional[str] = None,
+    symbol: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Cancel all pending orders (emergency stop).
-    
+
     **Use Cases:**
     - Emergency stop (cancel everything)
     - Symbol-specific stop (cancel all orders for one symbol)
     - Risk management (close all positions)
-    
+
     Args:
         symbol: Optional symbol filter (cancel only this symbol)
-    
+
     Performance: ~5ms
     """
     from cift.core.trading_queries import cancel_all_orders_fast
-    
+
     cancelled_count = await cancel_all_orders_fast(user_id, symbol)
-    
-    logger.info(f"Cancelled {cancelled_count} orders for user {user_id}" + 
+
+    logger.info(f"Cancelled {cancelled_count} orders for user {user_id}" +
                 (f" (symbol: {symbol})" if symbol else " (all symbols)"))
-    
+
     return {
         "message": f"Cancelled {cancelled_count} order(s)",
         "cancelled_count": cancelled_count,
@@ -563,17 +562,17 @@ async def cancel_all_orders(
 # POSITION ENDPOINTS
 # ============================================================================
 
-@router.get("/positions", response_model=List[Position])
+@router.get("/positions", response_model=list[Position])
 async def get_positions(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Get user's current positions.
-    
+
     Performance: ~2ms
     """
     positions_data = await get_user_positions(user_id)
-    
+
     positions = []
     for pos in positions_data:
         quantity = float(pos['quantity'] or 0)
@@ -581,14 +580,14 @@ async def get_positions(
         current_price = float(pos['current_price'] or 0)
         unrealized_pnl = float(pos['unrealized_pnl'] or 0)
         realized_pnl = float(pos['realized_pnl'] or 0)
-        
+
         total_cost = avg_cost * abs(quantity)
         market_value = current_price * abs(quantity)
         total_pnl = unrealized_pnl + realized_pnl
         pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0
         unrealized_pnl_pct = (unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
         side = 'long' if quantity > 0 else 'short'
-        
+
         positions.append(Position(
             id=pos['id'],
             symbol=pos['symbol'],
@@ -607,7 +606,7 @@ async def get_positions(
             day_pnl_pct=0.0,
             updated_at=pos['updated_at'],
         ))
-    
+
     return positions
 
 
@@ -618,11 +617,11 @@ async def get_position(
 ):
     """
     Get position for a specific symbol.
-    
+
     Performance: ~2ms
     """
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -633,23 +632,23 @@ async def get_position(
             """,
             user_id, symbol.upper()
         )
-    
+
     if not row:
         return None
-    
+
     quantity = float(row['quantity'] or 0)
     avg_cost = float(row['avg_cost'] or 0)
     current_price = float(row['current_price'] or 0)
     unrealized_pnl = float(row['unrealized_pnl'] or 0)
     realized_pnl = float(row['realized_pnl'] or 0)
-    
+
     total_cost = avg_cost * abs(quantity)
     market_value = current_price * abs(quantity)
     total_pnl = unrealized_pnl + realized_pnl
     pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0
     unrealized_pnl_pct = (unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
     side = 'long' if quantity > 0 else 'short'
-    
+
     return Position(
         id=row['id'],
         symbol=row['symbol'],
@@ -681,50 +680,50 @@ async def get_portfolio(
 ):
     """
     Get portfolio summary.
-    
+
     Performance: ~5ms
     """
     # Sync with broker if requested
     if sync:
         try:
-            from cift.integrations.alpaca import AlpacaClient
             from cift.core.database import db_manager
-            
+            from cift.integrations.alpaca import AlpacaClient
+
             alpaca = AlpacaClient()
             if alpaca.is_configured:
                 await alpaca.initialize()
-                
+
                 # 1. Sync Account Info
                 account = await alpaca.get_account()
-                
+
                 # Update local account
                 await db_manager.execute("""
-                    UPDATE accounts 
+                    UPDATE accounts
                     SET cash_balance = $1,
                         buying_power = $2,
                         equity = $3,
                         updated_at = NOW()
                     WHERE user_id = $4
-                """, 
+                """,
                 float(account['cash']),
                 float(account['buying_power']),
                 float(account['equity']),
                 user_id
                 )
-                
+
                 # 2. Sync Positions
                 positions = await alpaca.get_positions()
-                
+
                 # Clear existing positions (simple sync strategy)
                 # Or better: upsert and delete missing. For now, let's just upsert.
                 # Actually, if we sold something, we need to remove it.
                 # Let's get current DB positions and compare?
                 # For simplicity in this "add key" phase, let's just upsert.
-                
+
                 for pos in positions:
                     await db_manager.execute("""
                         INSERT INTO positions (
-                            id, account_id, symbol, quantity, avg_cost, current_price, 
+                            id, account_id, symbol, quantity, avg_cost, current_price,
                             market_value, unrealized_pnl, unrealized_pnl_pct, updated_at
                         ) VALUES (
                             gen_random_uuid(),
@@ -749,42 +748,42 @@ async def get_portfolio(
                     float(pos['unrealized_plpc']),
                     user_id
                     )
-                
+
                 await alpaca.close()
         except Exception as e:
             logger.error(f"Portfolio sync failed: {e}")
 
     # Parallel queries for speed
     import asyncio
-    
+
     total_value, buying_power, positions = await asyncio.gather(
         get_portfolio_value(user_id),
         get_buying_power(user_id),
         get_user_positions(user_id),
     )
-    
+
     # Convert Decimal values to float for arithmetic
     total_value = float(total_value) if total_value else 0.0
     buying_power = float(buying_power) if buying_power else 0.0
-    
+
     # Calculate aggregated P&L
     unrealized_pnl = sum(float(pos['unrealized_pnl'] or 0) for pos in positions)
     realized_pnl = sum(float(pos['realized_pnl'] or 0) for pos in positions)
     total_pnl = unrealized_pnl + realized_pnl
-    
+
     # Calculate positions value
     positions_value = sum(
         float(pos['quantity'] or 0) * float(pos['current_price'] or 0)
         for pos in positions
     )
-    
+
     # Calculate cash (total value - positions value)
     cash = total_value - positions_value
-    
+
     # TODO: Get day change from historical data
     day_change = 0.0
     day_change_percent = 0.0
-    
+
     return PortfolioSummary(
         total_value=total_value,
         cash=cash,
@@ -809,11 +808,11 @@ async def check_order_risk(
 ):
     """
     Check if an order would pass risk limits (dry run).
-    
+
     Performance: ~3ms
     """
     from cift.core.trading_queries import get_latest_price
-    
+
     # Get execution price
     if order.order_type == "market":
         price = await get_latest_price(order.symbol)
@@ -824,7 +823,7 @@ async def check_order_risk(
             )
     else:
         price = order.price
-    
+
     # Run risk checks
     risk_check = await check_risk_limits(
         user_id=user_id,
@@ -832,7 +831,7 @@ async def check_order_risk(
         quantity=order.quantity if order.side == "buy" else -order.quantity,
         price=price,
     )
-    
+
     return RiskCheckResult(**risk_check)
 
 
@@ -844,11 +843,11 @@ async def get_maximum_order_size(
 ):
     """
     Get maximum order size allowed for a symbol.
-    
+
     Performance: ~2ms
     """
     max_size = await get_max_order_size(user_id, symbol, side)
-    
+
     return {
         "symbol": symbol,
         "side": side,
@@ -866,11 +865,11 @@ async def get_account_buying_power(
 ):
     """
     Get available buying power.
-    
+
     Performance: ~1ms (cached)
     """
     buying_power = await get_buying_power(user_id)
-    
+
     return {
         "buying_power": buying_power,
         "timestamp": datetime.utcnow().isoformat(),
@@ -883,23 +882,23 @@ async def get_account_summary(
 ):
     """
     Get account summary (cash, equity, margin, etc.).
-    
+
     Performance: ~3ms
     """
     import asyncio
-    
+
     pool = await get_postgres_pool()
-    
+
     # Parallel queries
     total_value, buying_power, positions = await asyncio.gather(
         get_portfolio_value(user_id),
         get_buying_power(user_id),
         get_user_positions(user_id),
     )
-    
+
     total_value = float(total_value) if total_value else 0.0
     buying_power = float(buying_power) if buying_power else 0.0
-    
+
     # Calculate equity and margin
     positions_value = sum(
         float(pos['current_price'] or 0) * abs(float(pos['quantity'] or 0))
@@ -907,7 +906,7 @@ async def get_account_summary(
     )
     unrealized_pnl = sum(float(pos['unrealized_pnl'] or 0) for pos in positions)
     realized_pnl = sum(float(pos['realized_pnl'] or 0) for pos in positions)
-    
+
     # Get cash balance
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -915,12 +914,12 @@ async def get_account_summary(
             user_id
         )
         cash_balance = float(row['cash_balance']) if row and row['cash_balance'] else 0.0
-    
+
     # Calculate margin used (simplified: positions_value - cash used)
     equity = total_value
     margin_used = max(0, positions_value - cash_balance)
     margin_available = buying_power
-    
+
     return {
         "account_id": str(user_id),
         "cash_balance": cash_balance,
@@ -944,35 +943,35 @@ async def get_account_summary(
 @router.get("/activity")
 async def get_activity_feed(
     limit: int = 50,
-    activity_types: Optional[List[str]] = None,
+    activity_types: list[str] | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Get recent activity feed (orders, fills, transfers).
-    
+
     **Activity Types:**
     - `orders` - Order submissions/cancellations
     - `fills` - Trade executions
     - `transfers` - Deposits/withdrawals
-    
+
     **Use Cases:**
     - Dashboard "Recent Activity" widget
     - Activity timeline view
     - Audit trail
-    
+
     Args:
         limit: Number of activities (max 100)
         activity_types: Filter by types (default: all)
-    
+
     Performance: ~5ms
     """
     from cift.core.trading_queries import get_recent_activity
-    
+
     if limit > 100:
         limit = 100
-    
+
     activities = await get_recent_activity(user_id, limit, activity_types)
-    
+
     return {
         "activities": activities,
         "count": len(activities),

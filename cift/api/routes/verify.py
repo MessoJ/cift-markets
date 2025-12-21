@@ -5,10 +5,10 @@ Allows anyone to verify a transaction receipt by transaction ID.
 No authentication required - this is a public endpoint for receipt verification.
 """
 
-from fastapi import APIRouter, HTTPException
+from typing import Any
 from uuid import UUID
-from typing import Dict, Any, Optional
-from datetime import datetime
+
+from fastapi import APIRouter, HTTPException
 
 from cift.core.database import get_postgres_pool
 from cift.core.logging import logger
@@ -17,16 +17,16 @@ router = APIRouter(tags=["verification"])
 
 
 @router.get("/verify/{transaction_id}")
-async def verify_transaction(transaction_id: str) -> Dict[str, Any]:
+async def verify_transaction(transaction_id: str) -> dict[str, Any]:
     """
     Public endpoint to verify a transaction receipt.
-    
+
     Returns limited transaction information for verification purposes.
     Does not require authentication - anyone with a receipt can verify it.
-    
+
     Args:
         transaction_id: UUID of the transaction to verify
-        
+
     Returns:
         Verification result with transaction details
     """
@@ -39,14 +39,14 @@ async def verify_transaction(transaction_id: str) -> Dict[str, Any]:
                 "valid": False,
                 "message": "Invalid transaction ID format"
             }
-        
+
         pool = await get_postgres_pool()
-        
+
         async with pool.acquire() as conn:
             # Fetch transaction with limited fields (no sensitive user data)
             transaction = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     id,
                     type,
                     status,
@@ -59,14 +59,14 @@ async def verify_transaction(transaction_id: str) -> Dict[str, Any]:
                 """,
                 txn_uuid
             )
-            
+
             if not transaction:
                 logger.info(f"Verification attempted for non-existent transaction: {transaction_id}")
                 return {
                     "valid": False,
                     "message": "Transaction not found in our records"
                 }
-            
+
             # Fetch payment method type (no sensitive details like full account number)
             payment_method = None
             if transaction['payment_method_id']:
@@ -78,7 +78,7 @@ async def verify_transaction(transaction_id: str) -> Dict[str, Any]:
                     """,
                     transaction['payment_method_id']
                 )
-            
+
             # Build verification response with limited information
             response = {
                 "valid": True,
@@ -91,15 +91,15 @@ async def verify_transaction(transaction_id: str) -> Dict[str, Any]:
                     "created_at": transaction['created_at'].isoformat(),
                 }
             }
-            
+
             # Add payment method info if available (no sensitive data)
             if payment_method:
                 response["transaction"]["payment_method_type"] = payment_method['type']
                 response["transaction"]["payment_method_last4"] = payment_method['last_four']
-            
+
             logger.info(f"Transaction verified successfully: {transaction_id}")
             return response
-            
+
     except Exception as e:
         logger.error(f"Error verifying transaction {transaction_id}: {str(e)}", exc_info=True)
         raise HTTPException(

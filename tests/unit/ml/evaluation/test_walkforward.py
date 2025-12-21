@@ -276,12 +276,12 @@ def test_walkforward_full_de_prado_stack(tmp_path):
     assert report.metrics.get("use_meta_labeling") is True
     assert report.metrics.get("use_sample_weights") is True
     assert report.metrics.get("holdout_bars") == 100
-    
+
     # Verify we got meaningful results
     assert "psr_sharpe_gt_0" in report.metrics
     assert "dsr_sharpe_gt_0" in report.metrics
     assert report.metrics["n_obs"] > 0
-    
+
     # Holdout metrics should exist
     assert "holdout_sharpe_ratio" in report.metrics or "holdout_n_obs" in report.metrics
 

@@ -6,7 +6,6 @@ All data is fetched from database - NO MOCK DATA.
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,7 +14,6 @@ from pydantic import BaseModel
 from cift.core.auth import get_current_user_id
 from cift.core.database import get_postgres_pool, get_questdb_pool
 from cift.core.logging import logger
-from cift.services.news_service import get_news_service
 
 router = APIRouter(prefix="/news", tags=["news"])
 
@@ -33,9 +31,9 @@ class NewsArticle(BaseModel):
     url: str
     published_at: datetime
     category: str
-    sentiment: Optional[str] = None  # 'positive', 'negative', 'neutral'
-    symbols: List[str] = []
-    image_url: Optional[str] = None
+    sentiment: str | None = None  # 'positive', 'negative', 'neutral'
+    symbols: list[str] = []
+    image_url: str | None = None
 
 
 class MarketMover(BaseModel):
@@ -46,7 +44,7 @@ class MarketMover(BaseModel):
     change: Decimal
     change_percent: Decimal
     volume: int
-    market_cap: Optional[Decimal] = None
+    market_cap: Decimal | None = None
 
 
 class EconomicEvent(BaseModel):
@@ -56,9 +54,9 @@ class EconomicEvent(BaseModel):
     country: str
     date: datetime
     impact: str  # 'high', 'medium', 'low'
-    forecast: Optional[str] = None
-    previous: Optional[str] = None
-    actual: Optional[str] = None
+    forecast: str | None = None
+    previous: str | None = None
+    actual: str | None = None
     currency: str
 
 
@@ -68,19 +66,19 @@ class EconomicEvent(BaseModel):
 
 @router.get("/articles")
 async def get_news(
-    category: Optional[str] = None,
-    symbol: Optional[str] = None,
+    category: str | None = None,
+    symbol: str | None = None,
     limit: int = 50,
     offset: int = 0,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get market news articles from database"""
-    
+
     pool = await get_postgres_pool()
-    
+
     # Build query based on filters
     query = """
-        SELECT 
+        SELECT
             id::text,
             title,
             summary,
@@ -96,30 +94,30 @@ async def get_news(
     """
     params = [datetime.utcnow() - timedelta(days=7)]  # Last 7 days
     param_count = 2
-    
+
     if category and category != 'all':
         query += f" AND category = ${param_count}"
         params.append(category)
         param_count += 1
-    
+
     if symbol:
         query += f" AND ${param_count} = ANY(symbols)"
         params.append(symbol.upper())
         param_count += 1
-    
+
     query += f" ORDER BY published_at DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
     params.extend([limit, offset])
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         articles = []
         for row in rows:
             # Filter out known CORS-blocked domains
             image_url = row['image_url']
             if image_url and any(domain in image_url for domain in ['cryptoslate.com', 'medium.com']):
                 image_url = None
-            
+
             articles.append({
                 "id": row['id'],
                 "title": row['title'],
@@ -132,21 +130,21 @@ async def get_news(
                 "symbols": row['symbols'] or [],
                 "image_url": image_url,
             })
-        
+
         # Get total count
         count_query = "SELECT COUNT(*) FROM news_articles WHERE published_at >= $1"
         count_params = [datetime.utcnow() - timedelta(days=7)]
-        
+
         if category and category != 'all':
             count_query += f" AND category = ${len(count_params) + 1}"
             count_params.append(category)
-        
+
         if symbol:
             count_query += f" AND ${len(count_params) + 1} = ANY(symbols)"
             count_params.append(symbol.upper())
-        
+
         total = await conn.fetchval(count_query, *count_params)
-        
+
         return {
             "articles": articles,
             "total": total,
@@ -162,11 +160,11 @@ async def get_article(
 ):
     """Get single news article from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 title,
                 summary,
@@ -184,10 +182,10 @@ async def get_article(
             """,
             article_id,
         )
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Article not found")
-        
+
         return {
             "id": row['id'],
             "title": row['title'],
@@ -217,20 +215,20 @@ async def get_market_movers(
     """Get market movers (gainers, losers, most active) from database"""
     if mover_type not in ['gainers', 'losers', 'active']:
         raise HTTPException(status_code=400, detail="Invalid mover type")
-    
+
     pool = await get_questdb_pool()
-    
+
     # First, get the most recent data timestamp from QuestDB
     async with pool.acquire() as conn:
         latest_row = await conn.fetchrow("SELECT max(timestamp) as latest FROM ticks")
         if not latest_row or not latest_row['latest']:
-            logger.warning(f"No tick data available in QuestDB")
+            logger.warning("No tick data available in QuestDB")
             return []
-        
+
         latest_timestamp = latest_row['latest']
         # Use the day of the latest available data
         data_start = latest_timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
-    
+
     # Calculate movers from available tick data (QuestDB compatible)
     if mover_type == 'gainers':
         order_clause = "ORDER BY change_percent DESC"
@@ -238,11 +236,11 @@ async def get_market_movers(
         order_clause = "ORDER BY change_percent ASC"
     else:  # active
         order_clause = "ORDER BY total_volume DESC"
-    
+
     # QuestDB doesn't support HAVING, use subquery
     query = f"""
         SELECT * FROM (
-            SELECT 
+            SELECT
                 symbol,
                 first(price) as open_price,
                 last(price) as current_price,
@@ -257,20 +255,20 @@ async def get_market_movers(
         {order_clause}
         LIMIT $2
     """
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, data_start, limit)
-        
+
         movers = []
         pg_pool = await get_postgres_pool()
-        
+
         for row in rows:
             symbol = row['symbol']
             current_price = float(row['current_price'])
             open_price = float(row['open_price'])
             change = current_price - open_price
             change_percent = float(row['change_percent'])
-            
+
             # Get company name from postgres
             async with pg_pool.acquire() as pg_conn:
                 name_row = await pg_conn.fetchrow(
@@ -279,7 +277,7 @@ async def get_market_movers(
                 )
                 name = name_row['name'] if name_row else symbol
                 market_cap = float(name_row['market_cap']) if (name_row and name_row['market_cap']) else None
-            
+
             movers.append(
                 MarketMover(
                     symbol=symbol,
@@ -291,11 +289,11 @@ async def get_market_movers(
                     market_cap=market_cap,
                 )
             )
-        
+
         # If no data, log warning and return empty
         if not movers:
             logger.warning(f"No tick data found for {mover_type}. Run 'python scripts/populate_today.py' to generate data.")
-        
+
         return movers
 
 
@@ -305,25 +303,25 @@ async def get_market_summary(
 ):
     """Get market summary (indices) from database"""
     pool = await get_questdb_pool()
-    
+
     indices = ['SPY', 'QQQ', 'DIA', 'IWM']  # S&P 500, NASDAQ, Dow, Russell 2000
-    
+
     # First, get the most recent data timestamp
     async with pool.acquire() as conn:
         latest_row = await conn.fetchrow("SELECT max(timestamp) as latest FROM ticks")
         if not latest_row or not latest_row['latest']:
             return []
-        
+
         data_start = latest_row['latest'].replace(hour=0, minute=0, second=0, microsecond=0)
-    
+
     summary = []
-    
+
     async with pool.acquire() as conn:
         for index_symbol in indices:
             # Query from ticks table since market_quotes may not exist
             row = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     symbol,
                     first(price) as open_price,
                     last(price) as price,
@@ -336,13 +334,13 @@ async def get_market_summary(
                 index_symbol,
                 data_start,
             )
-            
+
             if row:
                 open_price = float(row['open_price'])
                 current_price = float(row['price'])
                 change = current_price - open_price
                 change_percent = float(row['change_percent']) if row['change_percent'] else 0
-                
+
                 # Get index name
                 pg_pool = await get_postgres_pool()
                 async with pg_pool.acquire() as pg_conn:
@@ -351,7 +349,7 @@ async def get_market_summary(
                         index_symbol,
                     )
                     name = name_row['name'] if name_row else index_symbol
-                
+
                 summary.append({
                     "symbol": row['symbol'],
                     "name": name,
@@ -360,7 +358,7 @@ async def get_market_summary(
                     "change_percent": change_percent,
                     "volume": int(row['volume']) if row['volume'] else 0,
                 })
-    
+
     return summary
 
 
@@ -371,18 +369,18 @@ async def get_market_summary(
 @router.get("/economic-calendar")
 async def get_economic_calendar(
     days_ahead: int = 7,
-    impact: Optional[str] = None,
+    impact: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get economic calendar events from database"""
     pool = await get_postgres_pool()
-    
+
     # Show events from 2 days ago to days_ahead in the future
     start_date = datetime.utcnow() - timedelta(days=2)
     end_date = datetime.utcnow() + timedelta(days=days_ahead)
-    
+
     query = """
-        SELECT 
+        SELECT
             id::text,
             title,
             country,
@@ -396,16 +394,16 @@ async def get_economic_calendar(
         WHERE event_date BETWEEN $1 AND $2
     """
     params = [start_date, end_date]
-    
+
     if impact:
         query += " AND impact = $3"
         params.append(impact)
-    
+
     query += " ORDER BY event_date ASC"
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         return [
             EconomicEvent(
                 id=row['id'],
@@ -429,14 +427,14 @@ async def get_earnings_calendar(
 ):
     """Get earnings calendar from database"""
     pool = await get_postgres_pool()
-    
+
     start_date = datetime.utcnow().date()
     end_date = start_date + timedelta(days=days_ahead)
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 symbol,
                 company_name,
                 earnings_date,
@@ -452,7 +450,7 @@ async def get_earnings_calendar(
             start_date,
             end_date,
         )
-        
+
         return [
             {
                 "symbol": row['symbol'],
@@ -479,7 +477,7 @@ async def get_symbol_sentiment(
 ):
     """Get news sentiment analysis for a symbol from database"""
     pool = await get_postgres_pool()
-    
+
     # Get sentiment from recent news
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -494,10 +492,10 @@ async def get_symbol_sentiment(
             symbol.upper(),
             datetime.utcnow() - timedelta(days=7),
         )
-        
+
         sentiment_counts = {row['sentiment']: row['count'] for row in rows}
         total = sum(sentiment_counts.values())
-        
+
         if total == 0:
             return {
                 "symbol": symbol.upper(),
@@ -507,7 +505,7 @@ async def get_symbol_sentiment(
                 "neutral_percent": 0,
                 "total_articles": 0,
             }
-        
+
         return {
             "symbol": symbol.upper(),
             "sentiment": max(sentiment_counts, key=sentiment_counts.get),
@@ -532,14 +530,14 @@ async def get_globe_news_data(
     Returns country-level statistics for 3D globe plotting.
     """
     pool = await get_postgres_pool()
-    
+
     time_threshold = datetime.utcnow() - timedelta(hours=hours)
-    
+
     async with pool.acquire() as conn:
         # Aggregate news by country
         country_data = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 country,
                 country_code,
                 region,
@@ -561,12 +559,12 @@ async def get_globe_news_data(
             """,
             time_threshold
         )
-        
+
         # Get top headlines per country (top 3)
         countries_list = []
         for row in country_data:
             country_code = row['country_code']
-            
+
             # Get top 3 headlines for this country
             headlines = await conn.fetch(
                 """
@@ -580,7 +578,7 @@ async def get_globe_news_data(
                 country_code,
                 time_threshold
             )
-            
+
             # Calculate sentiment score (-1 to 1)
             total_articles = row['article_count']
             if total_articles > 0:
@@ -589,7 +587,7 @@ async def get_globe_news_data(
                 )
             else:
                 sentiment_score = 0
-            
+
             countries_list.append({
                 "code": country_code,
                 "name": row['country'],
@@ -615,11 +613,11 @@ async def get_globe_news_data(
                     for h in headlines
                 ]
             })
-        
+
         # Get breaking news (last hour)
         breaking_news = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 title,
                 source,
@@ -633,7 +631,7 @@ async def get_globe_news_data(
             """,
             datetime.utcnow() - timedelta(hours=1)
         )
-        
+
         return {
             "countries": countries_list,
             "total_countries": len(countries_list),

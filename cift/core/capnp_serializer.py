@@ -3,36 +3,37 @@ Cap'n Proto Serializer - Zero-copy serialization (220x faster than JSON)
 Provides ultra-fast message encoding/decoding for high-frequency trading
 """
 
-from typing import Dict, Any, List
-from loguru import logger
+from typing import Any
+
 import msgpack  # Fallback to MessagePack (5x faster than JSON) since pycapnp setup is complex
+from loguru import logger
 
 
 class CapnProtoSerializer:
     """
     High-performance serializer using MessagePack as interim solution
-    
+
     Note: Full Cap'n Proto integration requires pycapnp compilation
     For production deployment, compile Cap'n Proto schemas and use pycapnp
-    
+
     Current implementation uses MessagePack which provides:
     - 5x faster than JSON
     - Smaller message size (60-80% of JSON)
     - Binary encoding
-    
+
     Future: Switch to Cap'n Proto for 220x speedup with zero-copy deserialization
     """
 
     def __init__(self):
         self.use_msgpack = True  # Will switch to capnp when schemas are compiled
 
-    def serialize(self, data: Dict[str, Any]) -> bytes:
+    def serialize(self, data: dict[str, Any]) -> bytes:
         """
         Serialize data to binary format
-        
+
         Args:
             data: Dictionary to serialize
-            
+
         Returns:
             Serialized bytes
         """
@@ -47,13 +48,13 @@ class CapnProtoSerializer:
             logger.error(f"Serialization failed: {e}")
             raise
 
-    def deserialize(self, data: bytes) -> Dict[str, Any]:
+    def deserialize(self, data: bytes) -> dict[str, Any]:
         """
         Deserialize binary data to dictionary
-        
+
         Args:
             data: Serialized bytes
-            
+
         Returns:
             Deserialized dictionary
         """
@@ -68,11 +69,11 @@ class CapnProtoSerializer:
             logger.error(f"Deserialization failed: {e}")
             raise
 
-    def serialize_batch(self, items: List[Dict[str, Any]]) -> bytes:
+    def serialize_batch(self, items: list[dict[str, Any]]) -> bytes:
         """Serialize multiple items efficiently"""
         return self.serialize({"items": items})
 
-    def deserialize_batch(self, data: bytes) -> List[Dict[str, Any]]:
+    def deserialize_batch(self, data: bytes) -> list[dict[str, Any]]:
         """Deserialize multiple items"""
         result = self.deserialize(data)
         return result.get("items", [])
@@ -85,7 +86,7 @@ class CapnProtoSerializer:
 class MarketDataSerializer(CapnProtoSerializer):
     """Optimized serializer for market data messages"""
 
-    def serialize_tick(self, tick: Dict[str, Any]) -> bytes:
+    def serialize_tick(self, tick: dict[str, Any]) -> bytes:
         """Serialize tick data"""
         return self.serialize({
             "type": "tick",
@@ -99,7 +100,7 @@ class MarketDataSerializer(CapnProtoSerializer):
             "ask_size": int(tick.get("ask_size", 0)),
         })
 
-    def serialize_bar(self, bar: Dict[str, Any]) -> bytes:
+    def serialize_bar(self, bar: dict[str, Any]) -> bytes:
         """Serialize OHLCV bar"""
         return self.serialize({
             "type": "bar",
@@ -113,7 +114,7 @@ class MarketDataSerializer(CapnProtoSerializer):
             "volume": int(bar["volume"]),
         })
 
-    def serialize_order_book(self, order_book: Dict[str, Any]) -> bytes:
+    def serialize_order_book(self, order_book: dict[str, Any]) -> bytes:
         """Serialize order book snapshot"""
         return self.serialize({
             "type": "orderbook",
@@ -127,7 +128,7 @@ class MarketDataSerializer(CapnProtoSerializer):
 class TradingSerializer(CapnProtoSerializer):
     """Optimized serializer for trading messages"""
 
-    def serialize_order(self, order: Dict[str, Any]) -> bytes:
+    def serialize_order(self, order: dict[str, Any]) -> bytes:
         """Serialize order message"""
         return self.serialize({
             "type": "order",
@@ -141,7 +142,7 @@ class TradingSerializer(CapnProtoSerializer):
             "timestamp": order["timestamp"],
         })
 
-    def serialize_fill(self, fill: Dict[str, Any]) -> bytes:
+    def serialize_fill(self, fill: dict[str, Any]) -> bytes:
         """Serialize fill/execution message"""
         return self.serialize({
             "type": "fill",
@@ -157,7 +158,7 @@ class TradingSerializer(CapnProtoSerializer):
             "timestamp": fill["timestamp"],
         })
 
-    def serialize_signal(self, signal: Dict[str, Any]) -> bytes:
+    def serialize_signal(self, signal: dict[str, Any]) -> bytes:
         """Serialize ML signal/prediction"""
         return self.serialize({
             "type": "signal",
@@ -205,13 +206,13 @@ For maximum performance in production, compile Cap'n Proto schemas:
 1. Install Cap'n Proto:
    - Windows: Download from capnproto.org
    - Linux: sudo apt-get install capnproto
-   
+
 2. Install pycapnp:
    pip install pycapnp
-   
+
 3. Compile schemas:
    capnp compile -oPython cift/core/capnp_schemas/*.capnp
-   
+
 4. Update this module to use compiled schemas
 
 This will provide 220x speedup over JSON and 44x over MessagePack.

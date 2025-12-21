@@ -1,9 +1,8 @@
 import os
 import sys
-import random
 from datetime import datetime, timedelta
+
 import psycopg2
-from psycopg2.extras import RealDictCursor
 
 # Add parent directory to path to import backend modules if needed
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,17 +25,17 @@ def get_db_connection():
 def populate_payment_methods(conn, user_id):
     """Add mock payment methods if none exist."""
     cur = conn.cursor()
-    
+
     # Check existing methods
     cur.execute("SELECT count(*) FROM payment_methods WHERE user_id = %s", (user_id,))
     count = cur.fetchone()[0]
-    
+
     if count > 0:
         print(f"User {user_id} already has {count} payment methods. Skipping.")
         return
 
     print(f"Adding payment methods for user {user_id}...")
-    
+
     methods = [
         {
             "type": "bank_account",
@@ -84,33 +83,33 @@ def populate_payment_methods(conn, user_id):
             m.get("last_four"), m.get("card_brand"), m.get("expiry_month"), m.get("expiry_year"),
             m.get("crypto_network"), m.get("wallet_address"), m["is_default"], m["is_verified"]
         ))
-    
+
     conn.commit()
     print("Payment methods added.")
 
 def populate_funding_history(conn, user_id):
     """Add mock funding history if none exists."""
     cur = conn.cursor()
-    
+
     # Check existing transactions
     cur.execute("SELECT count(*) FROM funding_transactions WHERE user_id = %s", (user_id,))
     count = cur.fetchone()[0]
-    
+
     if count > 0:
         print(f"User {user_id} already has {count} funding transactions. Skipping.")
         return
 
     print(f"Adding funding history for user {user_id}...")
-    
+
     # Get payment method IDs
     cur.execute("SELECT id, type FROM payment_methods WHERE user_id = %s", (user_id,))
     methods = cur.fetchall()
     if not methods:
         print("No payment methods found. Cannot add history.")
         return
-        
+
     method_map = {m[1]: m[0] for m in methods} # type -> id
-    
+
     transactions = [
         {
             "type": "deposit",
@@ -157,7 +156,7 @@ def populate_funding_history(conn, user_id):
     for t in transactions:
         if not t["payment_method_id"]:
             continue
-            
+
         cur.execute("""
             INSERT INTO funding_transactions (
                 user_id, type, amount, currency, status, payment_method_id,
@@ -170,28 +169,28 @@ def populate_funding_history(conn, user_id):
             user_id, t["type"], t["amount"], t["currency"], t["status"], t["payment_method_id"],
             t["created_at"], t["completed_at"], t["reference"]
         ))
-    
+
     conn.commit()
     print("Funding history added.")
 
 def main():
     conn = get_db_connection()
-    
+
     # Get the first user (usually the demo user)
     cur = conn.cursor()
     cur.execute("SELECT id FROM users ORDER BY id LIMIT 1")
     user = cur.fetchone()
-    
+
     if not user:
         print("No users found in database.")
         return
-        
+
     user_id = user[0]
     print(f"Populating data for user ID: {user_id}")
-    
+
     populate_payment_methods(conn, user_id)
     populate_funding_history(conn, user_id)
-    
+
     conn.close()
     print("Done.")
 

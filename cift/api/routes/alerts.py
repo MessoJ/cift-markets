@@ -6,7 +6,6 @@ All data is fetched from database - NO MOCK DATA.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,23 +29,23 @@ class PriceAlert(BaseModel):
     symbol: str
     alert_type: str  # 'price_above', 'price_below', 'price_change', 'volume'
     target_value: Decimal
-    current_value: Optional[Decimal] = None
+    current_value: Decimal | None = None
     status: str  # 'active', 'triggered', 'cancelled', 'expired'
-    notification_methods: List[str] = []  # ['email', 'sms', 'push']
+    notification_methods: list[str] = []  # ['email', 'sms', 'push']
     created_at: datetime
-    triggered_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    triggered_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 class CreateAlertRequest(BaseModel):
     """Create alert request"""
     symbol: str = Field(..., min_length=1, max_length=10)
     alert_type: str = Field(..., pattern="^(price_above|price_below|price_change|volume)$")
-    target_value: Optional[Decimal] = Field(None, gt=0)
-    condition_value: Optional[Decimal] = Field(None, gt=0, description="Alias for target_value")
-    notification_methods: List[str] = Field(default=['email', 'push'])
-    expires_in_days: Optional[int] = Field(default=30, ge=1, le=365)
-    message: Optional[str] = None
+    target_value: Decimal | None = Field(None, gt=0)
+    condition_value: Decimal | None = Field(None, gt=0, description="Alias for target_value")
+    notification_methods: list[str] = Field(default=['email', 'push'])
+    expires_in_days: int | None = Field(default=30, ge=1, le=365)
+    message: str | None = None
 
     def __init__(self, **data):
         # Handle alias for target_value
@@ -64,8 +63,8 @@ class Notification(BaseModel):
     message: str
     is_read: bool
     created_at: datetime
-    read_at: Optional[datetime] = None
-    metadata: Optional[dict] = None
+    read_at: datetime | None = None
+    metadata: dict | None = None
 
 
 # ============================================================================
@@ -74,16 +73,16 @@ class Notification(BaseModel):
 
 @router.get("")
 async def get_alerts(
-    status: Optional[str] = None,
-    symbol: Optional[str] = None,
+    status: str | None = None,
+    symbol: str | None = None,
     limit: int = 100,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get user's price alerts from database"""
     pool = await get_postgres_pool()
-    
+
     query = """
-        SELECT 
+        SELECT
             id::text,
             user_id::text,
             symbol,
@@ -100,23 +99,23 @@ async def get_alerts(
     """
     params = [user_id]
     param_count = 2
-    
+
     if status:
         query += f" AND status = ${param_count}"
         params.append(status)
         param_count += 1
-    
+
     if symbol:
         query += f" AND symbol = ${param_count}"
         params.append(symbol.upper())
         param_count += 1
-    
+
     query += f" ORDER BY created_at DESC LIMIT ${param_count}"
     params.append(limit)
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         return [
             PriceAlert(
                 id=row['id'],
@@ -142,11 +141,11 @@ async def get_alert(
 ):
     """Get single alert detail from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 user_id::text,
                 symbol,
@@ -164,10 +163,10 @@ async def get_alert(
             alert_id,
             user_id,
         )
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Alert not found")
-        
+
         return PriceAlert(
             id=row['id'],
             user_id=row['user_id'],
@@ -190,37 +189,37 @@ async def create_alert(
 ):
     """Create price alert in database"""
     pool = await get_postgres_pool()
-    
+
     # Validate notification methods
     valid_methods = {'email', 'sms', 'push'}
     if not all(m in valid_methods for m in request.notification_methods):
         raise HTTPException(status_code=400, detail="Invalid notification method")
-    
+
     # Calculate expiration
     expires_at = None
     if request.expires_in_days:
         from datetime import timedelta
         expires_at = datetime.utcnow() + timedelta(days=request.expires_in_days)
-    
+
     async with pool.acquire() as conn:
         # Verify symbol exists
         symbol_exists = await conn.fetchval(
             "SELECT EXISTS(SELECT 1 FROM symbols WHERE symbol = $1)",
             request.symbol.upper(),
         )
-        
+
         if not symbol_exists:
             raise HTTPException(status_code=404, detail="Symbol not found")
-        
+
         # Check alert limit (max 50 active alerts per user)
         active_count = await conn.fetchval(
             "SELECT COUNT(*) FROM price_alerts WHERE user_id = $1 AND status = 'active'",
             user_id,
         )
-        
+
         if active_count >= 50:
             raise HTTPException(status_code=400, detail="Maximum alert limit reached (50)")
-        
+
         row = await conn.fetchrow(
             """
             INSERT INTO price_alerts (
@@ -236,9 +235,9 @@ async def create_alert(
             request.notification_methods,
             expires_at,
         )
-        
+
         logger.info(f"Price alert created: id={row['id']}, user_id={user_id}, symbol={request.symbol}")
-        
+
         return {
             "alert_id": row['id'],
             "created_at": row['created_at'],
@@ -253,49 +252,49 @@ async def delete_alert(
 ):
     """Delete (cancel) price alert"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            UPDATE price_alerts 
-            SET status = 'cancelled' 
+            UPDATE price_alerts
+            SET status = 'cancelled'
             WHERE id = $1::uuid AND user_id = $2 AND status = 'active'
             """,
             alert_id,
             user_id,
         )
-        
+
         if result == "UPDATE 0":
             raise HTTPException(status_code=404, detail="Alert not found or already inactive")
-        
+
         logger.info(f"Price alert cancelled: id={alert_id}, user_id={user_id}")
-        
+
         return {"success": True, "message": "Alert cancelled"}
 
 
 @router.post("/bulk-delete")
 async def bulk_delete_alerts(
-    alert_ids: List[str],
+    alert_ids: list[str],
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Delete multiple alerts"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            UPDATE price_alerts 
-            SET status = 'cancelled' 
+            UPDATE price_alerts
+            SET status = 'cancelled'
             WHERE id = ANY($1::uuid[]) AND user_id = $2 AND status = 'active'
             """,
             alert_ids,
             user_id,
         )
-        
+
         count = int(result.split()[-1])
-        
+
         logger.info(f"Bulk alert cancellation: user_id={user_id}, count={count}")
-        
+
         return {
             "success": True,
             "cancelled_count": count,
@@ -309,17 +308,17 @@ async def bulk_delete_alerts(
 
 @router.get("/notifications")
 async def get_notifications(
-    is_read: Optional[bool] = None,
-    notification_type: Optional[str] = None,
+    is_read: bool | None = None,
+    notification_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get user's notifications from database"""
     pool = await get_postgres_pool()
-    
+
     query = """
-        SELECT 
+        SELECT
             id::text,
             user_id::text,
             notification_type,
@@ -334,23 +333,23 @@ async def get_notifications(
     """
     params = [user_id]
     param_count = 2
-    
+
     if is_read is not None:
         query += f" AND is_read = ${param_count}"
         params.append(is_read)
         param_count += 1
-    
+
     if notification_type:
         query += f" AND notification_type = ${param_count}"
         params.append(notification_type)
         param_count += 1
-    
+
     query += f" ORDER BY created_at DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
     params.extend([limit, offset])
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         notifications = [
             Notification(
                 id=row['id'],
@@ -365,13 +364,13 @@ async def get_notifications(
             )
             for row in rows
         ]
-        
+
         # Get unread count
         unread_count = await conn.fetchval(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false",
             user_id,
         )
-        
+
         return {
             "notifications": notifications,
             "unread_count": unread_count,
@@ -386,19 +385,19 @@ async def mark_notification_read(
 ):
     """Mark notification as read"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            UPDATE notifications 
-            SET is_read = true, read_at = $1 
+            UPDATE notifications
+            SET is_read = true, read_at = $1
             WHERE id = $2::uuid AND user_id = $3 AND is_read = false
             """,
             datetime.utcnow(),
             notification_id,
             user_id,
         )
-        
+
         if result == "UPDATE 0":
             # Check if notification exists
             exists = await conn.fetchval(
@@ -408,7 +407,7 @@ async def mark_notification_read(
             )
             if not exists:
                 raise HTTPException(status_code=404, detail="Notification not found")
-        
+
         return {"success": True}
 
 
@@ -418,20 +417,20 @@ async def mark_all_notifications_read(
 ):
     """Mark all notifications as read"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            UPDATE notifications 
-            SET is_read = true, read_at = $1 
+            UPDATE notifications
+            SET is_read = true, read_at = $1
             WHERE user_id = $2 AND is_read = false
             """,
             datetime.utcnow(),
             user_id,
         )
-        
+
         count = int(result.split()[-1])
-        
+
         return {
             "success": True,
             "marked_count": count,
@@ -446,20 +445,20 @@ async def delete_notification(
 ):
     """Delete notification"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            DELETE FROM notifications 
+            DELETE FROM notifications
             WHERE id = $1::uuid AND user_id = $2
             """,
             notification_id,
             user_id,
         )
-        
+
         if result == "DELETE 0":
             raise HTTPException(status_code=404, detail="Notification not found")
-        
+
         return {"success": True}
 
 
@@ -473,11 +472,11 @@ async def get_notification_settings(
 ):
     """Get user's notification settings from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 email_notifications,
                 sms_notifications,
                 push_notifications,
@@ -490,7 +489,7 @@ async def get_notification_settings(
             """,
             user_id,
         )
-        
+
         if not row:
             # Return defaults if not set
             return {
@@ -502,7 +501,7 @@ async def get_notification_settings(
                 "news_notifications": True,
                 "marketing_notifications": False,
             }
-        
+
         return dict(row)
 
 
@@ -513,7 +512,7 @@ async def update_notification_settings(
 ):
     """Update notification settings in database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -539,5 +538,5 @@ async def update_notification_settings(
             settings.get('news_notifications', True),
             settings.get('marketing_notifications', False),
         )
-        
+
         return {"success": True, "message": "Settings updated"}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Iterator, List, Sequence, Tuple
 
 import numpy as np
 
@@ -17,7 +17,7 @@ class EventInterval:
     start: float
     end: float
 
-    def overlaps(self, other: "EventInterval") -> bool:
+    def overlaps(self, other: EventInterval) -> bool:
         return not (self.end < other.start or self.start > other.end)
 
 
@@ -46,7 +46,7 @@ class PurgedKFold:
         self,
         indices: Sequence[int] | np.ndarray,
         events: Sequence[EventInterval],
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         idx = np.asarray(indices, dtype=np.int64)
         n = idx.size
         if n != len(events):
@@ -100,7 +100,7 @@ def build_forward_return_events(
     timestamps: Iterable[float] | np.ndarray,
     *,
     horizon: float,
-) -> List[EventInterval]:
+) -> list[EventInterval]:
     """Helper for common label: forward return over fixed horizon.
 
     timestamps should be monotonic and in the same time units as horizon.

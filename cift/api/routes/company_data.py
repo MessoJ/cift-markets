@@ -13,14 +13,12 @@ Endpoints:
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from cift.core.database import db_manager
-
 
 # ============================================================================
 # ROUTER
@@ -37,42 +35,42 @@ class CompanyProfile(BaseModel):
     """Company profile with fundamentals."""
     symbol: str
     name: str
-    exchange: Optional[str] = None
-    industry: Optional[str] = None
-    sector: Optional[str] = None
-    market_cap: Optional[float] = None  # In millions
-    shares_outstanding: Optional[float] = None
-    ipo_date: Optional[str] = None
-    logo_url: Optional[str] = None
-    website: Optional[str] = None
-    description: Optional[str] = None
+    exchange: str | None = None
+    industry: str | None = None
+    sector: str | None = None
+    market_cap: float | None = None  # In millions
+    shares_outstanding: float | None = None
+    ipo_date: str | None = None
+    logo_url: str | None = None
+    website: str | None = None
+    description: str | None = None
     currency: str = "USD"
     country: str = "US"
     # Valuation metrics
-    pe_ratio: Optional[float] = None
-    forward_pe: Optional[float] = None
-    dividend_yield: Optional[float] = None
-    beta: Optional[float] = None
+    pe_ratio: float | None = None
+    forward_pe: float | None = None
+    dividend_yield: float | None = None
+    beta: float | None = None
     # 52-week range
-    fifty_two_week_high: Optional[float] = None
-    fifty_two_week_low: Optional[float] = None
+    fifty_two_week_high: float | None = None
+    fifty_two_week_low: float | None = None
     # Volume
-    avg_volume: Optional[int] = None
+    avg_volume: int | None = None
 
 
 class EarningsEvent(BaseModel):
     """Earnings calendar entry."""
     symbol: str
     earnings_date: str
-    quarter: Optional[int] = None
-    year: Optional[int] = None
-    eps_estimate: Optional[float] = None
-    eps_actual: Optional[float] = None
-    eps_surprise: Optional[float] = None
-    eps_surprise_pct: Optional[float] = None
-    revenue_estimate: Optional[float] = None
-    revenue_actual: Optional[float] = None
-    report_time: Optional[str] = None  # 'bmo' or 'amc'
+    quarter: int | None = None
+    year: int | None = None
+    eps_estimate: float | None = None
+    eps_actual: float | None = None
+    eps_surprise: float | None = None
+    eps_surprise_pct: float | None = None
+    revenue_estimate: float | None = None
+    revenue_actual: float | None = None
+    report_time: str | None = None  # 'bmo' or 'amc'
 
 
 class ChartPattern(BaseModel):
@@ -82,11 +80,11 @@ class ChartPattern(BaseModel):
     pattern_name: str
     pattern_type: str  # bullish, bearish, neutral
     status: str
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    target_price: Optional[float] = None
-    stop_loss: Optional[float] = None
-    confidence: Optional[float] = None
+    start_date: str | None = None
+    end_date: str | None = None
+    target_price: float | None = None
+    stop_loss: float | None = None
+    confidence: float | None = None
 
 
 class SupportResistanceLevel(BaseModel):
@@ -102,10 +100,10 @@ class CompanyNews(BaseModel):
     """Company news article."""
     symbol: str
     headline: str
-    summary: Optional[str] = None
-    source: Optional[str] = None
-    url: Optional[str] = None
-    sentiment: Optional[str] = None
+    summary: str | None = None
+    source: str | None = None
+    url: str | None = None
+    sentiment: str | None = None
     published_at: datetime
 
 
@@ -117,22 +115,22 @@ class CompanyNews(BaseModel):
 async def get_company_profile(symbol: str):
     """
     Get company profile with fundamental data.
-    
+
     Returns company overview including:
     - Basic info (name, exchange, sector)
     - Market cap and shares outstanding
     - Valuation ratios (P/E, dividend yield)
     - 52-week price range
-    
+
     Performance: ~3ms (database query)
     """
     symbol = symbol.upper()
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     symbol, name, exchange, industry, sector,
                     market_cap, shares_outstanding, ipo_date::text,
                     logo_url, website, description, currency, country,
@@ -144,7 +142,7 @@ async def get_company_profile(symbol: str):
                 """,
                 symbol
             )
-        
+
         if not row:
             # Return minimal profile if not in database
             return CompanyProfile(
@@ -152,7 +150,7 @@ async def get_company_profile(symbol: str):
                 name=symbol,  # Placeholder
                 market_cap=None,
             )
-        
+
         return CompanyProfile(
             symbol=row['symbol'],
             name=row['name'],
@@ -175,13 +173,13 @@ async def get_company_profile(symbol: str):
             fifty_two_week_low=float(row['fifty_two_week_low']) if row['fifty_two_week_low'] else None,
             avg_volume=int(row['avg_volume']) if row['avg_volume'] else None,
         )
-    
+
     except Exception as e:
         logger.error(f"Error fetching profile for {symbol}: {e}")
         return CompanyProfile(symbol=symbol, name=symbol)
 
 
-@router.get("/{symbol}/earnings", response_model=List[EarningsEvent])
+@router.get("/{symbol}/earnings", response_model=list[EarningsEvent])
 async def get_earnings(
     symbol: str,
     include_past: bool = Query(True, description="Include past earnings"),
@@ -189,22 +187,22 @@ async def get_earnings(
 ):
     """
     Get earnings calendar and history for a symbol.
-    
+
     Returns:
     - Upcoming earnings dates
     - Historical earnings with actual vs estimate
     - Earnings surprise percentages
-    
+
     Performance: ~3ms
     """
     symbol = symbol.upper()
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             if include_past:
                 rows = await conn.fetch(
                     """
-                    SELECT 
+                    SELECT
                         symbol, earnings_date::text, earnings_time,
                         eps_estimate, eps_actual,
                         revenue_estimate, revenue_actual
@@ -218,7 +216,7 @@ async def get_earnings(
             else:
                 rows = await conn.fetch(
                     """
-                    SELECT 
+                    SELECT
                         symbol, earnings_date::text, earnings_time,
                         eps_estimate, eps_actual,
                         revenue_estimate, revenue_actual
@@ -229,7 +227,7 @@ async def get_earnings(
                     """,
                     symbol, limit
                 )
-        
+
         events = []
         for row in rows:
             # Calculate earnings surprise if both estimate and actual exist
@@ -239,7 +237,7 @@ async def get_earnings(
                 eps_surprise = float(row['eps_actual']) - float(row['eps_estimate'])
                 if float(row['eps_estimate']) != 0:
                     eps_surprise_pct = (eps_surprise / abs(float(row['eps_estimate']))) * 100
-            
+
             # Extract quarter and year from date
             from datetime import datetime
             date_str = row['earnings_date']
@@ -250,7 +248,7 @@ async def get_earnings(
             except:
                 quarter = None
                 year = None
-            
+
             events.append(EarningsEvent(
                 symbol=row['symbol'],
                 earnings_date=row['earnings_date'],
@@ -264,15 +262,15 @@ async def get_earnings(
                 revenue_actual=float(row['revenue_actual']) if row['revenue_actual'] else None,
                 report_time=row['earnings_time'],  # bmo, amc, dmh
             ))
-        
+
         return events
-    
+
     except Exception as e:
         logger.error(f"Error fetching earnings for {symbol}: {e}")
         return []
 
 
-@router.get("/{symbol}/patterns", response_model=List[ChartPattern])
+@router.get("/{symbol}/patterns", response_model=list[ChartPattern])
 async def get_chart_patterns(
     symbol: str,
     timeframe: str = Query("D", description="Timeframe (D, W, M)"),
@@ -280,23 +278,23 @@ async def get_chart_patterns(
 ):
     """
     Get detected chart patterns for a symbol.
-    
+
     Patterns include:
     - Head and Shoulders
     - Double Top/Bottom
     - Triangle (ascending, descending, symmetrical)
     - Flag, Pennant
     - Cup and Handle
-    
+
     Performance: ~3ms
     """
     symbol = symbol.upper()
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     symbol, timeframe, pattern_name, pattern_type, status,
                     start_date::text, end_date::text,
                     target_price, stop_loss, confidence
@@ -307,7 +305,7 @@ async def get_chart_patterns(
                 """,
                 symbol, timeframe, limit
             )
-        
+
         return [
             ChartPattern(
                 symbol=row['symbol'],
@@ -323,13 +321,13 @@ async def get_chart_patterns(
             )
             for row in rows
         ]
-    
+
     except Exception as e:
         logger.error(f"Error fetching patterns for {symbol}: {e}")
         return []
 
 
-@router.get("/{symbol}/levels", response_model=List[SupportResistanceLevel])
+@router.get("/{symbol}/levels", response_model=list[SupportResistanceLevel])
 async def get_support_resistance(
     symbol: str,
     timeframe: str = Query("D", description="Timeframe (D, W, M)"),
@@ -337,16 +335,16 @@ async def get_support_resistance(
 ):
     """
     Get support and resistance levels for a symbol.
-    
+
     Levels are calculated from:
     - Historical price pivots
     - Fibonacci retracements
     - Volume profile nodes
-    
+
     Performance: ~3ms
     """
     symbol = symbol.upper()
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             query = """
@@ -354,14 +352,14 @@ async def get_support_resistance(
                 FROM support_resistance_levels
                 WHERE symbol = $1 AND timeframe = $2
             """
-            
+
             if active_only:
                 query += " AND is_active = TRUE"
-            
+
             query += " ORDER BY price DESC LIMIT 20"
-            
+
             rows = await conn.fetch(query, symbol, timeframe)
-        
+
         return [
             SupportResistanceLevel(
                 symbol=row['symbol'],
@@ -372,13 +370,13 @@ async def get_support_resistance(
             )
             for row in rows
         ]
-    
+
     except Exception as e:
         logger.error(f"Error fetching S/R levels for {symbol}: {e}")
         return []
 
 
-@router.get("/{symbol}/news", response_model=List[CompanyNews])
+@router.get("/{symbol}/news", response_model=list[CompanyNews])
 async def get_company_news(
     symbol: str,
     limit: int = Query(10, ge=1, le=50),
@@ -386,17 +384,17 @@ async def get_company_news(
 ):
     """
     Get recent news for a symbol.
-    
+
     Includes:
     - Headline and summary
     - Source and URL
     - Sentiment analysis
-    
+
     Performance: ~5ms
     """
     symbol = symbol.upper()
     from_date = datetime.utcnow() - timedelta(days=days)
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             rows = await conn.fetch(
@@ -409,7 +407,7 @@ async def get_company_news(
                 """,
                 symbol, from_date, limit
             )
-        
+
         return [
             CompanyNews(
                 symbol=row['symbol'],
@@ -422,7 +420,7 @@ async def get_company_news(
             )
             for row in rows
         ]
-    
+
     except Exception as e:
         logger.error(f"Error fetching news for {symbol}: {e}")
         return []
@@ -432,9 +430,9 @@ async def get_company_news(
 async def get_symbol_summary(symbol: str):
     """
     Get comprehensive summary for a symbol (combines multiple data sources).
-    
+
     This is the main endpoint for the chart header info bar.
-    
+
     Returns:
     - Current price and change
     - Company name and sector
@@ -442,11 +440,11 @@ async def get_symbol_summary(symbol: str):
     - 52-week range
     - Next earnings date
     - Recent patterns
-    
+
     Performance: ~10ms (parallel queries)
     """
     symbol = symbol.upper()
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             # Get current quote
@@ -459,7 +457,7 @@ async def get_symbol_summary(symbol: str):
                 """,
                 symbol
             )
-            
+
             # Get company profile
             profile_row = await conn.fetchrow(
                 """
@@ -469,7 +467,7 @@ async def get_symbol_summary(symbol: str):
                 """,
                 symbol
             )
-            
+
             # Get next earnings
             earnings_row = await conn.fetchrow(
                 """
@@ -481,18 +479,18 @@ async def get_symbol_summary(symbol: str):
                 """,
                 symbol
             )
-            
+
             # Calculate 52-week high/low from OHLCV data (if not in market_data_cache)
             high_52w = float(quote_row['high_52w']) if quote_row and quote_row['high_52w'] else None
             low_52w = float(quote_row['low_52w']) if quote_row and quote_row['low_52w'] else None
-            
+
             if high_52w is None or low_52w is None:
                 # Calculate from historical data
                 range_row = await conn.fetchrow(
                     """
                     SELECT MAX(high) as high_52w, MIN(low) as low_52w
                     FROM ohlcv_bars
-                    WHERE symbol = $1 
+                    WHERE symbol = $1
                       AND timeframe = '1m'
                       AND timestamp >= NOW() - INTERVAL '7 days'
                     """,
@@ -501,7 +499,7 @@ async def get_symbol_summary(symbol: str):
                 if range_row:
                     high_52w = float(range_row['high_52w']) if range_row['high_52w'] else None
                     low_52w = float(range_row['low_52w']) if range_row['low_52w'] else None
-        
+
         return {
             "symbol": symbol,
             "name": profile_row['name'] if profile_row else symbol,
@@ -530,7 +528,7 @@ async def get_symbol_summary(symbol: str):
                 "time": earnings_row['earnings_time'] if earnings_row else None,
             } if earnings_row else None,
         }
-    
+
     except Exception as e:
         logger.error(f"Error fetching summary for {symbol}: {e}")
         return {"symbol": symbol, "error": str(e)}

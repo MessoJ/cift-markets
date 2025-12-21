@@ -5,13 +5,12 @@ All data is fetched from database - NO MOCK DATA.
 """
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from cift.core.auth import get_current_active_user, User
+from cift.core.auth import User, get_current_active_user
 from cift.core.database import get_postgres_pool
 from cift.core.logging import logger
 
@@ -51,16 +50,16 @@ class SupportTicket(BaseModel):
     status: str  # 'open', 'in_progress', 'waiting', 'resolved', 'closed'
     created_at: datetime
     updated_at: datetime
-    resolved_at: Optional[datetime] = None
-    last_message_at: Optional[datetime] = None
+    resolved_at: datetime | None = None
+    last_message_at: datetime | None = None
 
 
 class TicketMessage(BaseModel):
     """Ticket message model"""
     id: str
     ticket_id: str
-    user_id: Optional[str] = None
-    staff_id: Optional[str] = None
+    user_id: str | None = None
+    staff_id: str | None = None
     message: str
     is_internal: bool = False
     is_staff: bool = False
@@ -86,14 +85,14 @@ class AddMessageRequest(BaseModel):
 
 @router.get("/faq")
 async def get_faqs(
-    category: Optional[str] = None,
+    category: str | None = None,
     limit: int = 100,
 ):
     """Get FAQ items from database"""
     pool = await get_postgres_pool()
-    
+
     query = """
-        SELECT 
+        SELECT
             id::text,
             category,
             question,
@@ -105,17 +104,17 @@ async def get_faqs(
         WHERE is_published = true
     """
     params = []
-    
+
     if category:
         query += " AND category = $1"
         params.append(category)
-    
+
     query += " ORDER BY display_order ASC, created_at DESC LIMIT $" + str(len(params) + 1)
     params.append(limit)
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         return [
             FAQItem(
                 id=row['id'],
@@ -138,13 +137,13 @@ async def search_faqs(
     """Search FAQ items in database"""
     if len(q) < 3:
         raise HTTPException(status_code=400, detail="Search query must be at least 3 characters")
-    
+
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 category,
                 question,
@@ -162,7 +161,7 @@ async def search_faqs(
             q,
             limit,
         )
-        
+
         return [
             FAQItem(
                 id=row['id'],
@@ -181,7 +180,7 @@ async def search_faqs(
 async def get_faq_categories():
     """Get FAQ categories from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -192,7 +191,7 @@ async def get_faq_categories():
             ORDER BY category
             """
         )
-        
+
         return [
             {
                 "category": row['category'],
@@ -208,15 +207,15 @@ async def get_faq_categories():
 
 @router.get("/tickets")
 async def get_support_tickets(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 50,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get user's support tickets from database"""
     pool = await get_postgres_pool()
-    
+
     query = """
-        SELECT 
+        SELECT
             id::text,
             subject,
             category,
@@ -230,17 +229,17 @@ async def get_support_tickets(
         WHERE user_id = $1
     """
     params = [user_id]
-    
+
     if status:
         query += " AND status = $2"
         params.append(status)
-    
+
     query += f" ORDER BY created_at DESC LIMIT ${len(params) + 1}"
     params.append(limit)
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         return {
             "tickets": [
                 SupportTicket(
@@ -266,12 +265,12 @@ async def get_ticket_detail(
 ):
     """Get ticket detail with messages from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Get ticket
         ticket = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 subject,
                 category,
@@ -287,14 +286,14 @@ async def get_ticket_detail(
             ticket_id,
             user_id,
         )
-        
+
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         # Get messages
         messages = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 ticket_id::text,
                 user_id::text,
@@ -309,7 +308,7 @@ async def get_ticket_detail(
             """,
             ticket_id,
         )
-        
+
         return {
             "ticket": SupportTicket(
                 id=ticket['id'],
@@ -344,7 +343,7 @@ async def create_ticket(
 ):
     """Create support ticket in database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         async with conn.transaction():
             # Create ticket
@@ -360,7 +359,7 @@ async def create_ticket(
                 request.category,
                 request.priority,
             )
-            
+
             # Add initial message
             await conn.execute(
                 """
@@ -372,23 +371,23 @@ async def create_ticket(
                 user_id,
                 request.message,
             )
-            
+
             # Update last_message_at
             await conn.execute(
                 """
-                UPDATE support_tickets 
-                SET last_message_at = $1 
+                UPDATE support_tickets
+                SET last_message_at = $1
                 WHERE id = $2::uuid
                 """,
                 datetime.utcnow(),
                 ticket['id'],
             )
-            
+
             logger.info(f"Support ticket created: ticket_id={ticket['id']}, user_id={user_id}")
-            
+
             # TODO: Send email notification to support team
             # TODO: Integrate with helpdesk system (Zendesk, Intercom, etc.)
-            
+
             return SupportTicket(
                 id=ticket['id'],
                 subject=ticket['subject'],
@@ -409,7 +408,7 @@ async def get_ticket_messages(
 ):
     """Get all messages for a ticket from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Verify ticket belongs to user
         exists = await conn.fetchval(
@@ -417,14 +416,14 @@ async def get_ticket_messages(
             ticket_id,
             user_id,
         )
-        
+
         if not exists:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         # Get all messages
         rows = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 ticket_id::text,
                 user_id::text,
@@ -438,7 +437,7 @@ async def get_ticket_messages(
             """,
             ticket_id,
         )
-        
+
         messages = [
             TicketMessage(
                 id=row['id'],
@@ -452,7 +451,7 @@ async def get_ticket_messages(
             )
             for row in rows
         ]
-        
+
         return {"messages": messages}
 
 
@@ -464,7 +463,7 @@ async def add_ticket_message(
 ):
     """Add message to ticket in database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Verify ticket belongs to user
         exists = await conn.fetchval(
@@ -472,10 +471,10 @@ async def add_ticket_message(
             ticket_id,
             user_id,
         )
-        
+
         if not exists:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         # Add message
         message = await conn.fetchrow(
             """
@@ -488,20 +487,20 @@ async def add_ticket_message(
             user_id,
             request.message,
         )
-        
+
         # Update ticket
         await conn.execute(
             """
-            UPDATE support_tickets 
+            UPDATE support_tickets
             SET last_message_at = $1, updated_at = $1, status = 'waiting'
             WHERE id = $2::uuid
             """,
             datetime.utcnow(),
             ticket_id,
         )
-        
+
         # TODO: Send email notification to support team
-        
+
         return TicketMessage(
             id=message['id'],
             ticket_id=message['ticket_id'],
@@ -521,15 +520,15 @@ async def close_ticket(
 ):
     """Close support ticket"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Update and return the ticket
         ticket = await conn.fetchrow(
             """
-            UPDATE support_tickets 
+            UPDATE support_tickets
             SET status = 'closed', updated_at = $1, resolved_at = $1
             WHERE id = $2::uuid AND user_id = $3 AND status != 'closed'
-            RETURNING 
+            RETURNING
                 id::text, subject, category, priority, status,
                 created_at, updated_at, resolved_at, last_message_at
             """,
@@ -537,10 +536,10 @@ async def close_ticket(
             ticket_id,
             user_id,
         )
-        
+
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found or already closed")
-        
+
         return SupportTicket(
             id=ticket['id'],
             subject=ticket['subject'],

@@ -5,15 +5,13 @@ Account transaction history and cash flow analysis.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
-from cift.core.auth import get_current_active_user, User
+from cift.core.auth import User, get_current_active_user
 from cift.core.database import db_manager
-
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -28,33 +26,33 @@ async def get_current_user_id(current_user: User = Depends(get_current_active_us
 
 @router.get("")
 async def get_transactions(
-    transaction_type: Optional[str] = Query(None, regex="^(deposit|withdrawal|trade|dividend|interest|fee|commission|adjustment)$"),
-    symbol: Optional[str] = Query(None, description="Filter by symbol (for trades)"),
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    transaction_type: str | None = Query(None, regex="^(deposit|withdrawal|trade|dividend|interest|fee|commission|adjustment)$"),
+    symbol: str | None = Query(None, description="Filter by symbol (for trades)"),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Get transaction history with filters.
-    
+
     **Filters:**
     - transaction_type: deposit, withdrawal, trade, etc.
     - symbol: Filter by trading symbol
     - start_date/end_date: Date range
     - limit/offset: Pagination
-    
+
     Performance: ~5-10ms
     """
     if not start_date:
         start_date = datetime.utcnow() - timedelta(days=90)
     if not end_date:
         end_date = datetime.utcnow()
-    
+
     # Build query
     query = """
-        SELECT 
+        SELECT
             t.id, t.transaction_type, t.amount, t.balance_after,
             t.symbol, t.description, t.external_ref,
             t.transaction_date, t.created_at, t.order_id,
@@ -66,7 +64,7 @@ async def get_transactions(
     """
     params = [user_id, start_date, end_date]
     param_idx = 4
-    
+
     if transaction_type:
         # Support comma-separated types
         types = transaction_type.split(',')
@@ -77,18 +75,18 @@ async def get_transactions(
             query += f" AND t.transaction_type = ${param_idx}"
             params.append(transaction_type)
         param_idx += 1
-    
+
     if symbol:
         query += f" AND t.symbol = ${param_idx}"
         params.append(symbol.upper())
         param_idx += 1
-    
+
     query += f" ORDER BY t.transaction_date DESC LIMIT ${param_idx} OFFSET ${param_idx + 1}"
     params.extend([limit, offset])
-    
+
     async with db_manager.pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         # Get total count
         count_query = """
             SELECT COUNT(*) FROM transactions t
@@ -96,7 +94,7 @@ async def get_transactions(
         """
         count_params = [user_id, start_date, end_date]
         count_param_idx = 4
-        
+
         if transaction_type:
             types = transaction_type.split(',')
             if len(types) > 1:
@@ -106,13 +104,13 @@ async def get_transactions(
                 count_query += f" AND t.transaction_type = ${count_param_idx}"
                 count_params.append(transaction_type)
             count_param_idx += 1
-        
+
         if symbol:
             count_query += f" AND t.symbol = ${count_param_idx}"
             count_params.append(symbol.upper())
-        
+
         total = await conn.fetchval(count_query, *count_params)
-    
+
     return {
         "transactions": [
             {
@@ -121,7 +119,7 @@ async def get_transactions(
                 "price": float(row['price']) if row['price'] is not None else None,
                 "amount": float(row['amount']),
                 "balance_after": float(row['balance_after'])
-            } 
+            }
             for row in rows
         ],
         "pagination": {
@@ -143,11 +141,11 @@ async def get_transaction_summary(
     Performance: ~5-10ms
     """
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     async with db_manager.pool.acquire() as conn:
         # Get aggregations by type
         type_summary = await conn.fetch("""
-            SELECT 
+            SELECT
                 transaction_type,
                 COUNT(*) as count,
                 SUM(amount) as total_amount
@@ -156,10 +154,10 @@ async def get_transaction_summary(
             GROUP BY transaction_type
             ORDER BY transaction_type
         """, user_id, start_date)
-        
+
         # Daily aggregations
         daily = await conn.fetch("""
-            SELECT 
+            SELECT
                 DATE(transaction_date) as date,
                 SUM(amount) as net_flow,
                 COUNT(*) as count
@@ -168,17 +166,17 @@ async def get_transaction_summary(
             GROUP BY DATE(transaction_date)
             ORDER BY date DESC
         """, user_id, start_date)
-        
+
         # Total stats
         stats = await conn.fetchrow("""
-            SELECT 
+            SELECT
                 COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_inflow,
                 COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) as total_outflow,
                 COALESCE(SUM(amount), 0) as net_flow
             FROM transactions
             WHERE user_id = $1 AND transaction_date >= $2
         """, user_id, start_date)
-    
+
     return {
         "period": {
             "start_date": start_date.isoformat(),
@@ -190,7 +188,7 @@ async def get_transaction_summary(
                 "transaction_type": row['transaction_type'],
                 "count": row['count'],
                 "total_amount": float(row['total_amount'])
-            } 
+            }
             for row in type_summary
         ],
         "daily": [
@@ -198,7 +196,7 @@ async def get_transaction_summary(
                 "date": row['date'].isoformat(),
                 "net_flow": float(row['net_flow']),
                 "count": row['count']
-            } 
+            }
             for row in daily
         ],
         "stats": {
@@ -219,16 +217,17 @@ async def get_cash_flow_analysis(
     Performance: ~5-10ms (ClickHouse) or ~10-15ms (PostgreSQL)
     """
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     # Try ClickHouse first (Phase 5-7)
     try:
-        from cift.core.clickhouse_manager import get_clickhouse_manager
         import polars as pl
-        
+
+        from cift.core.clickhouse_manager import get_clickhouse_manager
+
         ch = await get_clickhouse_manager()
-        
+
         query = f"""
-            SELECT 
+            SELECT
                 toDate(transaction_date) as date,
                 sumIf(amount, amount > 0) as money_in,
                 sumIf(amount, amount < 0) as money_out,
@@ -239,17 +238,17 @@ async def get_cash_flow_analysis(
             ORDER BY date ASC
             FORMAT JSONEachRow
         """
-        
+
         result = await ch.query(query)
         df = pl.read_ndjson(result.encode())
-        
+
         # Calculate cumulative
         df = df.with_columns([
             pl.col('net_flow').cum_sum().alias('cumulative_flow')
         ])
-        
+
         logger.info("✅ Cash flow via ClickHouse + Polars")
-        
+
         return {
             "data": df.to_dicts(),
             "summary": {
@@ -259,14 +258,14 @@ async def get_cash_flow_analysis(
             },
             "_backend": "clickhouse"
         }
-        
+
     except Exception as e:
         logger.warning(f"ClickHouse unavailable, using PostgreSQL: {e}")
-        
+
         # Fallback to PostgreSQL
         async with db_manager.pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT 
+                SELECT
                     DATE(transaction_date) as date,
                     SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as money_in,
                     SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as money_out,
@@ -276,18 +275,18 @@ async def get_cash_flow_analysis(
                 GROUP BY DATE(transaction_date)
                 ORDER BY date ASC
             """, user_id, start_date)
-            
+
             data = [dict(row) for row in rows]
-            
+
             # Calculate cumulative
             cumulative = 0
             for item in data:
                 cumulative += item['net_flow']
                 item['cumulative_flow'] = round(cumulative, 2)
-            
+
             total_in = sum(float(d['money_in']) for d in data)
             total_out = sum(float(d['money_out']) for d in data)
-        
+
         return {
             "data": data,
             "summary": {
@@ -313,26 +312,26 @@ async def get_transaction_detail(
             SELECT * FROM transactions
             WHERE id = $1 AND user_id = $2
         """, transaction_id, user_id)
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        
+
         transaction = dict(row)
-        
+
         # If trade, get order details
         if transaction['order_id']:
             order = await conn.fetchrow("""
-                SELECT 
+                SELECT
                     id, symbol, side, order_type, quantity,
                     filled_quantity, avg_fill_price, status,
                     created_at, filled_at
                 FROM orders
                 WHERE id = $1
             """, transaction['order_id'])
-            
+
             if order:
                 transaction['order_details'] = dict(order)
-    
+
     return {"transaction": transaction}
 
 

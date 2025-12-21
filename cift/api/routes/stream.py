@@ -5,7 +5,7 @@ Server-Sent Events (SSE) endpoints for real-time price streaming.
 """
 
 import asyncio
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,7 +28,7 @@ async def price_stream_generator(
 ) -> AsyncGenerator[str, None]:
     """
     Generate SSE stream of real-time price updates.
-    
+
     Args:
         symbols: List of symbols to stream
         interval: Update interval in seconds
@@ -37,15 +37,15 @@ async def price_stream_generator(
         # Import the Finnhub service
         from cift.api.routes.admin import get_finnhub_service
         service = await get_finnhub_service()
-        
+
         last_prices = {}
-        
+
         while True:
             updates = []
-            
+
             for symbol in symbols:
                 price = service.last_prices.get(symbol.upper())
-                
+
                 # Only send if price changed
                 if price is not None and price != last_prices.get(symbol):
                     last_prices[symbol] = price
@@ -54,7 +54,7 @@ async def price_stream_generator(
                         "price": price,
                         "timestamp": asyncio.get_event_loop().time()
                     })
-            
+
             if updates:
                 # SSE format: data: {json}\n\n
                 import json
@@ -62,10 +62,10 @@ async def price_stream_generator(
                     yield f"data: {json.dumps(update)}\n\n"
             else:
                 # Send heartbeat to keep connection alive
-                yield f": heartbeat\n\n"
-            
+                yield ": heartbeat\n\n"
+
             await asyncio.sleep(interval)
-            
+
     except asyncio.CancelledError:
         logger.info("Price stream cancelled")
         raise
@@ -82,7 +82,7 @@ async def stream_prices(
 ):
     """
     Stream real-time prices via Server-Sent Events (SSE).
-    
+
     Connect from frontend:
     ```javascript
     const eventSource = new EventSource('/api/v1/stream/prices?symbols=AAPL,MSFT&interval=1');
@@ -93,13 +93,13 @@ async def stream_prices(
     ```
     """
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    
+
     if not symbol_list:
         raise HTTPException(status_code=400, detail="At least one symbol required")
-    
+
     if len(symbol_list) > 50:
         raise HTTPException(status_code=400, detail="Maximum 50 symbols allowed")
-    
+
     return StreamingResponse(
         price_stream_generator(symbol_list, interval),
         media_type="text/event-stream",
@@ -123,10 +123,10 @@ async def db_price_stream_generator(
     Generate SSE stream from database cache (polling fallback).
     """
     import json
-    
+
     last_prices = {}
     pool = await get_postgres_pool()
-    
+
     try:
         while True:
             async with pool.acquire() as conn:
@@ -138,12 +138,12 @@ async def db_price_stream_generator(
                     """,
                     symbols
                 )
-                
+
                 updates = []
                 for row in rows:
                     symbol = row['symbol']
                     price = float(row['price'])
-                    
+
                     if price != last_prices.get(symbol):
                         last_prices[symbol] = price
                         updates.append({
@@ -152,15 +152,15 @@ async def db_price_stream_generator(
                             "change_pct": float(row['change_pct']) if row['change_pct'] else 0,
                             "timestamp": row['updated_at'].isoformat()
                         })
-                
+
                 if updates:
                     for update in updates:
                         yield f"data: {json.dumps(update)}\n\n"
                 else:
-                    yield f": heartbeat\n\n"
-            
+                    yield ": heartbeat\n\n"
+
             await asyncio.sleep(interval)
-            
+
     except asyncio.CancelledError:
         logger.info("DB price stream cancelled")
         raise
@@ -177,18 +177,18 @@ async def stream_cached_prices(
 ):
     """
     Stream prices from database cache via Server-Sent Events.
-    
+
     Use this as fallback when WebSocket streaming is not available.
     Updates are slower but reliable.
     """
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    
+
     if not symbol_list:
         raise HTTPException(status_code=400, detail="At least one symbol required")
-    
+
     if len(symbol_list) > 50:
         raise HTTPException(status_code=400, detail="Maximum 50 symbols allowed")
-    
+
     return StreamingResponse(
         db_price_stream_generator(symbol_list, interval),
         media_type="text/event-stream",
@@ -213,10 +213,10 @@ async def news_stream_generator(
     """
     import json
     from datetime import datetime, timedelta
-    
+
     pool = await get_postgres_pool()
     last_check = datetime.utcnow() - timedelta(minutes=5)
-    
+
     try:
         while True:
             async with pool.acquire() as conn:
@@ -246,7 +246,7 @@ async def news_stream_generator(
                         """,
                         last_check
                     )
-                
+
                 if rows:
                     last_check = datetime.utcnow()
                     for row in rows:
@@ -261,10 +261,10 @@ async def news_stream_generator(
                         }
                         yield f"event: news\ndata: {json.dumps(article)}\n\n"
                 else:
-                    yield f": heartbeat\n\n"
-            
+                    yield ": heartbeat\n\n"
+
             await asyncio.sleep(interval)
-            
+
     except asyncio.CancelledError:
         logger.info("News stream cancelled")
         raise
@@ -281,7 +281,7 @@ async def stream_news(
 ):
     """
     Stream news updates via Server-Sent Events.
-    
+
     Connect from frontend:
     ```javascript
     const eventSource = new EventSource('/api/v1/stream/news?symbols=AAPL,MSFT');
@@ -294,7 +294,7 @@ async def stream_news(
     symbol_list = None
     if symbols:
         symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    
+
     return StreamingResponse(
         news_stream_generator(symbol_list, interval),
         media_type="text/event-stream",

@@ -65,7 +65,8 @@ export default function RegisterPage() {
 
     try {
       await authStore.register(email(), username(), password(), fullName());
-      navigate('/dashboard');
+      // Redirect to onboarding flow instead of dashboard
+      navigate('/onboarding');
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {

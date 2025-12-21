@@ -13,14 +13,17 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import make_asgi_app
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from cift.core.config import settings
 from cift.core.database import (
     check_all_connections,
-    close_all_connections,
     initialize_all_connections,
 )
+from cift.core.limiter import limiter
 from cift.core.logging import logger
 
 
@@ -31,19 +34,19 @@ async def lifespan(app: FastAPI):
     logger.info("Starting CIFT Markets API...")
     logger.info(f"Environment: {settings.app_env}")
     logger.info(f"Debug mode: {settings.app_debug}")
-    
+
     # Initialize all database connections (with timeout protection)
     try:
         # Use asyncio.wait_for to timeout database init after 5 seconds
         await asyncio.wait_for(initialize_all_connections(), timeout=5.0)
         logger.info("✅ All database connections initialized")
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("⚠️ Database initialization timed out (5s). API will start in degraded mode.")
         logger.warning("Some endpoints may not work without database connectivity.")
     except Exception as e:
         logger.error(f"⚠️ Failed to initialize connections: {e}")
         logger.warning("API starting in degraded mode - database endpoints will fail")
-    
+
     # Initialize execution engine (skip if databases failed)
     try:
         from cift.core.execution_engine import execution_engine
@@ -51,21 +54,21 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Execution engine started")
     except Exception as e:
         logger.warning(f"⚠️ Execution engine failed to start: {e}")
-    
+
     # Start market data source - use REAL Polygon data if API key is available
     market_data_task = None
     use_real_data = bool(settings.polygon_api_key)
-    
+
     try:
         from cift.api.routes.market_data import publish_price_update
-        
+
         if use_real_data:
             # USE REAL POLYGON DATA
             from cift.services.polygon_realtime_service import PolygonRealtimeService
-            
+
             polygon_service = PolygonRealtimeService()
             await polygon_service.initialize()
-            
+
             async def fetch_and_broadcast_real_data():
                 """Fetch real market data from Polygon and broadcast."""
                 symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "AMD"]
@@ -104,13 +107,13 @@ async def lifespan(app: FastAPI):
                     except Exception as e:
                         logger.error(f"Real data fetch error: {e}")
                         await asyncio.sleep(30)
-            
+
             market_data_task = asyncio.create_task(fetch_and_broadcast_real_data())
             logger.info("✅ REAL Polygon market data started (live prices from polygon.io)")
         else:
             # FALLBACK TO SIMULATOR
             from cift.core.market_simulator import simulator
-            
+
             async def broadcast_tick(tick_data):
                 """Broadcast simulated tick to WebSocket subscribers."""
                 await publish_price_update(
@@ -119,26 +122,26 @@ async def lifespan(app: FastAPI):
                     bid=tick_data.get("bid"),
                     ask=tick_data.get("ask"),
                 )
-            
+
             market_data_task = asyncio.create_task(simulator.generate_updates(broadcast_tick))
             logger.warning("⚠️ Market data SIMULATOR started (no Polygon API key - using fake data)")
     except Exception as e:
         logger.warning(f"⚠️ Market simulator failed to start: {e}")
-    
+
     # Start background tasks (KYC processing, portfolio snapshots, etc.)
     try:
         from cift.core.scheduler import setup_background_tasks
         await setup_background_tasks()
     except Exception as e:
         logger.warning(f"⚠️ Background tasks setup failed: {e}")
-    
+
     # TODO: Initialize Kafka consumers for market data (production)
     # TODO: Load ML models into memory
-    
+
     logger.success("✅ CIFT Markets API started successfully")
-    
+
     yield
-    
+
     # Shutdown market data source
     if market_data_task:
         try:
@@ -153,7 +156,7 @@ async def lifespan(app: FastAPI):
             logger.info("Market data source stopped")
         except Exception as e:
             logger.warning(f"⚠️ Failed to stop market data: {e}")
-    
+
     # Shutdown background tasks
     try:
         from cift.core.scheduler import stop_scheduler
@@ -168,6 +171,11 @@ app = FastAPI(
     redoc_url="/redoc" if settings.app_debug else None,
     lifespan=lifespan,
 )
+
+# Initialize Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ============================================================================
 # MIDDLEWARE
@@ -233,17 +241,17 @@ async def readiness_check():
     """Readiness check - verify all dependencies are available by querying actual services."""
     # Check all database connections with real queries
     connection_status = await check_all_connections()
-    
+
     # Determine if system is ready (all critical services must be healthy)
     critical_services = ["postgres", "questdb", "redis"]
     is_ready = all(
         connection_status.get(service) == "healthy"
         for service in critical_services
     )
-    
+
     # TODO: Add Kafka health check when implemented
     # TODO: Add ML model status check when implemented
-    
+
     return {
         "ready": is_ready,
         "timestamp": logger._core.clock.now().isoformat() if hasattr(logger, '_core') else None,
@@ -267,6 +275,7 @@ app.mount("/metrics", metrics_app)
 
 # Mount static files for uploads
 import os
+
 upload_dir = "uploads"
 if not os.path.exists(upload_dir):
     os.makedirs(upload_dir, exist_ok=True)
@@ -279,12 +288,29 @@ app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
 
 # Import route modules
 from cift.api.routes import (
-    auth, market_data, trading, analytics,
-    drilldowns, watchlists, transactions,
-    funding, onboarding, support, news,
-    screener, statements, alerts, verify, webhooks,
-    globe, assets, notifications, search, admin
+    admin,
+    alerts,
+    analytics,
+    assets,
+    auth,
+    drilldowns,
+    funding,
+    globe,
+    market_data,
+    news,
+    notifications,
+    onboarding,
+    screener,
+    search,
+    statements,
+    support,
+    trading,
+    transactions,
+    verify,
+    watchlists,
+    webhooks,
 )
+
 try:
     from cift.api.routes import settings as settings_routes
     SETTINGS_AVAILABLE = True
@@ -303,6 +329,7 @@ app.include_router(transactions.router, prefix="/api/v1")
 
 # Chart-related routes
 from cift.api.routes import chart_drawings, chart_templates, price_alerts
+
 app.include_router(chart_drawings.router, prefix="/api/v1")
 app.include_router(chart_templates.router, prefix="/api/v1")
 app.include_router(price_alerts.router, prefix="/api/v1")
@@ -361,7 +388,7 @@ except ImportError as e:
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "cift.api.main:app",
         host="0.0.0.0",

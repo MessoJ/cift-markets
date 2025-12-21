@@ -6,20 +6,20 @@ All data is fetched from database - NO MOCK DATA.
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from cift.core.auth import get_current_active_user, User
+from cift.core.auth import User, get_current_active_user
 from cift.core.database import get_postgres_pool
 from cift.core.logging import logger
-from cift.services.receipt_generator import ReceiptGenerator
 from cift.services.payment_processor import payment_processor
-from cift.services.transaction_settlement import transaction_settlement
 from cift.services.payment_verification import PaymentVerificationService, VerificationError
+from cift.services.receipt_generator import ReceiptGenerator
+from cift.services.transaction_settlement import transaction_settlement
 
 router = APIRouter(prefix="/funding", tags=["funding"])
 
@@ -42,36 +42,36 @@ async def get_current_user_id(
 class PaymentMethod(BaseModel):
     """Payment method model - RULES COMPLIANT: supports all payment types"""
     id: str
-    user_id: Optional[str] = None
+    user_id: str | None = None
     type: str  # 'bank_account', 'debit_card', 'credit_card', 'paypal', 'mpesa', 'crypto_wallet'
     status: str  # 'active', 'pending_verification', 'verified', 'failed', 'removed'
-    name: Optional[str] = None
+    name: str | None = None
     last_four: str
     # Bank account fields
-    bank_name: Optional[str] = None
-    account_type: Optional[str] = None  # 'checking', 'savings'
-    account_last4: Optional[str] = None
-    routing_number: Optional[str] = None
+    bank_name: str | None = None
+    account_type: str | None = None  # 'checking', 'savings'
+    account_last4: str | None = None
+    routing_number: str | None = None
     # Card fields (debit/credit)
-    card_brand: Optional[str] = None
-    card_last4: Optional[str] = None
-    card_exp_month: Optional[int] = None
-    card_exp_year: Optional[int] = None
+    card_brand: str | None = None
+    card_last4: str | None = None
+    card_exp_month: int | None = None
+    card_exp_year: int | None = None
     # PayPal fields
-    paypal_email: Optional[str] = None
+    paypal_email: str | None = None
     # Cash App fields
-    cashapp_tag: Optional[str] = None
+    cashapp_tag: str | None = None
     # M-Pesa fields
-    mpesa_phone: Optional[str] = None
-    mpesa_country: Optional[str] = None
+    mpesa_phone: str | None = None
+    mpesa_country: str | None = None
     # Crypto wallet fields
-    crypto_address: Optional[str] = None
-    crypto_network: Optional[str] = None
+    crypto_address: str | None = None
+    crypto_network: str | None = None
     # Status fields
     is_verified: bool
     is_default: bool
     is_active: bool = True
-    verified_at: Optional[datetime] = None
+    verified_at: datetime | None = None
     created_at: datetime
 
 
@@ -84,10 +84,10 @@ class FundingTransaction(BaseModel):
     fee: Decimal
     status: str  # 'pending', 'processing', 'completed', 'failed', 'cancelled'
     created_at: datetime
-    completed_at: Optional[datetime] = None
-    expected_arrival: Optional[datetime] = None
-    payment_method_id: Optional[str] = None
-    notes: Optional[str] = None
+    completed_at: datetime | None = None
+    expected_arrival: datetime | None = None
+    payment_method_id: str | None = None
+    notes: str | None = None
 
 
 class TransferLimit(BaseModel):
@@ -117,28 +117,28 @@ class AddPaymentMethodRequest(BaseModel):
     """Add payment method request - RULES COMPLIANT: accepts all payment types"""
     type: str = Field(..., pattern="^(bank_account|debit_card|credit_card|paypal|cashapp|mpesa|crypto_wallet)$")
     # Bank account fields
-    bank_name: Optional[str] = None
-    account_type: Optional[str] = None
-    account_number: Optional[str] = None
-    routing_number: Optional[str] = None
+    bank_name: str | None = None
+    account_type: str | None = None
+    account_number: str | None = None
+    routing_number: str | None = None
     # Card fields (debit/credit)
-    card_number: Optional[str] = None
-    card_brand: Optional[str] = None
-    card_exp_month: Optional[int] = None
-    card_exp_year: Optional[int] = None
-    card_cvv: Optional[str] = None
+    card_number: str | None = None
+    card_brand: str | None = None
+    card_exp_month: int | None = None
+    card_exp_year: int | None = None
+    card_cvv: str | None = None
     # PayPal fields
-    paypal_email: Optional[str] = None
+    paypal_email: str | None = None
     # Cash App fields
-    cashapp_tag: Optional[str] = None
+    cashapp_tag: str | None = None
     # M-Pesa fields
-    mpesa_phone: Optional[str] = None
-    mpesa_country: Optional[str] = "KE"  # Kenya by default
+    mpesa_phone: str | None = None
+    mpesa_country: str | None = "KE"  # Kenya by default
     # Crypto wallet fields
-    crypto_address: Optional[str] = None
-    crypto_network: Optional[str] = None  # 'bitcoin', 'ethereum', 'usdc', etc.
+    crypto_address: str | None = None
+    crypto_network: str | None = None  # 'bitcoin', 'ethereum', 'usdc', etc.
     # Generic name field
-    name: Optional[str] = None
+    name: str | None = None
 
 
 # ============================================================================
@@ -149,15 +149,15 @@ class AddPaymentMethodRequest(BaseModel):
 async def get_funding_transactions(
     limit: int = 50,
     offset: int = 0,
-    transaction_type: Optional[str] = None,
-    status: Optional[str] = None,
+    transaction_type: str | None = None,
+    status: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get funding transaction history from database"""
     pool = await get_postgres_pool()
-    
+
     query = """
-        SELECT 
+        SELECT
             id::text,
             type,
             method,
@@ -174,23 +174,23 @@ async def get_funding_transactions(
     """
     params = [user_id]
     param_count = 2
-    
+
     if transaction_type:
         query += f" AND type = ${param_count}"
         params.append(transaction_type)
         param_count += 1
-    
+
     if status:
         query += f" AND status = ${param_count}"
         params.append(status)
         param_count += 1
-    
+
     query += f" ORDER BY created_at DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
     params.extend([limit, offset])
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         transactions = [
             FundingTransaction(
                 id=row['id'],
@@ -207,7 +207,7 @@ async def get_funding_transactions(
             )
             for row in rows
         ]
-    
+
     return {"transactions": transactions, "total": len(transactions)}
 
 
@@ -218,11 +218,11 @@ async def get_funding_transaction(
 ):
     """Get funding transaction detail from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 type,
                 method,
@@ -240,10 +240,10 @@ async def get_funding_transaction(
             transaction_id,
             user_id,
         )
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        
+
         return FundingTransaction(
             id=row['id'],
             type=row['type'],
@@ -265,11 +265,11 @@ async def get_payment_methods(
 ):
     """Get user's payment methods from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 type,
                 name,
@@ -296,7 +296,7 @@ async def get_payment_methods(
             """,
             user_id,
         )
-        
+
         # RULES COMPLIANT: Return data from database with proper field mapping
         def compute_status(row):
             """Compute status from is_verified and is_active"""
@@ -306,7 +306,7 @@ async def get_payment_methods(
                 return 'verified'
             else:
                 return 'pending_verification'
-        
+
         return {
             "payment_methods": [
                 PaymentMethod(
@@ -351,7 +351,7 @@ async def add_payment_method(
 ):
     """Add new payment method to database - RULES COMPLIANT"""
     pool = await get_postgres_pool()
-    
+
     # Extract last 4 digits and display name based on type
     if request.type == 'bank_account':
         last_four = request.account_number[-4:] if request.account_number else "0000"
@@ -389,7 +389,7 @@ async def add_payment_method(
     else:
         last_four = "0000"
         display_name = request.name or "Payment Method"
-    
+
     async with pool.acquire() as conn:
         # Check if this is the first payment method
         count = await conn.fetchval(
@@ -397,7 +397,7 @@ async def add_payment_method(
             user_id,
         )
         is_default = count == 0
-        
+
         row = await conn.fetchrow(
             """
             INSERT INTO payment_methods (
@@ -409,7 +409,7 @@ async def add_payment_method(
                 account_number_encrypted, routing_number_encrypted,
                 is_verified, is_default, is_active
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, true)
-            RETURNING 
+            RETURNING
                 id::text, type, name, last_four,
                 bank_name, account_type, routing_number,
                 card_brand, card_exp_month, card_exp_year,
@@ -438,7 +438,7 @@ async def add_payment_method(
             False,  # Requires verification
             is_default,
         )
-        
+
         # Link with external processor if needed
         try:
             if request.type == 'bank_account':
@@ -454,7 +454,7 @@ async def add_payment_method(
                     },
                     metadata={'payment_method_id': row['id']}
                 )
-                
+
                 if link_result.get('status') == 'APPROVED':
                     # Auto-verify if approved immediately
                     await conn.execute(
@@ -463,15 +463,15 @@ async def add_payment_method(
                     )
                     row = dict(row)
                     row['is_verified'] = True
-                    
+
         except Exception as e:
             logger.error(f"Failed to link external account: {str(e)}")
             # We don't fail the request, but the account remains unverified
-        
+
         # RULES COMPLIANT: Return in format frontend expects
         # Compute status from verification state
         status = 'verified' if row['is_verified'] else 'pending_verification'
-        
+
         payment_method = PaymentMethod(
             id=row['id'],
             user_id=str(user_id),
@@ -498,7 +498,7 @@ async def add_payment_method(
             is_active=row['is_active'],
             created_at=row['created_at'],
         )
-        
+
         return {"payment_method": payment_method}
 
 
@@ -509,21 +509,21 @@ async def delete_payment_method(
 ):
     """Soft delete payment method"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
-            UPDATE payment_methods 
-            SET is_active = false 
+            UPDATE payment_methods
+            SET is_active = false
             WHERE id = $1::uuid AND user_id = $2
             """,
             method_id,
             user_id,
         )
-        
+
         if result == "UPDATE 0":
             raise HTTPException(status_code=404, detail="Payment method not found")
-        
+
         return {"success": True}
 
 
@@ -533,12 +533,12 @@ async def get_transfer_limits(
 ):
     """Get transfer limits from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Get user's tier limits
         limits_row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 daily_deposit_limit,
                 daily_withdrawal_limit,
                 instant_transfer_limit
@@ -547,7 +547,7 @@ async def get_transfer_limits(
             """,
             user_id,
         )
-        
+
         if not limits_row:
             # Default limits for new users
             daily_deposit_limit = Decimal("25000.00")
@@ -557,42 +557,42 @@ async def get_transfer_limits(
             daily_deposit_limit = limits_row['daily_deposit_limit']
             daily_withdrawal_limit = limits_row['daily_withdrawal_limit']
             instant_transfer_limit = limits_row['instant_transfer_limit']
-        
+
         # Calculate used amounts today
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        
+
         used_deposit = await conn.fetchval(
             """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
-            WHERE user_id = $1 
-            AND type = 'deposit' 
+            WHERE user_id = $1
+            AND type = 'deposit'
             AND status IN ('completed', 'processing')
             AND created_at >= $2
             """,
             user_id,
             today_start,
         ) or Decimal("0")
-        
+
         used_withdrawal = await conn.fetchval(
             """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
-            WHERE user_id = $1 
-            AND type = 'withdrawal' 
+            WHERE user_id = $1
+            AND type = 'withdrawal'
             AND status IN ('completed', 'processing')
             AND created_at >= $2
             """,
             user_id,
             today_start,
         ) or Decimal("0")
-        
+
         used_instant = await conn.fetchval(
             """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
-            WHERE user_id = $1 
-            AND type = 'deposit' 
+            WHERE user_id = $1
+            AND type = 'deposit'
             AND method = 'instant'
             AND status IN ('completed', 'processing')
             AND created_at >= $2
@@ -600,7 +600,7 @@ async def get_transfer_limits(
             user_id,
             today_start,
         ) or Decimal("0")
-        
+
         return TransferLimit(
             daily_deposit_limit=daily_deposit_limit,
             daily_deposit_remaining=daily_deposit_limit - used_deposit,
@@ -618,7 +618,7 @@ async def create_deposit(
 ):
     """Create deposit transaction in database"""
     pool = await get_postgres_pool()
-    
+
     # Verify payment method belongs to user
     async with pool.acquire() as conn:
         method = await conn.fetchrow(
@@ -626,26 +626,26 @@ async def create_deposit(
             request.payment_method_id,
             user_id,
         )
-        
+
         if not method:
             raise HTTPException(status_code=404, detail="Payment method not found")
-        
+
         if not method['is_verified']:
             raise HTTPException(status_code=400, detail="Payment method not verified")
-        
+
         # Calculate fee using payment processor
         fee = payment_processor.calculate_fee(
             request.amount,
             method['type'],
             request.transfer_type
         )
-        
+
         # Calculate expected arrival
         if request.transfer_type == "instant":
             expected_arrival = datetime.utcnow() + timedelta(minutes=5)
         else:
             expected_arrival = datetime.utcnow() + timedelta(days=3)
-        
+
         # Insert transaction
         row = await conn.fetchrow(
             """
@@ -662,7 +662,7 @@ async def create_deposit(
             request.payment_method_id,
             expected_arrival,
         )
-        
+
         # Process payment with payment processor
         try:
             if method['type'] in ('debit_card', 'credit_card'):
@@ -677,7 +677,7 @@ async def create_deposit(
                     }
                 )
                 logger.info(f"Payment intent created: {payment_result.get('id')} - Simulation: {payment_result.get('simulation', False)}")
-                
+
                 # Update status based on payment result
                 if payment_result.get('status') == 'succeeded':
                     await conn.execute(
@@ -690,7 +690,7 @@ async def create_deposit(
                         request.amount,
                         user_id,
                     )
-                    
+
                     # Record revenue
                     if fee > 0:
                         await conn.execute(
@@ -724,7 +724,7 @@ async def create_deposit(
                 "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
                 row['id']
             )
-        
+
         return FundingTransaction(
             id=row['id'],
             type=row['type'],
@@ -746,7 +746,7 @@ async def create_withdrawal(
 ):
     """Create withdrawal transaction in database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Verify payment method
         method = await conn.fetchrow(
@@ -754,19 +754,19 @@ async def create_withdrawal(
             request.payment_method_id,
             user_id,
         )
-        
+
         if not method:
             raise HTTPException(status_code=404, detail="Payment method not found")
-        
+
         # Check available cash from accounts table
         account = await conn.fetchrow(
             "SELECT cash FROM accounts WHERE user_id = $1 AND is_active = true LIMIT 1",
             user_id,
         )
-        
+
         if not account or account['cash'] < request.amount:
             raise HTTPException(status_code=400, detail="Insufficient funds")
-        
+
         # Calculate fee for withdrawal
         fee = payment_processor.calculate_fee(
             request.amount,
@@ -774,7 +774,7 @@ async def create_withdrawal(
             'standard'
         )
         expected_arrival = datetime.utcnow() + timedelta(days=3)
-        
+
         # Insert transaction
         row = await conn.fetchrow(
             """
@@ -790,14 +790,14 @@ async def create_withdrawal(
             request.payment_method_id,
             expected_arrival,
         )
-        
+
         # Deduct from cash (amount + fee)
         await conn.execute(
             "UPDATE accounts SET cash = cash - $1 WHERE user_id = $2 AND is_active = true",
             request.amount + fee,
             user_id,
         )
-        
+
         # Process withdrawal with payment processor
         try:
             withdrawal_result = await payment_processor.process_withdrawal(
@@ -824,7 +824,7 @@ async def create_withdrawal(
                 row['id']
             )
             raise HTTPException(status_code=500, detail="Withdrawal processing failed")
-        
+
         return FundingTransaction(
             id=row['id'],
             type=row['type'],
@@ -846,7 +846,7 @@ async def cancel_funding_transaction(
 ):
     """Cancel a pending funding transaction - RULES COMPLIANT"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Verify transaction belongs to user and is cancellable
         txn = await conn.fetchrow(
@@ -854,19 +854,19 @@ async def cancel_funding_transaction(
             transaction_id,
             user_id,
         )
-        
+
         if not txn:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        
+
         if txn['status'] not in ('pending', 'processing'):
             raise HTTPException(status_code=400, detail="Transaction cannot be cancelled")
-        
+
         # Update status to cancelled
         await conn.execute(
             "UPDATE funding_transactions SET status = 'cancelled' WHERE id = $1::uuid",
             transaction_id,
         )
-        
+
         return {"message": "Transaction cancelled successfully"}
 
 
@@ -877,12 +877,12 @@ async def download_receipt(
 ):
     """Download PDF receipt for a transaction - RULES COMPLIANT"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Fetch transaction data from database
         transaction = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 user_id,
                 type,
@@ -900,20 +900,20 @@ async def download_receipt(
             transaction_id,
             user_id,
         )
-        
+
         if not transaction:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        
+
         # Fetch user data
         user = await conn.fetchrow(
             "SELECT id, full_name, email FROM users WHERE id = $1",
             user_id,
         )
-        
+
         # Fetch payment method data
         payment_method = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id::text,
                 type,
                 name,
@@ -925,7 +925,7 @@ async def download_receipt(
             """,
             transaction['payment_method_id'],
         )
-        
+
         if not payment_method:
             # Create a default payment method if not found
             payment_method = {
@@ -936,12 +936,12 @@ async def download_receipt(
                 'bank_name': None,
                 'card_brand': None,
             }
-        
+
         # Convert to dicts for receipt generator
         transaction_data = dict(transaction)
         user_data = dict(user) if user else {'full_name': 'Unknown', 'email': 'N/A'}
         payment_method_data = dict(payment_method)
-        
+
         try:
             logger.info(f"Generating PDF receipt for transaction {transaction_id}")
             # Generate PDF receipt
@@ -950,7 +950,7 @@ async def download_receipt(
                 user_data,
                 payment_method_data
             )
-            
+
             logger.info(f"PDF receipt generated successfully for transaction {transaction_id}")
             # Return as streaming response
             return StreamingResponse(
@@ -970,7 +970,7 @@ async def download_receipt(
                     user_data,
                     payment_method_data
                 )
-                
+
                 return StreamingResponse(
                     iter([text_receipt.encode()]),
                     media_type="text/plain",
@@ -981,7 +981,7 @@ async def download_receipt(
             except Exception as fallback_error:
                 logger.error(f"Text receipt fallback also failed: {str(fallback_error)}")
                 raise HTTPException(
-                    status_code=500, 
+                    status_code=500,
                     detail=f"Failed to generate receipt: {str(e)}"
                 )
 
@@ -996,7 +996,7 @@ async def initiate_payment_verification(
     Returns verification status and next steps
     """
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Get payment method details
         method = await conn.fetchrow(
@@ -1010,13 +1010,13 @@ async def initiate_payment_verification(
             payment_method_id,
             user_id,
         )
-        
+
         if not method:
             raise HTTPException(status_code=404, detail="Payment method not found")
-        
+
         # Prepare metadata
         metadata = dict(method)
-        
+
         try:
             result = await PaymentVerificationService.initiate_verification(
                 UUID(payment_method_id),
@@ -1034,14 +1034,14 @@ async def initiate_payment_verification(
 @router.post("/payment-methods/{payment_method_id}/verify/complete")
 async def complete_payment_verification(
     payment_method_id: str,
-    verification_data: Dict[str, Any],
+    verification_data: dict[str, Any],
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Complete verification with user-provided data (amounts, codes, etc.)
     """
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Verify ownership
         exists = await conn.fetchval(
@@ -1049,10 +1049,10 @@ async def complete_payment_verification(
             payment_method_id,
             user_id,
         )
-        
+
         if not exists:
             raise HTTPException(status_code=404, detail="Payment method not found")
-        
+
         try:
             result = await PaymentVerificationService.complete_verification(
                 UUID(payment_method_id),
@@ -1073,12 +1073,12 @@ async def get_verification_status(
 ):
     """Get current verification status for a payment method"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Get payment method and verification status
         method = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 pm.verification_status,
                 pm.is_verified,
                 pm.verified_at,
@@ -1093,10 +1093,10 @@ async def get_verification_status(
             payment_method_id,
             user_id,
         )
-        
+
         if not method:
             raise HTTPException(status_code=404, detail="Payment method not found")
-        
+
         return {
             "status": method['verification_status'],
             "is_verified": method['is_verified'],
@@ -1118,11 +1118,11 @@ async def get_transaction_status(
     Used for polling transaction progress
     """
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 status,
                 completed_at,
                 expected_arrival,
@@ -1134,10 +1134,10 @@ async def get_transaction_status(
             transaction_id,
             user_id,
         )
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        
+
         return {
             "status": row['status'],
             "completed_at": row['completed_at'].isoformat() if row['completed_at'] else None,
@@ -1157,7 +1157,7 @@ async def run_settlement(
     """
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
-    
+
     result = await transaction_settlement.run_settlement_cycle()
     return {
         "message": "Settlement cycle completed",

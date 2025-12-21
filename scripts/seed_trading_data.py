@@ -19,8 +19,8 @@ import asyncio
 import os
 import random
 from datetime import datetime, timedelta
-from decimal import Decimal
 from uuid import UUID, uuid4
+
 import asyncpg
 from loguru import logger
 
@@ -65,7 +65,7 @@ def random_date(start_days_ago: int, end_days_ago: int = 0) -> datetime:
     """Generate random datetime between start_days_ago and end_days_ago."""
     start = datetime.utcnow() - timedelta(days=start_days_ago)
     end = datetime.utcnow() - timedelta(days=end_days_ago)
-    
+
     delta = end - start
     random_seconds = random.random() * delta.total_seconds()
     return start + timedelta(seconds=random_seconds)
@@ -89,7 +89,7 @@ def random_price(symbol: str) -> float:
         "MA": (400, 480),
         "HD": (320, 380),
     }
-    
+
     min_price, max_price = prices.get(symbol, (50, 200))
     return round(random.uniform(min_price, max_price), 2)
 
@@ -112,21 +112,21 @@ async def get_admin_user_id(conn: asyncpg.Connection) -> UUID:
         "SELECT id FROM users WHERE email = $1 OR username = $2 LIMIT 1",
         "admin@cift.markets", "admin"
     )
-    
+
     if row:
         logger.info(f"Found existing admin user: {row['id']}")
         return row['id']
-    
+
     # Create admin if doesn't exist
     from cift.core.auth import hash_password
-    
+
     user_id = uuid4()
     try:
         await conn.execute("""
             INSERT INTO users (id, email, username, hashed_password, full_name, is_active, is_superuser)
             VALUES ($1, $2, $3, $4, $5, true, true)
         """, user_id, "admin@cift.markets", "admin", hash_password("admin123"), "CIFT Admin")
-        
+
         logger.info(f"Created admin user: {user_id}")
         return user_id
     except Exception as e:
@@ -149,15 +149,15 @@ async def get_account_id(conn: asyncpg.Connection, user_id: UUID) -> UUID:
         "SELECT id FROM accounts WHERE user_id = $1 AND is_active = true LIMIT 1",
         user_id
     )
-    
+
     if row:
         logger.info(f"Found existing account: {row['id']}")
         return row['id']
-    
+
     # Create account
     account_id = uuid4()
     account_number = f"CIFT{random.randint(10000000, 99999999)}"
-    
+
     await conn.execute("""
         INSERT INTO accounts (
             id, user_id, account_number, account_type, account_name,
@@ -168,7 +168,7 @@ async def get_account_id(conn: asyncpg.Connection, user_id: UUID) -> UUID:
             $4, $5, $4, 0, true, false
         )
     """, account_id, user_id, account_number, INITIAL_CASH, INITIAL_CASH * 2)
-    
+
     logger.info(f"Created trading account: {account_id}")
     return account_id
 
@@ -176,24 +176,24 @@ async def get_account_id(conn: asyncpg.Connection, user_id: UUID) -> UUID:
 async def seed_positions(conn: asyncpg.Connection, user_id: UUID, account_id: UUID):
     """Create current positions (holdings)."""
     logger.info(f"Creating {NUM_POSITIONS} positions...")
-    
+
     # Select random symbols for current holdings
     holdings = random.sample(SYMBOLS, NUM_POSITIONS)
-    
+
     positions_data = []
     for symbol in holdings:
         # Generate position details
         quantity = random_quantity()
         avg_cost = random_price(symbol)
         current_price = avg_cost * random.uniform(0.85, 1.25)  # -15% to +25% P&L
-        
+
         # Calculate P&L
         total_cost = avg_cost * quantity
         market_value = current_price * quantity
         unrealized_pnl = market_value - total_cost
         realized_pnl = random.uniform(-500, 1500)  # From previous trades
         day_pnl = random.uniform(-200, 400)
-        
+
         position = {
             'id': uuid4(),
             'user_id': user_id,
@@ -213,9 +213,9 @@ async def seed_positions(conn: asyncpg.Connection, user_id: UUID, account_id: UU
             'opened_at': random_date(180, 7),
             'updated_at': datetime.utcnow()
         }
-        
+
         positions_data.append(position)
-    
+
     # Insert positions
     await conn.executemany("""
         INSERT INTO positions (
@@ -243,7 +243,7 @@ async def seed_positions(conn: asyncpg.Connection, user_id: UUID, account_id: UU
         p['unrealized_pnl'], p['unrealized_pnl_pct'], p['realized_pnl'],
         p['day_pnl'], p['day_pnl_pct'], p['opened_at'], p['updated_at']
     ) for p in positions_data])
-    
+
     logger.success(f"✅ Created {len(positions_data)} positions")
     return positions_data
 
@@ -251,13 +251,13 @@ async def seed_positions(conn: asyncpg.Connection, user_id: UUID, account_id: UU
 async def seed_orders(conn: asyncpg.Connection, user_id: UUID, account_id: UUID, positions_data: list):
     """Create order history."""
     logger.info(f"Creating {NUM_ORDERS} orders...")
-    
+
     orders_data = []
-    
+
     # Create orders for current positions (buy orders)
     for position in positions_data:
         num_buys = random.randint(1, 4)  # 1-4 buy orders per position
-        
+
         for _ in range(num_buys):
             order = {
                 'id': uuid4(),
@@ -280,22 +280,22 @@ async def seed_orders(conn: asyncpg.Connection, user_id: UUID, account_id: UUID,
                 'filled_at': None,
                 'cancelled_at': None
             }
-            
+
             order['filled_quantity'] = order['quantity']
             order['total_value'] = round(order['quantity'] * order['avg_fill_price'], 2)
             order['filled_at'] = order['created_at'] + timedelta(seconds=random.randint(1, 300))
-            
+
             if order['order_type'] == 'limit':
                 order['limit_price'] = round(order['avg_fill_price'] * random.uniform(0.98, 1.02), 2)
-            
+
             orders_data.append(order)
-    
+
     # Create some sell orders (realized P&L)
     for _ in range(NUM_PAST_TRADES):
         symbol = random.choice(SYMBOLS)
         quantity = random_quantity()
         price = random_price(symbol)
-        
+
         order = {
             'id': uuid4(),
             'user_id': user_id,
@@ -317,22 +317,22 @@ async def seed_orders(conn: asyncpg.Connection, user_id: UUID, account_id: UUID,
             'filled_at': None,
             'cancelled_at': None
         }
-        
+
         order['filled_at'] = order['created_at'] + timedelta(seconds=random.randint(1, 300))
-        
+
         if order['order_type'] == 'limit':
             order['limit_price'] = round(price * random.uniform(0.98, 1.02), 2)
-        
+
         orders_data.append(order)
-    
+
     # Create some cancelled/pending/partial orders
     for _ in range(random.randint(5, 15)):
         symbol = random.choice(SYMBOLS)
         quantity = random_quantity()
         price = random_price(symbol)
-        
+
         status = random.choice(['pending', 'accepted', 'cancelled', 'partial'])
-        
+
         order = {
             'id': uuid4(),
             'user_id': user_id,
@@ -354,9 +354,9 @@ async def seed_orders(conn: asyncpg.Connection, user_id: UUID, account_id: UUID,
             'filled_at': random_date(30, 0) if status == 'partial' else None,
             'cancelled_at': random_date(15, 0) if status == 'cancelled' else None
         }
-        
+
         orders_data.append(order)
-    
+
     # Insert orders
     await conn.executemany("""
         INSERT INTO orders (
@@ -375,7 +375,7 @@ async def seed_orders(conn: asyncpg.Connection, user_id: UUID, account_id: UUID,
         o['avg_fill_price'], o['status'], o['total_value'], o['commission'],
         o['created_at'], o['filled_at'], o['cancelled_at']
     ) for o in orders_data])
-    
+
     logger.success(f"✅ Created {len(orders_data)} orders")
     return orders_data
 
@@ -383,15 +383,15 @@ async def seed_orders(conn: asyncpg.Connection, user_id: UUID, account_id: UUID,
 async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id: UUID, orders_data: list):
     """Create transaction history."""
     logger.info("Creating transactions...")
-    
+
     transactions_data = []
-    
+
     # Create transactions for filled orders
     for order in orders_data:
         if order['status'] in ['filled', 'partial'] and order['filled_quantity'] > 0:
             # Trade transaction
             amount = -order['total_value'] if order['side'] == 'buy' else order['total_value']
-            
+
             transaction = {
                 'id': uuid4(),
                 'user_id': user_id,
@@ -406,9 +406,9 @@ async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id:
                 'transaction_date': order['filled_at'] or order['created_at'],
                 'created_at': order['filled_at'] or order['created_at']
             }
-            
+
             transactions_data.append(transaction)
-            
+
             # Commission transaction
             if order['commission'] > 0:
                 commission_txn = {
@@ -425,14 +425,14 @@ async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id:
                     'transaction_date': order['filled_at'] or order['created_at'],
                     'created_at': order['filled_at'] or order['created_at']
                 }
-                
+
                 transactions_data.append(commission_txn)
-    
+
     # Add some dividends
     for _ in range(random.randint(5, 15)):
         symbol = random.choice(["AAPL", "MSFT", "JPM", "JNJ", "PG", "WMT"])
         amount = round(random.uniform(10, 200), 2)
-        
+
         dividend = {
             'id': uuid4(),
             'user_id': user_id,
@@ -447,9 +447,9 @@ async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id:
             'transaction_date': random_date(90, 5),
             'created_at': random_date(90, 5)
         }
-        
+
         transactions_data.append(dividend)
-    
+
     # Add initial deposit
     initial_deposit = {
         'id': uuid4(),
@@ -461,22 +461,22 @@ async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id:
         'symbol': None,
         'description': "Initial deposit",
         'order_id': None,
-        'external_ref': f"DEP-INIT",
+        'external_ref': "DEP-INIT",
         'transaction_date': random_date(180, 179),
         'created_at': random_date(180, 179)
     }
-    
+
     transactions_data.append(initial_deposit)
-    
+
     # Sort by date
     transactions_data.sort(key=lambda x: x['transaction_date'])
-    
+
     # Calculate running balance
     balance = 0
     for txn in transactions_data:
         balance += txn['amount']
         txn['balance_after'] = round(balance, 2)
-    
+
     # Insert transactions
     await conn.executemany("""
         INSERT INTO transactions (
@@ -493,7 +493,7 @@ async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id:
         t['description'], t['order_id'], t['external_ref'],
         t['transaction_date'], t['created_at']
     ) for t in transactions_data])
-    
+
     logger.success(f"✅ Created {len(transactions_data)} transactions")
     return transactions_data
 
@@ -501,28 +501,28 @@ async def seed_transactions(conn: asyncpg.Connection, user_id: UUID, account_id:
 async def seed_portfolio_snapshots(conn: asyncpg.Connection, user_id: UUID, account_id: UUID, positions_data: list):
     """Create historical portfolio snapshots for equity curve."""
     logger.info("Creating portfolio snapshots...")
-    
+
     snapshots = []
-    
+
     # Create daily snapshots for last 90 days
     for days_ago in range(90, -1, -1):
         snapshot_date = datetime.utcnow() - timedelta(days=days_ago)
-        
+
         # Calculate portfolio value at that time
         # Add some randomness but trending up
         base_value = INITIAL_CASH
         trend = (90 - days_ago) / 90 * 15000  # Trending up $15k over 90 days
         volatility = random.uniform(-2000, 2000)
-        
+
         total_value = base_value + trend + volatility
-        
+
         # Calculate positions value
         positions_value = sum(p['market_value'] for p in positions_data)
         cash = total_value - positions_value
-        
+
         unrealized_pnl = sum(p['unrealized_pnl'] for p in positions_data)
         realized_pnl = random.uniform(-500, trend)  # Realized gains accumulate
-        
+
         snapshot = {
             'id': uuid4(),
             'user_id': user_id,
@@ -539,13 +539,13 @@ async def seed_portfolio_snapshots(conn: asyncpg.Connection, user_id: UUID, acco
             'day_pnl_pct': round(random.uniform(-2, 3), 2),
             'created_at': snapshot_date
         }
-        
+
         snapshots.append(snapshot)
-    
+
     # Insert snapshots
     await conn.executemany("""
         INSERT INTO portfolio_snapshots (
-            id, user_id, account_id, timestamp, snapshot_type, total_value, cash, 
+            id, user_id, account_id, timestamp, snapshot_type, total_value, cash,
             positions_value, equity, unrealized_pnl, realized_pnl, day_pnl, day_pnl_pct, created_at
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
@@ -566,7 +566,7 @@ async def seed_portfolio_snapshots(conn: asyncpg.Connection, user_id: UUID, acco
         s['unrealized_pnl'], s['realized_pnl'], s['day_pnl'], s['day_pnl_pct'],
         s['created_at']
     ) for s in snapshots])
-    
+
     logger.success(f"✅ Created {len(snapshots)} portfolio snapshots")
 
 
@@ -574,43 +574,43 @@ async def seed_data():
     """Main seeding function."""
     logger.info("🌱 Starting seed data generation...")
     logger.info(f"📡 Connecting to database: {DB_HOST}:{DB_PORT}/{DB_NAME} as {DB_USER}")
-    
+
     # Connect to database
     try:
         conn = await asyncpg.connect(DATABASE_URL)
-        logger.success(f"✅ Connected to database successfully!")
+        logger.success("✅ Connected to database successfully!")
     except Exception as e:
         logger.error(f"❌ Failed to connect to database: {e}")
         logger.info(f"💡 Connection string: postgresql://{DB_USER}:***@{DB_HOST}:{DB_PORT}/{DB_NAME}")
-        logger.info(f"💡 Make sure PostgreSQL is running and accessible")
+        logger.info("💡 Make sure PostgreSQL is running and accessible")
         raise
-    
+
     try:
         # Get admin user and account
         user_id = await get_admin_user_id(conn)
         account_id = await get_account_id(conn, user_id)
-        
+
         # Seed in order
         positions_data = await seed_positions(conn, user_id, account_id)
         orders_data = await seed_orders(conn, user_id, account_id, positions_data)
         transactions_data = await seed_transactions(conn, user_id, account_id, orders_data)
         await seed_portfolio_snapshots(conn, user_id, account_id, positions_data)
-        
+
         logger.success("🎉 Seed data generation complete!")
-        logger.info(f"📊 Summary:")
+        logger.info("📊 Summary:")
         logger.info(f"   - User ID: {user_id}")
         logger.info(f"   - Positions: {len(positions_data)}")
         logger.info(f"   - Orders: {len(orders_data)}")
         logger.info(f"   - Transactions: {len(transactions_data)}")
-        logger.info(f"   - Portfolio snapshots: 91 days")
+        logger.info("   - Portfolio snapshots: 91 days")
         logger.info(f"   - Initial cash: ${INITIAL_CASH:,.2f}")
-        
+
         # Calculate summary
         total_pnl = sum(p['unrealized_pnl'] + p['realized_pnl'] for p in positions_data)
         total_value = sum(p['market_value'] for p in positions_data)
         logger.info(f"   - Current value: ${total_value:,.2f}")
         logger.info(f"   - Total P&L: ${total_pnl:,.2f} ({total_pnl/INITIAL_CASH*100:.1f}%)")
-        
+
     except Exception as e:
         logger.error(f"❌ Error seeding data: {e}")
         raise

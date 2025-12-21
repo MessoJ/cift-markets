@@ -4,17 +4,16 @@ Handles stock screening with technical and fundamental filters.
 All data is fetched from database - NO MOCK DATA.
 """
 
+import json
 from datetime import datetime
 from decimal import Decimal
-import json
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from cift.core.auth import get_current_user_id
-from cift.core.database import get_postgres_pool, get_questdb_pool
+from cift.core.database import get_postgres_pool
 from cift.core.logging import logger
 
 router = APIRouter(prefix="/screener", tags=["screener"])
@@ -27,37 +26,37 @@ router = APIRouter(prefix="/screener", tags=["screener"])
 class ScreenerCriteria(BaseModel):
     """Screener criteria model"""
     # Price filters
-    price_min: Optional[Decimal] = None
-    price_max: Optional[Decimal] = None
-    
+    price_min: Decimal | None = None
+    price_max: Decimal | None = None
+
     # Volume filters
-    volume_min: Optional[int] = None
-    
+    volume_min: int | None = None
+
     # Market cap filters
-    market_cap_min: Optional[Decimal] = None
-    market_cap_max: Optional[Decimal] = None
-    
+    market_cap_min: Decimal | None = None
+    market_cap_max: Decimal | None = None
+
     # Fundamental filters
-    pe_ratio_min: Optional[Decimal] = None
-    pe_ratio_max: Optional[Decimal] = None
-    eps_min: Optional[Decimal] = None
-    dividend_yield_min: Optional[Decimal] = None
-    beta_min: Optional[Decimal] = None
-    beta_max: Optional[Decimal] = None
-    
+    pe_ratio_min: Decimal | None = None
+    pe_ratio_max: Decimal | None = None
+    eps_min: Decimal | None = None
+    dividend_yield_min: Decimal | None = None
+    beta_min: Decimal | None = None
+    beta_max: Decimal | None = None
+
     # Performance filters
-    change_pct_min: Optional[Decimal] = None
-    change_pct_max: Optional[Decimal] = None
-    
+    change_pct_min: Decimal | None = None
+    change_pct_max: Decimal | None = None
+
     # Category filters
-    sector: Optional[str] = None
-    industry: Optional[str] = None
-    country: Optional[str] = None
+    sector: str | None = None
+    industry: str | None = None
+    country: str | None = None
 
 
 class ScreenerResponse(BaseModel):
     """Screener response with pagination"""
-    results: List[dict]
+    results: list[dict]
     total_count: int
     page: int
     limit: int
@@ -71,12 +70,12 @@ class ScreenerResult(BaseModel):
     change: Decimal
     change_percent: Decimal
     volume: int
-    market_cap: Optional[Decimal] = None
-    pe_ratio: Optional[Decimal] = None
-    eps: Optional[Decimal] = None
-    dividend_yield: Optional[Decimal] = None
-    sector: Optional[str] = None
-    industry: Optional[str] = None
+    market_cap: Decimal | None = None
+    pe_ratio: Decimal | None = None
+    eps: Decimal | None = None
+    dividend_yield: Decimal | None = None
+    sector: str | None = None
+    industry: str | None = None
 
 
 class SavedScreen(BaseModel):
@@ -85,7 +84,7 @@ class SavedScreen(BaseModel):
     name: str
     criteria: ScreenerCriteria
     created_at: datetime
-    last_run: Optional[datetime] = None
+    last_run: datetime | None = None
 
 
 class SaveScreenRequest(BaseModel):
@@ -111,7 +110,7 @@ async def screen_stocks(
     No authentication required for basic screening.
     """
     pg_pool = await get_postgres_pool()
-    
+
     # Valid sort columns - map frontend names to actual column expressions
     sort_map = {
         "market_cap": "cp.market_cap",
@@ -128,100 +127,100 @@ async def screen_stocks(
     }
     sort_column = sort_map.get(sort_by, "cp.market_cap")
     sort_direction = "DESC" if sort_order.lower() == "desc" else "ASC"
-    
+
     # Base query
     base_query = """
         FROM company_profiles cp
         LEFT JOIN market_data_cache mdc ON cp.symbol = mdc.symbol
         WHERE 1=1
     """
-    
+
     params = []
     param_count = 1
-    
+
     # Apply fundamental filters from company_profiles
     if criteria.market_cap_min:
         base_query += f" AND cp.market_cap >= ${param_count}"
         params.append(float(criteria.market_cap_min))
         param_count += 1
-    
+
     if criteria.market_cap_max:
         base_query += f" AND cp.market_cap <= ${param_count}"
         params.append(float(criteria.market_cap_max))
         param_count += 1
-    
+
     if criteria.pe_ratio_min:
         base_query += f" AND cp.pe_ratio >= ${param_count}"
         params.append(float(criteria.pe_ratio_min))
         param_count += 1
-    
+
     if criteria.pe_ratio_max:
         base_query += f" AND cp.pe_ratio <= ${param_count}"
         params.append(float(criteria.pe_ratio_max))
         param_count += 1
-    
+
     if criteria.dividend_yield_min:
         base_query += f" AND cp.dividend_yield >= ${param_count}"
         params.append(float(criteria.dividend_yield_min))
         param_count += 1
-        
+
     if criteria.beta_min:
         base_query += f" AND cp.beta >= ${param_count}"
         params.append(float(criteria.beta_min))
         param_count += 1
-        
+
     if criteria.beta_max:
         base_query += f" AND cp.beta <= ${param_count}"
         params.append(float(criteria.beta_max))
         param_count += 1
-    
+
     if criteria.sector:
         base_query += f" AND cp.sector ILIKE ${param_count}"
         params.append(f"%{criteria.sector}%")
         param_count += 1
-    
+
     if criteria.industry:
         base_query += f" AND cp.industry ILIKE ${param_count}"
         params.append(f"%{criteria.industry}%")
         param_count += 1
-        
+
     if criteria.country:
         base_query += f" AND cp.country = ${param_count}"
         params.append(criteria.country)
         param_count += 1
-    
+
     # Apply price filters from market_data_cache
     if criteria.price_min:
         base_query += f" AND mdc.price >= ${param_count}"
         params.append(float(criteria.price_min))
         param_count += 1
-    
+
     if criteria.price_max:
         base_query += f" AND mdc.price <= ${param_count}"
         params.append(float(criteria.price_max))
         param_count += 1
-    
+
     if criteria.volume_min:
         base_query += f" AND mdc.volume >= ${param_count}"
         params.append(criteria.volume_min)
         param_count += 1
-    
+
     if criteria.change_pct_min:
         base_query += f" AND mdc.change_pct >= ${param_count}"
         params.append(float(criteria.change_pct_min))
         param_count += 1
-    
+
     if criteria.change_pct_max:
         base_query += f" AND mdc.change_pct <= ${param_count}"
         params.append(float(criteria.change_pct_max))
         param_count += 1
-    
+
     # Count query
     count_query = f"SELECT COUNT(*) {base_query}"
-    
+
     # Data query
     data_query = f"""
-        SELECT 
+        SELECT
             cp.symbol,
             cp.name,
             cp.sector,
@@ -243,18 +242,18 @@ async def screen_stocks(
         ORDER BY {sort_column} {sort_direction} NULLS LAST
         LIMIT ${param_count} OFFSET ${param_count + 1}
     """
-    
+
     results = []
     total_count = 0
-    
+
     try:
         async with pg_pool.acquire() as conn:
             # Get total count first
             total_count = await conn.fetchval(count_query, *params)
-            
+
             # Get paginated data
             rows = await conn.fetch(data_query, *params, limit, offset)
-            
+
             for row in rows:
                 results.append({
                     "symbol": row['symbol'],
@@ -275,7 +274,7 @@ async def screen_stocks(
                     "industry": row['industry'] or "Unknown",
                     "country": row['country'] or "Unknown",
                 })
-        
+
         logger.info(f"Screener returned {len(results)} results (Total: {total_count})")
         return {
             "results": results,
@@ -283,7 +282,7 @@ async def screen_stocks(
             "page": (offset // limit) + 1,
             "limit": limit
         }
-                    
+
     except Exception as e:
         logger.error(f"Stock screening failed: {e}")
         raise HTTPException(status_code=500, detail=f"Screening failed: {str(e)}")
@@ -303,7 +302,7 @@ async def get_preset_screens():
             "sort_order": "desc"
         },
         {
-            "id": "losers", 
+            "id": "losers",
             "name": "Top Losers",
             "description": "Stocks with negative change today",
             "criteria": {"change_pct_max": -0.01},  # Any negative change
@@ -357,7 +356,7 @@ async def get_preset_screens():
 async def get_sectors():
     """Get list of available sectors from database"""
     pg_pool = await get_postgres_pool()
-    
+
     try:
         async with pg_pool.acquire() as conn:
             rows = await conn.fetch("""
@@ -377,7 +376,7 @@ async def get_sectors():
 async def get_industries(sector: str = None):
     """Get list of available industries, optionally filtered by sector"""
     pg_pool = await get_postgres_pool()
-    
+
     try:
         async with pg_pool.acquire() as conn:
             if sector:
@@ -408,11 +407,11 @@ async def get_saved_screens(
 ):
     """Get user's saved screens from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 name,
                 criteria,
@@ -424,7 +423,7 @@ async def get_saved_screens(
             """,
             user_id,
         )
-        
+
         screens = [
             SavedScreen(
                 id=row['id'],
@@ -435,7 +434,7 @@ async def get_saved_screens(
             )
             for row in rows
         ]
-        
+
         return {"screens": screens}
 
 
@@ -446,11 +445,11 @@ async def save_screen(
 ):
     """Save screen to database"""
     pool = await get_postgres_pool()
-    
+
     try:
         # Convert criteria to dict, excluding None values for proper JSON storage
         criteria_dict = {k: v for k, v in request.criteria.dict().items() if v is not None}
-        
+
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -462,7 +461,7 @@ async def save_screen(
                 request.name,
                 json.dumps(criteria_dict),
             )
-            
+
             return SavedScreen(
                 id=row['id'],
                 name=row['name'],
@@ -482,7 +481,7 @@ async def delete_saved_screen(
 ):
     """Delete saved screen from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
@@ -492,10 +491,10 @@ async def delete_saved_screen(
             screen_id,
             user_id,
         )
-        
+
         if result == "DELETE 0":
             raise HTTPException(status_code=404, detail="Screen not found")
-        
+
         return {"success": True}
 
 
@@ -507,7 +506,7 @@ async def run_saved_screen(
 ):
     """Run a saved screen"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -518,12 +517,12 @@ async def run_saved_screen(
             screen_id,
             user_id,
         )
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Screen not found")
-        
+
         criteria = ScreenerCriteria(**row['criteria'])
-        
+
         # Update last_run timestamp
         await conn.execute(
             """
@@ -534,7 +533,7 @@ async def run_saved_screen(
             datetime.utcnow(),
             screen_id,
         )
-    
+
     # Run the screen
     return await screen_stocks(criteria, limit, user_id)
 
@@ -546,8 +545,8 @@ async def advanced_stock_screen(
 ):
     """Run advanced stock screen using new screener service"""
     try:
-        from cift.services.stock_screener import get_screener_service, ScreenerRequest
-        
+        from cift.services.stock_screener import ScreenerRequest, get_screener_service
+
         # Convert dict to ScreenerRequest
         screener_request = ScreenerRequest(
             name=request.get('name', 'Advanced Screen'),
@@ -557,12 +556,12 @@ async def advanced_stock_screen(
             limit=request.get('limit', 100),
             save_screen=request.get('save_screen', False)
         )
-        
+
         screener = get_screener_service()
         result = await screener.screen_stocks(screener_request, str(user_id))
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Advanced screening failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -573,10 +572,10 @@ async def get_popular_screens():
     """Get popular/template screening criteria"""
     try:
         from cift.services.stock_screener import get_screener_service
-        
+
         screener = get_screener_service()
         return await screener.get_popular_screens()
-        
+
     except Exception as e:
         logger.error(f"Failed to get popular screens: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -587,13 +586,13 @@ async def get_screener_fields():
     """Get available screening fields and their descriptions"""
     try:
         from cift.services.stock_screener import get_screener_service
-        
+
         screener = get_screener_service()
         return {
             "fields": screener.supported_fields,
             "operators": {
                 ">": "Greater than",
-                "<": "Less than", 
+                "<": "Less than",
                 ">=": "Greater than or equal",
                 "<=": "Less than or equal",
                 "=": "Equal to",
@@ -603,7 +602,7 @@ async def get_screener_fields():
                 "not_in": "Not in list of values"
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get screener fields: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -617,12 +616,12 @@ async def run_saved_screen_advanced(
     """Run a saved screen using advanced screener service"""
     try:
         from cift.services.stock_screener import get_screener_service
-        
+
         screener = get_screener_service()
         result = await screener.run_saved_screen(screen_id, str(user_id))
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Failed to run saved screen: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -632,7 +631,7 @@ async def run_saved_screen_advanced(
 async def get_sectors():
     """Get list of sectors from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -643,7 +642,7 @@ async def get_sectors():
             ORDER BY sector
             """
         )
-        
+
         return [
             {
                 "sector": row['sector'],
@@ -655,27 +654,27 @@ async def get_sectors():
 
 @router.get("/industries")
 async def get_industries(
-    sector: Optional[str] = None,
+    sector: str | None = None,
 ):
     """Get list of industries from database"""
     pool = await get_postgres_pool()
-    
+
     query = """
         SELECT DISTINCT industry, COUNT(*) as count
         FROM symbols
         WHERE industry IS NOT NULL AND is_tradable = true
     """
     params = []
-    
+
     if sector:
         query += " AND sector = $1"
         params.append(sector)
-    
+
     query += " GROUP BY industry ORDER BY industry"
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
         return [
             {
                 "industry": row['industry'],

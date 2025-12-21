@@ -5,11 +5,10 @@ All data is fetched from database - NO MOCK DATA.
 """
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from pydantic import BaseModel, Field, EmailStr
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from cift.core.auth import get_current_user, get_current_user_id
 from cift.core.database import get_postgres_pool
@@ -28,77 +27,77 @@ class KYCProfile(BaseModel):
     """KYC profile model"""
     user_id: str
     status: str  # 'incomplete', 'pending', 'approved', 'rejected'
-    
+
     # Personal info
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    middle_name: Optional[str] = None
-    date_of_birth: Optional[str] = None
-    ssn_last_four: Optional[str] = None
-    phone_number: Optional[str] = None
-    
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    date_of_birth: str | None = None
+    ssn_last_four: str | None = None
+    phone_number: str | None = None
+
     # Address
-    street_address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
-    country: Optional[str] = None
-    
+    street_address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
+    country: str | None = None
+
     # Employment
-    employment_status: Optional[str] = None
-    employer_name: Optional[str] = None
-    occupation: Optional[str] = None
-    annual_income: Optional[str] = None
-    net_worth: Optional[str] = None
-    
+    employment_status: str | None = None
+    employer_name: str | None = None
+    occupation: str | None = None
+    annual_income: str | None = None
+    net_worth: str | None = None
+
     # Trading experience
-    trading_experience: Optional[str] = None
-    investment_objectives: Optional[List[str]] = None
-    risk_tolerance: Optional[str] = None
-    
+    trading_experience: str | None = None
+    investment_objectives: list[str] | None = None
+    risk_tolerance: str | None = None
+
     # Documents
     identity_document_uploaded: bool = False
     address_proof_uploaded: bool = False
-    
+
     # Agreements
     terms_accepted: bool = False
     privacy_accepted: bool = False
     risk_disclosure_accepted: bool = False
-    
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    reviewed_at: Optional[datetime] = None
-    reviewer_notes: Optional[str] = None
+
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    reviewer_notes: str | None = None
 
 
 class UpdateKYCRequest(BaseModel):
     """Update KYC profile request"""
     # Personal info
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    middle_name: Optional[str] = None
-    date_of_birth: Optional[str] = None
-    ssn: Optional[str] = None
-    phone_number: Optional[str] = None
-    
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    date_of_birth: str | None = None
+    ssn: str | None = None
+    phone_number: str | None = None
+
     # Address
-    street_address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
-    country: Optional[str] = None
-    
+    street_address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
+    country: str | None = None
+
     # Employment
-    employment_status: Optional[str] = None
-    employer_name: Optional[str] = None
-    occupation: Optional[str] = None
-    annual_income: Optional[str] = None
-    net_worth: Optional[str] = None
-    
+    employment_status: str | None = None
+    employer_name: str | None = None
+    occupation: str | None = None
+    annual_income: str | None = None
+    net_worth: str | None = None
+
     # Trading experience
-    trading_experience: Optional[str] = None
-    investment_objectives: Optional[List[str]] = None
-    risk_tolerance: Optional[str] = None
+    trading_experience: str | None = None
+    investment_objectives: list[str] | None = None
+    risk_tolerance: str | None = None
 
 
 class AcceptAgreementsRequest(BaseModel):
@@ -126,11 +125,11 @@ async def get_kyc_profile(
 ):
     """Get KYC profile from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 user_id::text,
                 status,
                 first_name,
@@ -166,10 +165,10 @@ async def get_kyc_profile(
             """,
             user_id,
         )
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="KYC profile not found")
-        
+
         return KYCProfile(
             user_id=row['user_id'],
             status=row['status'],
@@ -210,17 +209,17 @@ async def create_kyc_profile(
 ):
     """Create initial KYC profile in database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Check if profile already exists
         exists = await conn.fetchval(
             "SELECT EXISTS(SELECT 1 FROM kyc_profiles WHERE user_id = $1)",
             user_id,
         )
-        
+
         if exists:
             raise HTTPException(status_code=400, detail="KYC profile already exists")
-        
+
         row = await conn.fetchrow(
             """
             INSERT INTO kyc_profiles (user_id, status)
@@ -229,7 +228,7 @@ async def create_kyc_profile(
             """,
             user_id,
         )
-        
+
         return {
             "user_id": row['user_id'],
             "status": row['status'],
@@ -244,12 +243,12 @@ async def update_kyc_profile(
 ):
     """Update KYC profile in database"""
     pool = await get_postgres_pool()
-    
+
     # Build dynamic update query
     updates = []
     params = [user_id]
     param_count = 2
-    
+
     update_fields = {
         'first_name': request.first_name,
         'last_name': request.last_name,
@@ -270,42 +269,42 @@ async def update_kyc_profile(
         'investment_objectives': request.investment_objectives,
         'risk_tolerance': request.risk_tolerance,
     }
-    
+
     # Handle SSN separately (encrypt last 4 digits only)
     if request.ssn:
         updates.append(f"ssn_encrypted = ${param_count}")
         params.append(request.ssn)
         param_count += 1
-        
+
         updates.append(f"ssn_last_four = ${param_count}")
         params.append(request.ssn[-4:])
         param_count += 1
-    
+
     for field, value in update_fields.items():
         if value is not None:
             updates.append(f"{field} = ${param_count}")
             params.append(value)
             param_count += 1
-    
+
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
-    
+
     updates.append(f"updated_at = ${param_count}")
     params.append(datetime.utcnow())
-    
+
     query = f"""
-        UPDATE kyc_profiles 
+        UPDATE kyc_profiles
         SET {', '.join(updates)}
         WHERE user_id = $1
         RETURNING user_id::text, status, updated_at
     """
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(query, *params)
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="KYC profile not found")
-        
+
         return {
             "user_id": row['user_id'],
             "status": row['status'],
@@ -322,11 +321,11 @@ async def submit_application(
     Requires KYC profile to be filled out.
     """
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # 1. Get User Email
         email = await conn.fetchval("SELECT email FROM users WHERE id = $1", user_id)
-        
+
         # 2. Get KYC Profile
         profile = await conn.fetchrow(
             """
@@ -334,10 +333,10 @@ async def submit_application(
             """,
             user_id
         )
-        
+
         if not profile:
             raise HTTPException(status_code=400, detail="KYC profile incomplete")
-            
+
         # Validate required fields
         required = ['first_name', 'last_name', 'street_address', 'city', 'state', 'zip_code', 'date_of_birth', 'ssn_encrypted']
         for field in required:
@@ -359,31 +358,31 @@ async def submit_application(
             'tax_id': profile['ssn_encrypted'], # Assuming stored raw for now (see note)
             'tax_id_type': 'USA_SSN'
         }
-        
+
         try:
             # 4. Create Account via Processor
             account = await payment_processor.create_brokerage_account(user_details)
             alpaca_id = account.get('id')
             status_val = account.get('status')
-            
+
             # 5. Update User and Profile
             await conn.execute(
                 "UPDATE users SET alpaca_account_id = $1 WHERE id = $2",
                 alpaca_id, user_id
             )
-            
+
             await conn.execute(
                 "UPDATE kyc_profiles SET status = 'pending', submitted_at = NOW() WHERE user_id = $1",
                 user_id
             )
-            
+
             return {
                 "success": True,
                 "account_id": alpaca_id,
                 "status": status_val,
                 "message": "Application submitted to Alpaca"
             }
-            
+
         except Exception as e:
             logger.error(f"Alpaca submission failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Brokerage account creation failed: {str(e)}")
@@ -398,21 +397,21 @@ async def upload_document(
     """Upload identity document to database"""
     if document_type not in ['identity', 'address_proof', 'other']:
         raise HTTPException(status_code=400, detail="Invalid document type")
-    
+
     # Read file content
     content = await file.read()
-    
+
     if len(content) > 10 * 1024 * 1024:  # 10MB limit
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
-    
+
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Store document
         row = await conn.fetchrow(
             """
             INSERT INTO kyc_documents (
-                user_id, document_type, file_name, file_size, 
+                user_id, document_type, file_name, file_size,
                 file_content, mime_type, status
             ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')
             RETURNING id::text, document_type, file_name, uploaded_at
@@ -424,7 +423,7 @@ async def upload_document(
             content,
             file.content_type,
         )
-        
+
         # Update KYC profile flags
         if document_type == 'identity':
             await conn.execute(
@@ -436,18 +435,19 @@ async def upload_document(
                 "UPDATE kyc_profiles SET address_proof_uploaded = true WHERE user_id = $1",
                 user_id,
             )
-        
+
         # Trigger document verification (async)
         try:
-            from cift.services.kyc_verification import verify_document_async
             import asyncio
-            
+
+            from cift.services.kyc_verification import verify_document_async
+
             # Run verification in background
             asyncio.create_task(verify_document_async(UUID(row['id']), document_type))
             logger.info(f"Started background verification for document {row['id']}")
         except Exception as e:
             logger.warning(f"Failed to start document verification: {e}")
-        
+
         return DocumentUploadResponse(
             document_id=row['id'],
             document_type=row['document_type'],
@@ -462,11 +462,11 @@ async def get_documents(
 ):
     """Get user's uploaded documents from database"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT 
+            SELECT
                 id::text,
                 document_type,
                 file_name,
@@ -481,7 +481,7 @@ async def get_documents(
             """,
             user_id,
         )
-        
+
         return [
             {
                 "document_id": row['id'],
@@ -504,23 +504,23 @@ async def verify_document(
 ):
     """Manually trigger document verification"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Check document belongs to user
         doc = await conn.fetchrow(
             "SELECT document_type FROM kyc_documents WHERE id = $1 AND user_id = $2",
             document_id, user_id
         )
-        
+
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
-    
+
     try:
         from cift.services.kyc_verification import verify_document_async
-        
+
         # Run verification
         result = await verify_document_async(document_id, doc['document_type'])
-        
+
         return {
             "document_id": str(document_id),
             "verification_status": result.verification_status,
@@ -528,7 +528,7 @@ async def verify_document(
             "risk_flags": result.risk_flags,
             "processing_time_ms": result.processing_time_ms,
         }
-        
+
     except Exception as e:
         logger.error(f"Document verification failed: {e}")
         raise HTTPException(status_code=500, detail="Verification failed")
@@ -541,26 +541,26 @@ async def get_document_verification_status(
 ):
     """Get document verification status and details"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         doc = await conn.fetchrow("""
-            SELECT 
+            SELECT
                 id, document_type, status, verification_details,
                 uploaded_at, verified_at
             FROM kyc_documents
             WHERE id = $1 AND user_id = $2
         """, document_id, user_id)
-        
+
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         verification_details = {}
         if doc['verification_details']:
             try:
                 verification_details = json.loads(doc['verification_details'])
             except:
                 pass
-        
+
         return {
             "document_id": str(document_id),
             "document_type": doc['document_type'],
@@ -578,10 +578,10 @@ async def verify_user_identity(
     """Trigger complete identity verification for user"""
     try:
         from cift.services.kyc_verification import verify_identity_async
-        
+
         # Run identity verification
         result = await verify_identity_async(user_id)
-        
+
         return {
             "user_id": str(user_id),
             "verification_status": result.verification_status,
@@ -590,7 +590,7 @@ async def verify_user_identity(
             "document_checks": result.document_checks,
             "identity_checks": result.identity_checks,
         }
-        
+
     except Exception as e:
         logger.error(f"Identity verification failed: {e}")
         raise HTTPException(status_code=500, detail="Identity verification failed")
@@ -602,18 +602,18 @@ async def get_verification_status(
 ):
     """Get overall verification status for user"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Get KYC profile
         kyc_profile = await conn.fetchrow("""
-            SELECT 
+            SELECT
                 status, verification_score, verification_details,
                 identity_document_uploaded, address_proof_uploaded,
                 phone_verified, email_verified, created_at, verified_at
             FROM kyc_profiles
             WHERE user_id = $1
         """, user_id)
-        
+
         # Get document statuses
         documents = await conn.fetch("""
             SELECT document_type, status, verified_at
@@ -621,14 +621,14 @@ async def get_verification_status(
             WHERE user_id = $1
             ORDER BY uploaded_at DESC
         """, user_id)
-        
+
         verification_details = {}
         if kyc_profile and kyc_profile['verification_details']:
             try:
                 verification_details = json.loads(kyc_profile['verification_details'])
             except:
                 pass
-        
+
         return {
             "user_id": str(user_id),
             "overall_status": kyc_profile['status'] if kyc_profile else "not_started",
@@ -660,15 +660,15 @@ async def accept_agreements(
 ):
     """Accept legal agreements in database"""
     pool = await get_postgres_pool()
-    
+
     if not all([request.terms_accepted, request.privacy_accepted, request.risk_disclosure_accepted]):
         raise HTTPException(status_code=400, detail="All agreements must be accepted")
-    
+
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            UPDATE kyc_profiles 
-            SET 
+            UPDATE kyc_profiles
+            SET
                 terms_accepted = $1,
                 privacy_accepted = $2,
                 risk_disclosure_accepted = $3,
@@ -681,7 +681,7 @@ async def accept_agreements(
             datetime.utcnow(),
             user_id,
         )
-        
+
         return {"success": True, "message": "Agreements accepted"}
 
 
@@ -691,12 +691,12 @@ async def submit_for_review(
 ):
     """Submit KYC profile for review"""
     pool = await get_postgres_pool()
-    
+
     async with pool.acquire() as conn:
         # Verify profile is complete
         profile = await conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 first_name, last_name, date_of_birth, ssn_last_four,
                 street_address, city, state, zip_code,
                 employment_status, trading_experience,
@@ -707,50 +707,50 @@ async def submit_for_review(
             """,
             user_id,
         )
-        
+
         if not profile:
             raise HTTPException(status_code=404, detail="KYC profile not found")
-        
+
         # Check required fields
         required_fields = [
             'first_name', 'last_name', 'date_of_birth', 'ssn_last_four',
             'street_address', 'city', 'state', 'zip_code',
             'employment_status', 'trading_experience',
         ]
-        
+
         missing = [f for f in required_fields if not profile[f]]
         if missing:
             raise HTTPException(
                 status_code=400,
                 detail=f"Missing required fields: {', '.join(missing)}"
             )
-        
+
         if not profile['identity_document_uploaded']:
             raise HTTPException(status_code=400, detail="Identity document required")
-        
+
         if not all([
             profile['terms_accepted'],
             profile['privacy_accepted'],
             profile['risk_disclosure_accepted'],
         ]):
             raise HTTPException(status_code=400, detail="All agreements must be accepted")
-        
+
         # Update status to pending
         await conn.execute(
             """
-            UPDATE kyc_profiles 
+            UPDATE kyc_profiles
             SET status = 'pending', updated_at = $1
             WHERE user_id = $2
             """,
             datetime.utcnow(),
             user_id,
         )
-        
+
         logger.info(f"KYC profile submitted for review: user_id={user_id}")
-        
+
         # TODO: Trigger automated verification checks
         # TODO: Send to compliance team queue
-        
+
         return {
             "success": True,
             "status": "pending",

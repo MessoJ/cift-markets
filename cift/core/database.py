@@ -9,17 +9,15 @@ Phase 5-7 Ultra-Low-Latency Stack:
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import asyncpg
 import redis.asyncio as redis
 from loguru import logger
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
 
 from cift.core.config import settings
 from cift.core.exceptions import DatabaseConnectionError
@@ -84,11 +82,11 @@ class DatabaseManager:
 
             # Test connection with timeout
             await asyncio.wait_for(self.health_check(), timeout=2.0)
-            
+
             self._is_initialized = True
             logger.info("✅ PostgreSQL connection pool initialized (SQLAlchemy + asyncpg)")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("PostgreSQL connection timed out - database may not be running")
             raise DatabaseConnectionError(
                 "PostgreSQL connection timeout - database unavailable",
@@ -168,7 +166,7 @@ class QuestDBManager:
 
             # Test connection
             await self.health_check()
-            
+
             self._is_initialized = True
             logger.info("✅ QuestDB connection pool initialized")
 
@@ -228,12 +226,12 @@ class QuestDBManager:
 class RedisManager:
     """
     Manage Dragonfly connections for caching and real-time data.
-    
+
     Dragonfly is 100% Redis API compatible but provides:
     - 25x higher throughput (2.5M ops/sec)
     - 80% less memory usage
     - Vertical scaling
-    
+
     Note: Called RedisManager for backward compatibility.
     """
 
@@ -257,7 +255,7 @@ class RedisManager:
 
             # Test connection
             await self.health_check()
-            
+
             self._is_initialized = True
             logger.info("✅ Dragonfly cache connection initialized (25x faster)")
 
@@ -360,10 +358,10 @@ async def get_redis() -> redis.Redis:
 async def get_postgres_pool() -> asyncpg.Pool:
     """
     FastAPI dependency for PostgreSQL asyncpg pool.
-    
+
     Returns raw asyncpg pool for direct SQL queries.
     Use this for high-performance queries in new route modules.
-    
+
     Best Practice: Prefer this over ORM for:
     - Simple CRUD operations
     - High-throughput endpoints
@@ -377,7 +375,7 @@ async def get_postgres_pool() -> asyncpg.Pool:
 async def get_questdb_pool() -> asyncpg.Pool:
     """
     FastAPI dependency for QuestDB connection pool.
-    
+
     Returns asyncpg pool for time-series queries.
     Use this for:
     - Real-time market data
@@ -446,28 +444,28 @@ async def initialize_all_connections() -> None:
     """Initialize all database connections on startup with graceful degradation."""
     # Try to initialize each database with timeout protection
     # Allows backend to start even if some databases are unavailable
-    
+
     # PostgreSQL (critical for auth/trading)
     try:
         await asyncio.wait_for(db_manager.initialize(), timeout=5.0)
-    except (asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, Exception) as e:
         logger.warning(f"⚠️  PostgreSQL unavailable: {e}")
         logger.warning("Auth and trading endpoints will be unavailable")
-    
+
     # QuestDB (for tick data)
     try:
         await asyncio.wait_for(questdb_manager.initialize(), timeout=3.0)
-    except (asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, Exception) as e:
         logger.warning(f"⚠️  QuestDB unavailable: {e}")
         logger.warning("Real-time market data storage will be unavailable")
-    
+
     # Redis/Dragonfly (for caching)
     try:
         await asyncio.wait_for(redis_manager.initialize(), timeout=3.0)
-    except (asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, Exception) as e:
         logger.warning(f"⚠️  Redis unavailable: {e}")
         logger.warning("Caching will be unavailable, performance may be degraded")
-    
+
     # Phase 5-7 advanced services (lazy load)
     logger.info("Phase 5-7 services (ClickHouse, NATS) will initialize on first use")
 
@@ -480,11 +478,11 @@ async def close_all_connections() -> None:
         questdb_manager.close(),
         redis_manager.close(),
     )
-    
+
     # Close Phase 5-7 services if initialized
     if _clickhouse_manager is not None:
         from cift.core.clickhouse_manager import close_clickhouse_manager
         await close_clickhouse_manager()
-    
+
     if _nats_manager is not None:
         await _nats_manager.disconnect()

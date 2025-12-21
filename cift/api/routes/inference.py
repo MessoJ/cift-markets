@@ -17,19 +17,17 @@ Integration:
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Depends
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from cift.inference.pipeline import (
     InferencePipeline,
-    PipelineConfig,
     InferenceResult,
+    PipelineConfig,
 )
-from cift.ml.ensemble import EnsemblePrediction, build_ensemble
-
+from cift.ml.ensemble import build_ensemble
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -38,39 +36,39 @@ from cift.ml.ensemble import EnsemblePrediction, build_ensemble
 class PredictionRequest(BaseModel):
     """Request for single prediction."""
     symbol: str = Field(..., description="Symbol to predict")
-    tick_features: Optional[List[List[float]]] = Field(None, description="Recent tick features")
-    second_features: Optional[List[List[float]]] = Field(None, description="Second bar features")
-    regime_features: Optional[List[float]] = Field(None, description="Regime detection features")
-    xgboost_features: Optional[List[float]] = Field(None, description="Alternative data features")
+    tick_features: list[list[float]] | None = Field(None, description="Recent tick features")
+    second_features: list[list[float]] | None = Field(None, description="Second bar features")
+    regime_features: list[float] | None = Field(None, description="Regime detection features")
+    xgboost_features: list[float] | None = Field(None, description="Alternative data features")
 
 
 class PredictionResponse(BaseModel):
     """Response with prediction."""
     timestamp: float
     symbol: str
-    
+
     # Primary signal
     direction: str                   # "long", "short", "neutral"
     direction_probability: float
     magnitude: float
-    
+
     # Confidence
     confidence: float
     model_agreement: int
-    
+
     # Regime
     current_regime: str
     regime_probability: float
-    
+
     # Trade recommendation
     should_trade: bool
     position_size: float
     stop_loss_bps: float
     take_profit_bps: float
-    
+
     # Model contributions
-    model_weights: Dict[str, float]
-    
+    model_weights: dict[str, float]
+
     # Latency
     inference_latency_ms: float
 
@@ -79,7 +77,7 @@ class ModelStatus(BaseModel):
     """Model status information."""
     model_name: str
     loaded: bool
-    last_prediction_time: Optional[float]
+    last_prediction_time: float | None
     total_predictions: int
     avg_latency_ms: float
 
@@ -87,9 +85,9 @@ class ModelStatus(BaseModel):
 class SystemStatus(BaseModel):
     """Overall system status."""
     status: str  # "healthy", "degraded", "error"
-    models: List[ModelStatus]
+    models: list[ModelStatus]
     pipeline_running: bool
-    active_symbols: List[str]
+    active_symbols: list[str]
     total_predictions: int
     uptime_seconds: float
 
@@ -100,20 +98,20 @@ class SystemStatus(BaseModel):
 
 class InferenceAPIState:
     """Singleton state for inference API."""
-    
+
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
-            
-        self.pipeline: Optional[InferencePipeline] = None
+
+        self.pipeline: InferencePipeline | None = None
         self.ensemble = None
         self.start_time = time.time()
         self.total_predictions = 0
@@ -124,36 +122,36 @@ class InferenceAPIState:
             "gnn": {"predictions": 0, "latencies": []},
             "xgboost": {"predictions": 0, "latencies": []},
         }
-        
+
         # WebSocket connections
         self.ws_connections: set = set()
-        
+
         self._initialized = True
-    
-    async def initialize(self, config: Optional[PipelineConfig] = None):
+
+    async def initialize(self, config: PipelineConfig | None = None):
         """Initialize the inference system."""
         if self.ensemble is None:
             logger.info("Initializing inference ensemble...")
             self.ensemble = build_ensemble()
             logger.info("Ensemble initialized")
-        
+
         if config and self.pipeline is None:
             logger.info("Initializing inference pipeline...")
             self.pipeline = InferencePipeline(config)
             self.pipeline.on_prediction(self._on_prediction)
             logger.info("Pipeline initialized")
-    
+
     async def _on_prediction(self, result: InferenceResult):
         """Handle prediction from pipeline."""
         self.total_predictions += 1
-        
+
         # Broadcast to WebSocket clients
         await self._broadcast_prediction(result)
-    
+
     async def _broadcast_prediction(self, result: InferenceResult):
         """Broadcast prediction to all WebSocket clients."""
         import json
-        
+
         message = json.dumps({
             "type": "prediction",
             "data": {
@@ -166,7 +164,7 @@ class InferenceAPIState:
                 "latency_ms": result.total_latency_ms,
             }
         })
-        
+
         for ws in self.ws_connections.copy():
             try:
                 await ws.send_text(message)
@@ -197,22 +195,22 @@ async def predict(
 ):
     """
     Make a single prediction for a symbol.
-    
+
     Accepts feature arrays and returns ensemble prediction.
     """
     import numpy as np
-    
+
     if state.ensemble is None:
         await state.initialize()
-    
+
     start_time = time.time()
-    
+
     try:
         # Convert request to numpy arrays
         tick_features = None
         if request.tick_features:
             tick_features = np.array(request.tick_features, dtype=np.float32)
-        
+
         transformer_features = None
         if tick_features is not None and len(tick_features) >= 10:
             transformer_features = {
@@ -223,15 +221,15 @@ async def predict(
             if request.second_features:
                 second_arr = np.array(request.second_features, dtype=np.float32)
                 transformer_features["second"] = second_arr[-60:]
-        
+
         hmm_features = None
         if request.regime_features:
             hmm_features = np.array(request.regime_features, dtype=np.float32)
-        
+
         xgboost_features = None
         if request.xgboost_features:
             xgboost_features = np.array(request.xgboost_features, dtype=np.float32)
-        
+
         # Prepare hawkes events
         hawkes_events = None
         if tick_features is not None:
@@ -240,7 +238,7 @@ async def predict(
                 hawkes_events[i, 0] = i
                 hawkes_events[i, 1] = 0 if t[7] > 0 else 1
                 hawkes_events[i, 2] = abs(t[4])
-        
+
         # Run prediction
         prediction = state.ensemble.predict(
             hawkes_events=hawkes_events,
@@ -250,10 +248,10 @@ async def predict(
             target_symbol=request.symbol,
             timestamp=time.time(),
         )
-        
+
         state.total_predictions += 1
         inference_time = (time.time() - start_time) * 1000
-        
+
         return PredictionResponse(
             timestamp=prediction.timestamp,
             symbol=request.symbol,
@@ -271,7 +269,7 @@ async def predict(
             model_weights=prediction.model_weights,
             inference_latency_ms=inference_time,
         )
-        
+
     except Exception as e:
         logger.error(f"Prediction error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -284,15 +282,15 @@ async def predict_stream(
 ):
     """
     WebSocket endpoint for streaming predictions.
-    
+
     Clients receive real-time predictions as they're generated.
     """
     await websocket.accept()
     state.ws_connections.add(websocket)
-    
+
     try:
         logger.info("WebSocket client connected for prediction streaming")
-        
+
         # Keep connection alive
         while True:
             try:
@@ -301,19 +299,19 @@ async def predict_stream(
                     websocket.receive_text(),
                     timeout=30.0
                 )
-                
+
                 # Process subscription message
                 import json
                 data = json.loads(message)
-                
+
                 if data.get("type") == "subscribe":
                     symbols = data.get("symbols", [])
                     logger.info(f"Client subscribed to: {symbols}")
-                    
-            except asyncio.TimeoutError:
+
+            except TimeoutError:
                 # Send heartbeat
                 await websocket.send_text('{"type": "heartbeat"}')
-                
+
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
     finally:
@@ -326,13 +324,13 @@ async def get_model_status(
 ):
     """Get status of all models and the inference system."""
     models = []
-    
+
     model_names = ["hawkes", "transformer", "hmm", "gnn", "xgboost"]
-    
+
     for name in model_names:
         stats = state.model_stats.get(name, {"predictions": 0, "latencies": []})
         latencies = stats["latencies"]
-        
+
         models.append(ModelStatus(
             model_name=name,
             loaded=state.ensemble is not None,
@@ -340,7 +338,7 @@ async def get_model_status(
             total_predictions=stats["predictions"],
             avg_latency_ms=sum(latencies[-100:]) / len(latencies[-100:]) if latencies else 0,
         ))
-    
+
     # Determine overall status
     if state.ensemble is None:
         status = "error"
@@ -348,7 +346,7 @@ async def get_model_status(
         status = "healthy"
     else:
         status = "degraded"
-    
+
     return SystemStatus(
         status=status,
         models=models,
@@ -366,18 +364,18 @@ async def reload_models(
     """Reload models from disk."""
     try:
         logger.info("Reloading models...")
-        
+
         # Rebuild ensemble
         state.ensemble = build_ensemble()
-        
+
         # Reconnect to pipeline if running
         if state.pipeline:
             state.pipeline.ensemble = state.ensemble
-        
+
         logger.info("Models reloaded successfully")
-        
+
         return {"status": "success", "message": "Models reloaded"}
-        
+
     except Exception as e:
         logger.error(f"Error reloading models: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -385,23 +383,25 @@ async def reload_models(
 
 @router.post("/pipeline/start")
 async def start_pipeline(
-    symbols: List[str] = ["SPY"],
+    symbols: list[str] = None,
     state: InferenceAPIState = Depends(get_api_state),
 ):
     """Start the inference pipeline."""
     from cift.core.config import settings
-    
+
+    if symbols is None:
+        symbols = ["SPY"]
     try:
         config = PipelineConfig(
             polygon_api_key=settings.polygon_api_key,
             symbols=symbols,
         )
-        
+
         await state.initialize(config)
         await state.pipeline.start()
-        
+
         return {"status": "success", "message": f"Pipeline started for {symbols}"}
-        
+
     except Exception as e:
         logger.error(f"Error starting pipeline: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -418,7 +418,7 @@ async def stop_pipeline(
             return {"status": "success", "message": "Pipeline stopped"}
         else:
             return {"status": "warning", "message": "Pipeline not running"}
-            
+
     except Exception as e:
         logger.error(f"Error stopping pipeline: {e}")
         raise HTTPException(status_code=500, detail=str(e))

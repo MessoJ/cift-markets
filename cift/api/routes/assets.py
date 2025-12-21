@@ -4,11 +4,10 @@ Provides endpoints for major market-moving locations (central banks, commodities
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
 import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from cift.core.database import get_postgres_pool
 from cift.core.logging import logger
@@ -26,24 +25,24 @@ def get_flag_emoji(country_code: str) -> str:
 @router.get("/")
 async def get_asset_locations(
     timeframe: str = Query("24h", regex="^(1h|24h|7d|30d)$"),
-    asset_type: Optional[str] = Query(
-        None, 
+    asset_type: str | None = Query(
+        None,
         regex="^(central_bank|commodity_market|government|tech_hq|energy|all)$"
     ),
-    status: Optional[str] = Query(None, regex="^(operational|unknown|issue|all)$"),
+    status: str | None = Query(None, regex="^(operational|unknown|issue|all)$"),
     min_importance: int = Query(0, ge=0, le=100),
     db: asyncpg.Connection = Depends(get_postgres_pool),
 ):
     """
     Get all asset locations with current status and news mentions.
-    
+
     Query params:
     - timeframe: 1h, 24h, 7d, 30d - time window for news analysis
     - asset_type: Filter by type (or 'all' for no filter)
     - status: operational, unknown, issue (or 'all' for no filter)
     - min_importance: Minimum importance score (0-100)
     """
-    
+
     time_windows = {
         "1h": timedelta(hours=1),
         "24h": timedelta(hours=24),
@@ -51,11 +50,11 @@ async def get_asset_locations(
         "30d": timedelta(days=30),
     }
     start_time = datetime.utcnow() - time_windows[timeframe]
-    
+
     # Build dynamic query based on filters
     type_filter = "" if not asset_type or asset_type == "all" else "AND al.asset_type = $4"
     status_filter = "" if not status or status == "all" else "AND asl.status = $5"
-    
+
     query = f"""
         WITH latest_status AS (
             SELECT DISTINCT ON (asset_id)
@@ -69,15 +68,15 @@ async def get_asset_locations(
             ORDER BY asset_id, checked_at DESC
         ),
         asset_news AS (
-            SELECT 
+            SELECT
                 anm.asset_id,
                 COUNT(DISTINCT anm.article_id) as article_count,
                 COALESCE(
-                    AVG(CASE 
+                    AVG(CASE
                         WHEN a.sentiment = 'positive' THEN 0.7
                         WHEN a.sentiment = 'negative' THEN -0.7
                         ELSE 0
-                    END), 
+                    END),
                     0
                 ) as avg_sentiment,
                 MAX(a.published_at) as last_article_at,
@@ -97,7 +96,7 @@ async def get_asset_locations(
             WHERE a.published_at >= $1
             GROUP BY anm.asset_id
         )
-        SELECT 
+        SELECT
             al.id,
             al.code,
             al.name,
@@ -127,7 +126,7 @@ async def get_asset_locations(
             {status_filter}
         ORDER BY al.importance_score DESC, al.name
     """
-    
+
     try:
         # Build params list dynamically
         params = [start_time, min_importance]
@@ -135,18 +134,18 @@ async def get_asset_locations(
             params.append(asset_type)
         if status and status != "all":
             params.append(status)
-        
+
         rows = await db.fetch(query, *params)
-        
+
         assets = []
         status_summary = {"operational": 0, "unknown": 0, "issue": 0}
-        
+
         for row in rows:
             flag = get_flag_emoji(row['country_code'])
-            
+
             # Limit latest articles to top 5
             latest = row['latest_articles'][:5] if row['latest_articles'] else []
-            
+
             # Determine current status if not set
             current_status = row['current_status']
             if current_status == 'unknown' and row['news_count'] > 0:
@@ -155,9 +154,9 @@ async def get_asset_locations(
                     current_status = 'operational'
                 elif row['sentiment_score'] < -0.3:
                     current_status = 'issue'
-            
+
             status_summary[current_status] = status_summary.get(current_status, 0) + 1
-            
+
             asset_data = {
                 "id": str(row['id']),
                 "code": row['code'],
@@ -181,9 +180,9 @@ async def get_asset_locations(
                 "categories": row['categories'] or [],
                 "latest_articles": latest,
             }
-            
+
             assets.append(asset_data)
-        
+
         return {
             "assets": assets,
             "total_count": len(assets),
@@ -191,7 +190,7 @@ async def get_asset_locations(
             "timeframe": timeframe,
             "last_updated": datetime.utcnow().isoformat(),
         }
-        
+
     except Exception as e:
         logger.error(f"Error fetching asset locations: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch asset data")
@@ -204,7 +203,7 @@ async def get_asset_detail(
     db: asyncpg.Connection = Depends(get_postgres_pool),
 ):
     """Get detailed information for a specific asset location."""
-    
+
     time_windows = {
         "1h": timedelta(hours=1),
         "24h": timedelta(hours=24),
@@ -212,7 +211,7 @@ async def get_asset_detail(
         "30d": timedelta(days=30),
     }
     start_time = datetime.utcnow() - time_windows[timeframe]
-    
+
     query = """
         WITH latest_status AS (
             SELECT DISTINCT ON (asset_id)
@@ -228,7 +227,7 @@ async def get_asset_detail(
             LIMIT 1
         ),
         asset_articles AS (
-            SELECT 
+            SELECT
                 a.id,
                 a.title,
                 a.summary,
@@ -243,7 +242,7 @@ async def get_asset_detail(
             ORDER BY a.published_at DESC
             LIMIT 20
         )
-        SELECT 
+        SELECT
             al.id,
             al.code,
             al.name,
@@ -269,15 +268,15 @@ async def get_asset_detail(
         LEFT JOIN latest_status ls ON TRUE
         WHERE al.id = $1 AND al.is_active = true
     """
-    
+
     try:
         row = await db.fetchrow(query, asset_id, start_time)
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Asset not found")
-        
+
         flag = get_flag_emoji(row['country_code'])
-        
+
         return {
             "id": str(row['id']),
             "code": row['code'],
@@ -303,7 +302,7 @@ async def get_asset_detail(
             "articles": row['articles'] or [],
             "timeframe": timeframe,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -316,9 +315,9 @@ async def get_asset_types_summary(
     db: asyncpg.Connection = Depends(get_postgres_pool),
 ):
     """Get summary statistics for each asset type."""
-    
+
     query = """
-        SELECT 
+        SELECT
             asset_type,
             COUNT(*) as total_count,
             ROUND(AVG(importance_score), 1) as avg_importance,
@@ -329,10 +328,10 @@ async def get_asset_types_summary(
         GROUP BY asset_type
         ORDER BY COUNT(*) DESC
     """
-    
+
     try:
         rows = await db.fetch(query)
-        
+
         return {
             "types": [
                 {
@@ -345,7 +344,7 @@ async def get_asset_types_summary(
                 for row in rows
             ]
         }
-        
+
     except Exception as e:
         logger.error(f"Error fetching asset types summary: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch types summary")

@@ -15,8 +15,6 @@ from cift.core.models import (
     APIKey,
     AuditLog,
     Backtest,
-    ModelConfig,
-    TradingAccount,
     TradingStrategy,
     User,
 )
@@ -36,11 +34,11 @@ class TestUserModel:
             is_active=True,
             is_superuser=False,
         )
-        
+
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-        
+
         # Verify user was actually created with ID
         assert user.id is not None
         assert isinstance(user.id, uuid.UUID)
@@ -54,13 +52,13 @@ class TestUserModel:
         user = User(email="query@test.com", username="queryuser", hashed_password="hash")
         db_session.add(user)
         await db_session.commit()
-        
+
         # Query from database
         result = await db_session.execute(
             select(User).where(User.email == "query@test.com")
         )
         queried_user = result.scalar_one()
-        
+
         assert queried_user.email == "query@test.com"
         assert queried_user.username == "queryuser"
 
@@ -72,7 +70,7 @@ class TestUserModel:
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-        
+
         # Add API key
         api_key = APIKey(
             user_id=user.id,
@@ -81,11 +79,11 @@ class TestUserModel:
         )
         db_session.add(api_key)
         await db_session.commit()
-        
+
         # Delete user - should cascade to API key
         await db_session.delete(user)
         await db_session.commit()
-        
+
         # Verify API key was also deleted
         result = await db_session.execute(select(APIKey).where(APIKey.key_hash == "hash123"))
         assert result.scalar_one_or_none() is None
@@ -102,7 +100,7 @@ class TestTradingModels:
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-        
+
         # Create strategy
         strategy = TradingStrategy(
             user_id=user.id,
@@ -117,7 +115,7 @@ class TestTradingModels:
         db_session.add(strategy)
         await db_session.commit()
         await db_session.refresh(strategy)
-        
+
         assert strategy.id is not None
         assert strategy.config["lookback_period"] == 20
         assert "AAPL" in strategy.config["symbols"]
@@ -130,7 +128,7 @@ class TestTradingModels:
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-        
+
         # Create backtest
         backtest = Backtest(
             user_id=user.id,
@@ -150,7 +148,7 @@ class TestTradingModels:
         db_session.add(backtest)
         await db_session.commit()
         await db_session.refresh(backtest)
-        
+
         assert backtest.results["sharpe_ratio"] == 2.5
         assert backtest.symbols == ["AAPL", "MSFT"]
         assert backtest.status == "completed"
@@ -167,7 +165,7 @@ class TestAuditAndAlerts:
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-        
+
         # Create audit log
         log = AuditLog(
             user_id=user.id,
@@ -179,7 +177,7 @@ class TestAuditAndAlerts:
         db_session.add(log)
         await db_session.commit()
         await db_session.refresh(log)
-        
+
         assert log.action == "user.login"
         assert log.details["ip"] == "192.168.1.1"
 
@@ -191,7 +189,7 @@ class TestAuditAndAlerts:
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-        
+
         # Create alert
         alert = Alert(
             user_id=user.id,
@@ -204,7 +202,7 @@ class TestAuditAndAlerts:
         db_session.add(alert)
         await db_session.commit()
         await db_session.refresh(alert)
-        
+
         assert alert.severity == "critical"
         assert alert.data["current_drawdown"] == 0.12
         assert alert.is_read is False
