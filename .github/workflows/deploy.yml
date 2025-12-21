@@ -86,13 +86,6 @@ jobs:
                 sudo usermod -aG docker $USER
             fi
 
-            # Install Docker Compose if not present
-            if ! command -v docker-compose &> /dev/null; then
-                echo "Installing Docker Compose..."
-                sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-                sudo chmod +x /usr/local/bin/docker-compose
-            fi
-
             # Clone repo if not present
             if [ ! -d "$HOME/cift-markets" ]; then
                 echo "Cloning repository..."
@@ -112,10 +105,10 @@ jobs:
             # echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" > .env
             
             # Pull latest images
-            sudo docker-compose pull api frontend
+            sudo docker compose pull api frontend
             
             # Restart services
-            sudo docker-compose up -d --remove-orphans
+            sudo docker compose up -d --remove-orphans
             
             # Prune old images to save space
             sudo docker image prune -f
