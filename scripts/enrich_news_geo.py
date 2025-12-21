@@ -9,9 +9,10 @@ Usage:
 """
 
 import asyncio
+import os
+
 import asyncpg
 from loguru import logger
-import os
 
 # Database configuration
 DB_CONFIG = {
@@ -42,31 +43,31 @@ SOURCE_COUNTRY_MAP = {
     "Yahoo Entertainment": ("United States", "US", 37.4163, -122.0256, "Americas"),
     "Biztoc.com": ("United States", "US", 37.7749, -122.4194, "Americas"),
     "Moneyweb.co.za": ("South Africa", "ZA", -25.7479, 28.2293, "Africa"),
-    
+
     # UK Sources
     "BBC": ("United Kingdom", "GB", 51.5074, -0.1278, "Europe"),
     "Financial Times": ("United Kingdom", "GB", 51.5074, -0.1278, "Europe"),
     "The Guardian": ("United Kingdom", "GB", 51.5074, -0.1278, "Europe"),
     "The Telegraph": ("United Kingdom", "GB", 51.5074, -0.1278, "Europe"),
     "City A.M.": ("United Kingdom", "GB", 51.5074, -0.1278, "Europe"),
-    
+
     # European Sources
     "Dpa-international.com": ("Germany", "DE", 52.5200, 13.4050, "Europe"),
     "Handelsblatt": ("Germany", "DE", 51.2277, 6.7735, "Europe"),
     "Les Echos": ("France", "FR", 48.8566, 2.3522, "Europe"),
     "Il Sole 24 Ore": ("Italy", "IT", 45.4642, 9.1900, "Europe"),
-    
+
     # Asian Sources
     "Nikkei": ("Japan", "JP", 35.6762, 139.6503, "Asia"),
     "The Times of India": ("India", "IN", 19.0760, 72.8777, "Asia"),
     "Economic Times": ("India", "IN", 28.6139, 77.2090, "Asia"),
     "South China Morning Post": ("Hong Kong", "HK", 22.3193, 114.1694, "Asia"),
     "The Straits Times": ("Singapore", "SG", 1.3521, 103.8198, "Asia"),
-    
+
     # Canadian Sources
     "Globe and Mail": ("Canada", "CA", 43.6532, -79.3832, "Americas"),
     "Financial Post": ("Canada", "CA", 43.6532, -79.3832, "Americas"),
-    
+
     # Australian Sources
     "Australian Financial Review": ("Australia", "AU", -33.8688, 151.2093, "Oceania"),
     "Sydney Morning Herald": ("Australia", "AU", -33.8688, 151.2093, "Oceania"),
@@ -91,9 +92,9 @@ SYMBOL_COUNTRY_MAP = {
 
 async def enrich_news_with_geo(pool: asyncpg.Pool):
     """Enrich existing news articles with geographic data"""
-    
+
     logger.info("Starting geographic enrichment of news articles...")
-    
+
     # Get all articles without geo data
     async with pool.acquire() as conn:
         articles = await conn.fetch(
@@ -103,36 +104,36 @@ async def enrich_news_with_geo(pool: asyncpg.Pool):
             WHERE country_code IS NULL
             """
         )
-        
+
         logger.info(f"Found {len(articles)} articles to enrich")
-        
+
         enriched_count = 0
-        
+
         for article in articles:
             article_id = article['id']
             source = article['source']
             symbols = article['symbols'] or []
-            
+
             # Try to match by source first
             geo_data = None
             for source_key, data in SOURCE_COUNTRY_MAP.items():
                 if source and source_key.lower() in source.lower():
                     geo_data = data
                     break
-            
+
             # If no source match, try symbol-based geo
             if not geo_data and symbols:
                 for symbol in symbols:
                     if symbol in SYMBOL_COUNTRY_MAP:
                         geo_data = SYMBOL_COUNTRY_MAP[symbol]
                         break
-            
+
             # Default to US if no match (since most financial news is US-centric)
             if not geo_data:
                 geo_data = ("United States", "US", 40.7128, -74.0060, "Americas")
-            
+
             country, country_code, lat, lng, region = geo_data
-            
+
             # Update article
             try:
                 await conn.execute(
@@ -144,23 +145,23 @@ async def enrich_news_with_geo(pool: asyncpg.Pool):
                     country, country_code, lat, lng, region, article_id
                 )
                 enriched_count += 1
-                
+
                 if enriched_count % 50 == 0:
                     logger.info(f"Enriched {enriched_count}/{len(articles)} articles...")
-                    
+
             except Exception as e:
                 logger.error(f"Error enriching article {article_id}: {e}")
                 continue
-        
+
         logger.info(f"✅ Successfully enriched {enriched_count} articles with geographic data")
 
 
 async def main():
     """Main entry point"""
-    
+
     # Create database connection pool
     pool = await asyncpg.create_pool(**DB_CONFIG, min_size=1, max_size=5)
-    
+
     try:
         await enrich_news_with_geo(pool)
     finally:

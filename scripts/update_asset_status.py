@@ -12,10 +12,11 @@ Rules compliant:
 """
 
 import asyncio
-import asyncpg
-from datetime import datetime, timedelta
-import os
 import logging
+import os
+from datetime import datetime, timedelta
+
+import asyncpg
 
 # Setup logging
 logging.basicConfig(
@@ -46,7 +47,7 @@ async def get_db_connection():
 async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_name: str, asset_type: str, country: str) -> dict:
     """
     Calculate asset status based on recent news mentions with advanced analysis
-    
+
     Enhanced Logic:
     - Search for news articles mentioning the asset (by name + related keywords)
     - Analyze for specific issue keywords (shutdown, malfunction, disruption, etc.)
@@ -56,16 +57,16 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
       * operational: Strong positive indicators OR normal operation with no issues
       * issue: Negative keywords detected OR critical sentiment drop
       * unknown: No recent data or conflicting signals
-    
+
     Returns dict with status, sentiment_score, news_count, last_news_at
     """
-    
+
     # Time window: last 24 hours
     since = datetime.utcnow() - timedelta(hours=24)
-    
+
     # Build search pattern based on asset type
     search_terms = [asset_name]
-    
+
     # Add context-specific keywords
     if asset_type == 'central_bank':
         search_terms.extend(['monetary policy', 'interest rate', 'inflation'])
@@ -77,10 +78,10 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
         search_terms.extend(['data center', 'outage', 'downtime'])
     elif asset_type == 'government':
         search_terms.extend(['operations', 'services', 'closure'])
-    
+
     # Search for news mentioning the asset with advanced keyword detection
     query = """
-        SELECT 
+        SELECT
             id,
             title,
             summary,
@@ -103,7 +104,7 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
                 summary ILIKE '%operational%' OR summary ILIKE '%running%'
             ) as has_operational_keywords
         FROM news_articles
-        WHERE 
+        WHERE
             published_at >= $1
             AND (
                 title ILIKE '%' || $2 || '%'
@@ -112,11 +113,11 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
         ORDER BY published_at DESC
         LIMIT 100
     """
-    
+
     results = await conn.fetch(query, since, asset_name)
-    
+
     news_count = len(results)
-    
+
     if news_count == 0:
         return {
             'status': 'unknown',
@@ -125,13 +126,13 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
             'last_news_at': None,
             'status_reason': 'No recent news mentions in past 24h'
         }
-    
+
     # Calculate advanced metrics
     total_sentiment = 0.0
     issue_count = 0
     operational_count = 0
     last_news_at = results[0]['published_at']
-    
+
     for article in results:
         # Map sentiment to score
         if article['sentiment'] == 'positive':
@@ -140,18 +141,18 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
             total_sentiment += -0.7
         else:
             total_sentiment += 0.0
-        
+
         if article['has_issue_keywords']:
             issue_count += 1
-        
+
         if article['has_operational_keywords']:
             operational_count += 1
-    
+
     avg_sentiment = total_sentiment / news_count
-    
+
     # Advanced status determination with multiple factors
     # Priority: Issue keywords > Sentiment > Operational keywords > Default
-    
+
     if issue_count >= 2:
         # Multiple articles mentioning issues = likely problem
         status = 'issue'
@@ -180,7 +181,7 @@ async def calculate_asset_status(conn: asyncpg.Connection, asset_id: str, asset_
         # Ambiguous signals
         status = 'unknown'
         status_reason = f'ℹ️ Mixed signals: {news_count} articles, sentiment {avg_sentiment:.2f}, {issue_count} issues, {operational_count} operational mentions'
-    
+
     return {
         'status': status,
         'sentiment_score': avg_sentiment,
@@ -197,7 +198,7 @@ async def update_all_assets():
     Main function to update status for all assets
     """
     conn = await get_db_connection()
-    
+
     try:
         # Get all active assets
         assets = await conn.fetch("""
@@ -206,26 +207,26 @@ async def update_all_assets():
             WHERE is_active = true
             ORDER BY importance_score DESC
         """)
-        
+
         logger.info(f"🔄 Updating status for {len(assets)} assets...")
-        
+
         updated_count = 0
         status_summary = {'operational': 0, 'unknown': 0, 'issue': 0}
-        
+
         for asset in assets:
             asset_id = asset['id']
             asset_name = asset['name']
             asset_code = asset['code']
             asset_type = asset['asset_type']
             asset_country = asset['country']
-            
+
             logger.info(f"  📊 Processing {asset_code} ({asset_name})...")
-            
+
             # Calculate new status with enhanced analysis
             status_data = await calculate_asset_status(
                 conn, str(asset_id), asset_name, asset_type, asset_country
             )
-            
+
             # Insert new status log entry
             await conn.execute("""
                 INSERT INTO asset_status_log (
@@ -241,19 +242,19 @@ async def update_all_assets():
                 status_data['last_news_at'],
                 status_data['status_reason']
             )
-            
+
             status_summary[status_data['status']] += 1
             updated_count += 1
-            
+
             logger.info(f"    ✅ {asset_code}: {status_data['status']} (sentiment: {status_data['sentiment_score']:.2f}, news: {status_data['news_count']})")
-        
-        logger.info(f"")
+
+        logger.info("")
         logger.info(f"✅ Updated {updated_count} assets!")
-        logger.info(f"📊 Status Summary:")
+        logger.info("📊 Status Summary:")
         logger.info(f"   🟢 Operational: {status_summary['operational']}")
         logger.info(f"   ⚪ Unknown: {status_summary['unknown']}")
         logger.info(f"   🔴 Issues: {status_summary['issue']}")
-        
+
     except Exception as e:
         logger.error(f"❌ Error updating asset status: {e}")
         raise
@@ -266,17 +267,17 @@ async def cleanup_old_logs():
     Clean up old status log entries (keep last 7 days)
     """
     conn = await get_db_connection()
-    
+
     try:
         cutoff = datetime.utcnow() - timedelta(days=7)
-        
-        result = await conn.execute("""
+
+        await conn.execute("""
             DELETE FROM asset_status_log
             WHERE checked_at < $1
         """, cutoff)
-        
-        logger.info(f"🧹 Cleaned up old status logs (kept last 7 days)")
-        
+
+        logger.info("🧹 Cleaned up old status logs (kept last 7 days)")
+
     except Exception as e:
         logger.error(f"❌ Error cleaning up logs: {e}")
     finally:
@@ -290,21 +291,21 @@ async def main():
     logger.info("=" * 60)
     logger.info("🏛️  Asset Status Update Job Started")
     logger.info("=" * 60)
-    
+
     start_time = datetime.utcnow()
-    
+
     try:
         # Update all asset statuses
         await update_all_assets()
-        
+
         # Cleanup old logs
         await cleanup_old_logs()
-        
+
         duration = (datetime.utcnow() - start_time).total_seconds()
-        logger.info(f"")
+        logger.info("")
         logger.info(f"✅ Job completed successfully in {duration:.2f}s")
         logger.info("=" * 60)
-        
+
     except Exception as e:
         logger.error(f"❌ Job failed: {e}")
         logger.error("=" * 60)

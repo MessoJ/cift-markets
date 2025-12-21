@@ -12,17 +12,14 @@ Endpoints:
 """
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
-import asyncpg
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel
 
 from cift.core.auth import get_current_user_id
 from cift.core.database import get_postgres_pool
-
 
 # ============================================================================
 # ROUTER
@@ -44,8 +41,8 @@ class Notification(BaseModel):
     message: str
     is_read: bool = False
     created_at: datetime
-    read_at: Optional[datetime] = None
-    metadata: Optional[dict] = None
+    read_at: datetime | None = None
+    metadata: dict | None = None
 
 
 class UnreadCount(BaseModel):
@@ -57,7 +54,7 @@ class UnreadCount(BaseModel):
 # ENDPOINTS
 # ============================================================================
 
-@router.get("", response_model=List[Notification])
+@router.get("", response_model=list[Notification])
 async def get_notifications(
     limit: int = 50,
     unread_only: bool = False,
@@ -65,7 +62,7 @@ async def get_notifications(
 ):
     """
     Get user notifications from database.
-    
+
     Returns recent notifications with ability to filter to unread only.
     """
     try:
@@ -75,15 +72,15 @@ async def get_notifications(
             table_exists = await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'notifications')"
             )
-            
+
             if not table_exists:
                 logger.warning("notifications table does not exist")
                 return []
-            
+
             # Build query based on filters
             if unread_only:
                 query = """
-                    SELECT 
+                    SELECT
                         id::text, user_id::text, notification_type as type, title, message,
                         is_read, created_at, read_at, metadata
                     FROM notifications
@@ -93,7 +90,7 @@ async def get_notifications(
                 """
             else:
                 query = """
-                    SELECT 
+                    SELECT
                         id::text, user_id::text, notification_type as type, title, message,
                         is_read, created_at, read_at, metadata
                     FROM notifications
@@ -101,9 +98,9 @@ async def get_notifications(
                     ORDER BY created_at DESC
                     LIMIT $2;
                 """
-            
+
             rows = await conn.fetch(query, user_id, limit)
-            
+
             return [Notification(**dict(row)) for row in rows]
     except Exception as e:
         logger.error(f"Error fetching notifications for user {user_id}: {e}")
@@ -116,7 +113,7 @@ async def get_unread_count(
 ):
     """
     Get count of unread notifications from database.
-    
+
     Used for badge display in header.
     """
     try:
@@ -126,15 +123,15 @@ async def get_unread_count(
             table_exists = await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'notifications')"
             )
-            
+
             if not table_exists:
                 return UnreadCount(count=0)
-            
+
             count = await conn.fetchval(
                 "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false",
                 user_id
             )
-            
+
             return UnreadCount(count=count or 0)
     except Exception as e:
         logger.error(f"Error fetching unread count for user {user_id}: {e}")
@@ -148,7 +145,7 @@ async def mark_notification_read(
 ):
     """
     Mark a notification as read in database.
-    
+
     Only works for notifications belonging to the current user.
     """
     try:
@@ -158,23 +155,23 @@ async def mark_notification_read(
             table_exists = await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'notifications')"
             )
-            
+
             if not table_exists:
                 raise HTTPException(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
                     detail="Notifications not available"
                 )
-            
+
             result = await conn.execute(
                 """
-                UPDATE notifications 
+                UPDATE notifications
                 SET is_read = true, read_at = NOW()
                 WHERE id = $1 AND user_id = $2 AND is_read = false
                 """,
                 notification_id,
                 user_id
             )
-            
+
             if result == "UPDATE 0":
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -196,7 +193,7 @@ async def mark_all_notifications_read(
 ):
     """
     Mark all user notifications as read in database.
-    
+
     Useful for "mark all as read" button.
     """
     try:
@@ -206,13 +203,13 @@ async def mark_all_notifications_read(
             table_exists = await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'notifications')"
             )
-            
+
             if not table_exists:
                 return  # Silently succeed if table doesn't exist
-            
+
             await conn.execute(
                 """
-                UPDATE notifications 
+                UPDATE notifications
                 SET is_read = true, read_at = NOW()
                 WHERE user_id = $1 AND is_read = false
                 """,

@@ -11,18 +11,16 @@ Performance optimizations:
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Query, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from cift.core.auth import get_current_active_user, User
+from cift.core.auth import User, get_current_active_user
+from cift.core.data_processing import calculate_technical_indicators, load_ohlcv_data
 from cift.core.database import db_manager
 from cift.core.trading_queries import get_ohlcv_last_n_bars
-from cift.core.data_processing import load_ohlcv_data, calculate_technical_indicators
-
 
 # ============================================================================
 # ROUTER
@@ -41,8 +39,8 @@ class TickData(BaseModel):
     symbol: str
     price: float
     volume: int
-    bid: Optional[float] = None
-    ask: Optional[float] = None
+    bid: float | None = None
+    ask: float | None = None
 
 
 class OHLCVBar(BaseModel):
@@ -60,23 +58,23 @@ class PriceQuote(BaseModel):
     """Real-time price quote."""
     symbol: str
     price: float
-    bid: Optional[float] = None
-    ask: Optional[float] = None
-    spread_bps: Optional[float] = None
-    change: Optional[float] = None
-    change_pct: Optional[float] = None
-    high: Optional[float] = None
-    low: Optional[float] = None
-    open: Optional[float] = None
-    volume: Optional[int] = None
+    bid: float | None = None
+    ask: float | None = None
+    spread_bps: float | None = None
+    change: float | None = None
+    change_pct: float | None = None
+    high: float | None = None
+    low: float | None = None
+    open: float | None = None
+    volume: int | None = None
     timestamp: datetime
 
 
 class MarketDepth(BaseModel):
     """Market depth/order book data."""
     symbol: str
-    bids: List[tuple[float, int]]  # [(price, volume), ...]
-    asks: List[tuple[float, int]]
+    bids: list[tuple[float, int]]  # [(price, volume), ...]
+    asks: list[tuple[float, int]]
     timestamp: datetime
 
 
@@ -88,13 +86,13 @@ class MarketDepth(BaseModel):
 async def get_quote(symbol: str):
     """
     Get latest quote for a symbol from database.
-    
+
     Checks: market_data_cache first, then market_data as fallback.
-    
+
     Performance: ~2ms (database query)
     """
     symbol_upper = symbol.upper()
-    
+
     async with db_manager.pool.acquire() as conn:
         # First try market_data_cache (most up-to-date)
         row = await conn.fetchrow(
@@ -105,7 +103,7 @@ async def get_quote(symbol: str):
             """,
             symbol_upper
         )
-        
+
         # Fallback to market_data if not in cache
         if not row:
             row = await conn.fetchrow(
@@ -118,15 +116,15 @@ async def get_quote(symbol: str):
                 """,
                 symbol_upper
             )
-    
+
     if not row:
         raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol_upper}")
-    
+
     # Calculate spread in basis points
     bid = float(row['bid']) if row['bid'] else float(row['price']) * 0.9999
     ask = float(row['ask']) if row['ask'] else float(row['price']) * 1.0001
     spread_bps = ((ask - bid) / bid) * 10000 if bid > 0 else 0.0
-    
+
     return PriceQuote(
         symbol=row['symbol'],
         price=float(row['price']),
@@ -143,29 +141,29 @@ async def get_quote(symbol: str):
     )
 
 
-@router.get("/quotes", response_model=List[PriceQuote])
+@router.get("/quotes", response_model=list[PriceQuote])
 async def get_quotes(
     symbols: str = Query(..., description="Comma-separated list of symbols"),
 ):
     """
     Get latest quotes for multiple symbols from database.
-    
+
     Checks: market_data_cache -> market_data -> ohlcv_bars (in order of preference)
-    
+
     Performance: ~3-5ms for 10 symbols (efficient batch query)
     """
     if not symbols:
         return []
-    
+
     # Parse comma-separated symbols and convert to uppercase
     symbols_list = [s.strip().upper() for s in symbols.split(',') if s.strip()]
     if not symbols_list:
         return []
-    
+
     symbols_upper = symbols_list
     found_symbols = set()
     all_quotes = []
-    
+
     async with db_manager.pool.acquire() as conn:
         # First try market_data_cache (most up-to-date real-time data)
         cache_rows = await conn.fetch(
@@ -176,13 +174,13 @@ async def get_quotes(
             """,
             symbols_upper
         )
-        
+
         for row in cache_rows:
             found_symbols.add(row['symbol'])
             bid = float(row['bid']) if row['bid'] else float(row['price']) * 0.9999
             ask = float(row['ask']) if row['ask'] else float(row['price']) * 1.0001
             spread_bps = ((ask - bid) / bid) * 10000 if bid > 0 else 0.0
-            
+
             all_quotes.append(PriceQuote(
                 symbol=row['symbol'],
                 price=float(row['price']),
@@ -197,7 +195,7 @@ async def get_quotes(
                 volume=int(row['volume']) if row['volume'] else None,
                 timestamp=row['timestamp'],
             ))
-        
+
         # Find missing symbols and try market_data
         missing_symbols = [s for s in symbols_upper if s not in found_symbols]
         if missing_symbols:
@@ -210,13 +208,13 @@ async def get_quotes(
                 """,
                 missing_symbols
             )
-            
+
             for row in market_rows:
                 found_symbols.add(row['symbol'])
                 bid = float(row['bid']) if row['bid'] else None
                 ask = float(row['ask']) if row['ask'] else None
                 spread_bps = ((ask - bid) / bid * 10000) if (bid and ask and bid > 0) else 0.0
-                
+
                 all_quotes.append(PriceQuote(
                     symbol=row['symbol'],
                     price=float(row['price']),
@@ -226,18 +224,18 @@ async def get_quotes(
                     volume=int(row['volume']) if row['volume'] else None,
                     timestamp=row['timestamp'],
                 ))
-        
+
         # Final fallback: check ohlcv_bars for any remaining symbols
         remaining_symbols = [s for s in symbols_upper if s not in found_symbols]
         if remaining_symbols:
             ohlcv_rows = await conn.fetch(
                 """
-                SELECT DISTINCT ON (symbol) 
-                    symbol, 
-                    close as price, 
-                    open as bid, 
-                    close as ask, 
-                    volume, 
+                SELECT DISTINCT ON (symbol)
+                    symbol,
+                    close as price,
+                    open as bid,
+                    close as ask,
+                    volume,
                     timestamp
                 FROM ohlcv_bars
                 WHERE symbol = ANY($1::text[])
@@ -245,12 +243,12 @@ async def get_quotes(
                 """,
                 remaining_symbols
             )
-            
+
             for row in ohlcv_rows:
                 bid = float(row['bid']) if row['bid'] else None
                 ask = float(row['ask']) if row['ask'] else None
                 spread_bps = ((ask - bid) / bid * 10000) if (bid and ask and bid > 0) else 0.0
-                
+
                 all_quotes.append(PriceQuote(
                     symbol=row['symbol'],
                     price=float(row['price']),
@@ -259,7 +257,7 @@ async def get_quotes(
                     spread_bps=round(spread_bps, 2),
                     timestamp=row['timestamp'],
                 ))
-    
+
     return all_quotes
 
 
@@ -274,25 +272,25 @@ async def get_order_book(
 ):
     """
     Get order book (Level 2 market depth) for a symbol.
-    
+
     **Note:** Currently returns simulated order book based on spread.
     Real L2 data requires market data provider subscription.
-    
+
     Performance: ~2ms
     """
     symbol = symbol.upper()
-    
+
     # Get current quote
     async with db_manager.pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT price, bid, ask, volume 
-            FROM market_data_cache 
+            SELECT price, bid, ask, volume
+            FROM market_data_cache
             WHERE symbol = $1
             """,
             symbol
         )
-        
+
         if not row:
             # Fallback to OHLCV
             row = await conn.fetchrow(
@@ -305,23 +303,23 @@ async def get_order_book(
                 """,
                 symbol
             )
-    
+
     if not row:
         raise HTTPException(status_code=404, detail=f"No data for {symbol}")
-    
+
     price = float(row['price'])
     bid = float(row['bid']) if row['bid'] else price * 0.9995
     ask = float(row['ask']) if row['ask'] else price * 1.0005
     base_volume = int(row['volume']) if row['volume'] else 10000
-    
+
     # Generate realistic order book levels
     import random
     random.seed(int(price * 100))  # Deterministic for same price
-    
+
     bids = []
     asks = []
     spread = (ask - bid) / 2
-    
+
     for i in range(levels):
         # Bid levels (decreasing prices)
         bid_price = round(bid - (spread * 0.2 * i), 2)
@@ -331,7 +329,7 @@ async def get_order_book(
             "size": bid_size,
             "orders": random.randint(1, 5 + i)
         })
-        
+
         # Ask levels (increasing prices)
         ask_price = round(ask + (spread * 0.2 * i), 2)
         ask_size = int(base_volume * (0.05 + random.random() * 0.1) / (i + 1))
@@ -340,7 +338,7 @@ async def get_order_book(
             "size": ask_size,
             "orders": random.randint(1, 5 + i)
         })
-    
+
     return {
         "symbol": symbol,
         "timestamp": datetime.utcnow().isoformat(),
@@ -364,14 +362,14 @@ async def get_time_and_sales(
 ):
     """
     Get recent trades (Time & Sales) for a symbol.
-    
+
     **Note:** Currently returns simulated trades based on recent price action.
     Real T&S data requires market data provider subscription.
-    
+
     Performance: ~3ms
     """
     symbol = symbol.upper()
-    
+
     # Get recent bars to simulate trades
     async with db_manager.pool.acquire() as conn:
         bars = await conn.fetch(
@@ -384,7 +382,7 @@ async def get_time_and_sales(
             """,
             symbol
         )
-        
+
         # Get current quote
         quote = await conn.fetchrow(
             """
@@ -394,34 +392,34 @@ async def get_time_and_sales(
             """,
             symbol
         )
-    
+
     if not bars and not quote:
         raise HTTPException(status_code=404, detail=f"No data for {symbol}")
-    
+
     current_price = float(quote['price']) if quote else float(bars[0]['close']) if bars else 100.0
-    
+
     # Generate realistic time & sales
     import random
     from datetime import timedelta
-    
+
     trades = []
     base_time = datetime.utcnow()
-    
+
     for i in range(limit):
         # Time decreases as we go back
         trade_time = base_time - timedelta(seconds=i * random.uniform(0.5, 5))
-        
+
         # Price varies slightly around current
         price_var = (random.random() - 0.5) * 0.002 * current_price
         trade_price = round(current_price + price_var, 2)
-        
+
         # Size follows power law distribution
         size = int(random.paretovariate(1.5) * 50)
         size = min(max(size, 1), 10000)
-        
+
         # Side based on price movement
         side = "buy" if price_var > 0 else "sell"
-        
+
         trades.append({
             "time": trade_time.isoformat(),
             "price": trade_price,
@@ -429,7 +427,7 @@ async def get_time_and_sales(
             "side": side,
             "exchange": random.choice(["NYSE", "NASDAQ", "ARCA", "BATS"])
         })
-    
+
     return {
         "symbol": symbol,
         "trades": trades,
@@ -439,25 +437,25 @@ async def get_time_and_sales(
     }
 
 
-@router.get("/bars/{symbol}", response_model=List[OHLCVBar])
+@router.get("/bars/{symbol}", response_model=list[OHLCVBar])
 async def get_bars(
     symbol: str,
     timeframe: str = Query("1m", description="Bar timeframe (1m, 5m, 15m, 1h, 1d)"),
     limit: int = Query(100, ge=1, le=1000, description="Number of bars"),
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ):
     """
     Get OHLCV bars for a symbol.
-    
+
     Performance: ~3-5ms for 100 bars (uses QuestDB SAMPLE BY optimization)
     """
     # Use optimized QuestDB query
     bars = await get_ohlcv_last_n_bars(symbol, timeframe, limit)
-    
+
     if not bars:
         raise HTTPException(status_code=404, detail=f"No bar data found for {symbol}")
-    
+
     return [
         OHLCVBar(
             timestamp=bar['timestamp'],
@@ -482,24 +480,24 @@ async def get_historical_data(
 ):
     """
     Get historical data for a symbol (supports large datasets).
-    
-    Performance: 
+
+    Performance:
     - JSON: ~50ms for 10K rows
     - Parquet: ~10ms for 10K rows (19.5x faster, recommended for large datasets)
     """
     # Load data using Polars (19.5x faster than Pandas)
     df = await load_ohlcv_data([symbol], start_date, end_date, timeframe)
-    
+
     if df.is_empty():
         raise HTTPException(status_code=404, detail="No historical data found")
-    
+
     # Add technical indicators
     df = calculate_technical_indicators(df)
-    
+
     if format == "json":
         # Convert to JSON (slower but widely compatible)
         return df.to_dicts()
-    
+
     elif format == "csv":
         # Stream CSV response
         csv_buffer = df.write_csv()
@@ -508,29 +506,29 @@ async def get_historical_data(
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={symbol}_historical.csv"}
         )
-    
+
     elif format == "parquet":
         # Stream Parquet response (fastest, most efficient)
         import io
         buffer = io.BytesIO()
         df.write_parquet(buffer)
         buffer.seek(0)
-        
+
         return StreamingResponse(
             iter([buffer.getvalue()]),
             media_type="application/octet-stream",
             headers={"Content-Disposition": f"attachment; filename={symbol}_historical.parquet"}
         )
-    
+
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
 
-@router.get("/symbols", response_model=List[str])
+@router.get("/symbols", response_model=list[str])
 async def get_available_symbols():
     """
     Get list of available symbols.
-    
+
     Performance: ~5ms (cached)
     """
     # Get symbols from database (market_data_cache table)
@@ -562,22 +560,22 @@ class TickerItem(BaseModel):
     volume: int
 
 
-@router.get("/ticker", response_model=List[TickerItem])
+@router.get("/ticker", response_model=list[TickerItem])
 async def get_market_ticker(
-    symbols: Optional[str] = Query(None, description="Comma-separated list of symbols")
+    symbols: str | None = Query(None, description="Comma-separated list of symbols")
 ):
     """
     Get market ticker data for dashboard display.
     Returns price, change, and volume data for major indices and stocks.
-    
+
     Performance: ~5ms (uses market_data_cache)
     """
     # Default major symbols if not specified
     default_symbols = ["SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "META"]
-    
+
     symbol_list = symbols.split(',') if symbols else default_symbols
     symbol_list = [s.strip().upper() for s in symbol_list]
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             rows = await conn.fetch(
@@ -588,7 +586,7 @@ async def get_market_ticker(
                 """,
                 symbol_list
             )
-        
+
         if not rows:
             # Return fallback with zeros if no data
             return [
@@ -601,7 +599,7 @@ async def get_market_ticker(
                 )
                 for s in symbol_list
             ]
-        
+
         return [
             TickerItem(
                 symbol=row['symbol'],
@@ -633,7 +631,7 @@ class MarketMover(BaseModel):
 async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
     """
     Get top market gainers and losers from database.
-    
+
     Performance: ~5ms (uses market_data_cache with sorting)
     """
     try:
@@ -649,7 +647,7 @@ async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
                 """,
                 limit
             )
-            
+
             # Get losers (top negative change)
             losers_rows = await conn.fetch(
                 """
@@ -661,7 +659,7 @@ async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
                 """,
                 limit
             )
-        
+
         def row_to_mover(row):
             return MarketMover(
                 symbol=row['symbol'],
@@ -670,7 +668,7 @@ async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
                 changePercent=float(row['change_pct']) if row['change_pct'] else 0.0,
                 volume=int(row['volume']) if row['volume'] else 0
             )
-        
+
         return {
             "gainers": [row_to_mover(r) for r in gainers_rows],
             "losers": [row_to_mover(r) for r in losers_rows]
@@ -688,11 +686,11 @@ async def get_equity_curve_data(
     """
     Get equity curve data for dashboard from portfolio_snapshots.
     Returns daily portfolio value snapshots.
-    
+
     Performance: ~10ms
     """
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     try:
         async with db_manager.pool.acquire() as conn:
             # Use portfolio_snapshots for accurate total equity (cash + positions)
@@ -708,13 +706,13 @@ async def get_equity_curve_data(
                 current_user.id,
                 start_date
             )
-        
+
         if rows:
             return [
                 {"timestamp": row['timestamp'].isoformat(), "value": float(row['total_value'])}
                 for row in rows
             ]
-        
+
         # Return empty if no data
         return []
     except Exception as e:
@@ -727,14 +725,14 @@ async def get_technical_indicators(
     symbol: str,
     timeframe: str = Query("1d", description="Bar timeframe"),
     limit: int = Query(100, ge=1, le=1000),
-    indicators: List[str] = Query(
+    indicators: list[str] = Query(
         default=["sma_20", "sma_50", "ema_12", "bb_upper", "bb_lower", "macd"],
         description="List of indicators to calculate"
     ),
 ):
     """
     Get technical indicators for a symbol (calculated using Polars - 12x faster).
-    
+
     Available indicators:
     - sma_5, sma_10, sma_20, sma_50, sma_200: Simple Moving Averages
     - ema_12, ema_26, ema_50: Exponential Moving Averages
@@ -742,41 +740,42 @@ async def get_technical_indicators(
     - macd, macd_signal, macd_histogram: MACD
     - rsi_14: Relative Strength Index
     - volatility_20: Rolling volatility
-    
+
     Performance: ~5-10ms for 100 bars with all indicators
     """
-    import polars as pl
     import math
-    
+
+    import polars as pl
+
     # Get OHLCV data
     bars = await get_ohlcv_last_n_bars(symbol, timeframe, limit)
-    
+
     if not bars:
         raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
-    
+
     # Convert to Polars DataFrame
     df = pl.DataFrame(bars)
-    
+
     # Calculate all technical indicators using Polars
     df = calculate_technical_indicators(df)
-    
+
     # Select only requested indicators plus timestamp
     columns_to_select = ["timestamp", "symbol", "close"] + [
         ind for ind in indicators if ind in df.columns
     ]
-    
+
     result_df = df.select(columns_to_select)
-    
+
     # Convert to dict format for JSON response
     # Replace NaN/Infinity with None for JSON compatibility
     result = result_df.to_dicts()
-    
+
     def sanitize_value(v):
         """Replace NaN/Infinity with None for JSON compatibility."""
         if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
             return None
         return v
-    
+
     return [
         {k: sanitize_value(v) for k, v in row.items()}
         for row in result
@@ -789,59 +788,59 @@ async def get_technical_indicators(
 
 class ConnectionManager:
     """Manage WebSocket connections for real-time market data."""
-    
+
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
-        self.symbol_subscriptions: dict[str, List[WebSocket]] = {}
-    
+        self.active_connections: list[WebSocket] = []
+        self.symbol_subscriptions: dict[str, list[WebSocket]] = {}
+
     async def connect(self, websocket: WebSocket):
         """Accept new WebSocket connection."""
         await websocket.accept()
         self.active_connections.append(websocket)
         logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
-    
+
     def disconnect(self, websocket: WebSocket):
         """Remove WebSocket connection."""
         self.active_connections.remove(websocket)
-        
+
         # Remove from all symbol subscriptions
         for symbol in list(self.symbol_subscriptions.keys()):
             if websocket in self.symbol_subscriptions[symbol]:
                 self.symbol_subscriptions[symbol].remove(websocket)
-                
+
                 # Clean up empty subscription lists
                 if not self.symbol_subscriptions[symbol]:
                     del self.symbol_subscriptions[symbol]
-        
+
         logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
-    
+
     def subscribe(self, websocket: WebSocket, symbol: str):
         """Subscribe WebSocket to symbol updates."""
         if symbol not in self.symbol_subscriptions:
             self.symbol_subscriptions[symbol] = []
-        
+
         if websocket not in self.symbol_subscriptions[symbol]:
             self.symbol_subscriptions[symbol].append(websocket)
             logger.debug(f"Subscribed to {symbol}. Total subscribers: {len(self.symbol_subscriptions[symbol])}")
-    
+
     def unsubscribe(self, websocket: WebSocket, symbol: str):
         """Unsubscribe WebSocket from symbol updates."""
         if symbol in self.symbol_subscriptions and websocket in self.symbol_subscriptions[symbol]:
             self.symbol_subscriptions[symbol].remove(websocket)
             logger.debug(f"Unsubscribed from {symbol}")
-    
+
     async def broadcast_to_symbol(self, symbol: str, message: dict):
         """
         Broadcast message to all subscribers of a symbol.
-        
+
         Performance: Async broadcast, non-blocking
         """
         if symbol not in self.symbol_subscriptions:
             return
-        
+
         # Get list of subscribers for this symbol
         subscribers = self.symbol_subscriptions[symbol].copy()
-        
+
         # Broadcast to all subscribers concurrently
         disconnected = []
         for connection in subscribers:
@@ -850,7 +849,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error sending to WebSocket: {e}")
                 disconnected.append(connection)
-        
+
         # Clean up disconnected clients
         for connection in disconnected:
             self.disconnect(connection)
@@ -864,61 +863,61 @@ manager = ConnectionManager()
 async def websocket_market_data(websocket: WebSocket):
     """
     WebSocket endpoint for real-time market data streaming.
-    
+
     Protocol:
     - Client → Server: {"action": "subscribe", "symbols": ["AAPL", "GOOGL"]}
     - Client → Server: {"action": "unsubscribe", "symbols": ["AAPL"]}
     - Server → Client: {"type": "price", "symbol": "AAPL", "price": 150.25, "timestamp": "..."}
     - Server → Client: {"type": "tick", "symbol": "AAPL", "data": {...}}
-    
-    Performance: 
+
+    Performance:
     - Sub-millisecond message delivery
     - Supports 1000+ concurrent connections
     - Efficient fan-out to subscribers
     """
     await manager.connect(websocket)
-    
+
     try:
         while True:
             # Receive message from client
             data = await websocket.receive_json()
             action = data.get("action")
-            
+
             if action == "subscribe":
                 # Subscribe to symbols
                 symbols = data.get("symbols", [])
                 for symbol in symbols:
                     manager.subscribe(websocket, symbol)
-                
+
                 await websocket.send_json({
                     "type": "subscribed",
                     "symbols": symbols,
                     "timestamp": datetime.utcnow().isoformat(),
                 })
-            
+
             elif action == "unsubscribe":
                 # Unsubscribe from symbols
                 symbols = data.get("symbols", [])
                 for symbol in symbols:
                     manager.unsubscribe(websocket, symbol)
-                
+
                 await websocket.send_json({
                     "type": "unsubscribed",
                     "symbols": symbols,
                     "timestamp": datetime.utcnow().isoformat(),
                 })
-            
+
             elif action == "ping":
                 # Respond to ping (heartbeat)
                 await websocket.send_json({
                     "type": "pong",
                     "timestamp": datetime.utcnow().isoformat(),
                 })
-    
+
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         logger.info("WebSocket client disconnected")
-    
+
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
         manager.disconnect(websocket)
@@ -928,12 +927,12 @@ async def websocket_market_data(websocket: WebSocket):
 # HELPER FUNCTIONS FOR PUBLISHING DATA
 # ============================================================================
 
-async def publish_price_update(symbol: str, price: float, bid: Optional[float] = None, ask: Optional[float] = None):
+async def publish_price_update(symbol: str, price: float, bid: float | None = None, ask: float | None = None):
     """
     Publish price update to all subscribed WebSocket clients.
-    
+
     Call this function whenever a new price tick arrives.
-    
+
     Args:
         symbol: Symbol that was updated
         price: New price
@@ -948,14 +947,14 @@ async def publish_price_update(symbol: str, price: float, bid: Optional[float] =
         "ask": ask,
         "timestamp": datetime.utcnow().isoformat(),
     }
-    
+
     await manager.broadcast_to_symbol(symbol, message)
 
 
 async def publish_tick_data(tick_data: dict):
     """
     Publish full tick data to subscribers.
-    
+
     Args:
         tick_data: Dictionary with tick data (must include 'symbol')
     """
@@ -963,14 +962,14 @@ async def publish_tick_data(tick_data: dict):
     if not symbol:
         logger.warning("Tick data missing symbol, cannot publish")
         return
-    
+
     message = {
         "type": "tick",
         "symbol": symbol,
         "data": tick_data,
         "timestamp": datetime.utcnow().isoformat(),
     }
-    
+
     await manager.broadcast_to_symbol(symbol, message)
 
 

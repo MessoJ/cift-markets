@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -19,7 +20,7 @@ class BacktestResult:
     equity: np.ndarray
     strategy_returns: np.ndarray
     positions: np.ndarray
-    metrics: Dict[str, Any]
+    metrics: dict[str, Any]
 
 
 def backtest_positions(
@@ -85,7 +86,7 @@ def backtest_positions(
     equity_rel = np.cumprod(1.0 + net)
     equity = equity_rel * float(initial_capital)
 
-    metrics: Dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
     metrics["total_return"] = float(equity[-1] / float(initial_capital) - 1.0)
     metrics["cagr"] = float(cagr(net, periods_per_year=periods_per_year))
     metrics["annual_volatility"] = float(annualized_volatility(net, periods_per_year=periods_per_year))

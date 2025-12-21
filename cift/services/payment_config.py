@@ -3,21 +3,21 @@ Payment Processor Configuration - RULES COMPLIANT
 Centralized configuration management for payment processors
 """
 import os
-from typing import Dict, Any
+from typing import Any
 
 
 class PaymentConfig:
     """
     Centralized payment processor configuration
-    
+
     Loads configuration from environment variables
     """
-    
+
     @staticmethod
-    def get_mpesa_config() -> Dict[str, Any]:
+    def get_mpesa_config() -> dict[str, Any]:
         """
         Get M-Pesa configuration
-        
+
         Required environment variables:
         - MPESA_CONSUMER_KEY
         - MPESA_CONSUMER_SECRET
@@ -37,12 +37,12 @@ class PaymentConfig:
             'security_credential': os.getenv('MPESA_SECURITY_CREDENTIAL', ''),
             'timeout_url': os.getenv('MPESA_TIMEOUT_URL', 'http://localhost:8000/api/v1/webhooks/mpesa/timeout')
         }
-    
+
     @staticmethod
-    def get_stripe_config() -> Dict[str, Any]:
+    def get_stripe_config() -> dict[str, Any]:
         """
         Get Stripe configuration
-        
+
         Required environment variables:
         - STRIPE_SECRET_KEY
         - STRIPE_PUBLISHABLE_KEY
@@ -54,12 +54,12 @@ class PaymentConfig:
             'webhook_secret': os.getenv('STRIPE_WEBHOOK_SECRET', ''),
             'environment': 'production' if 'sk_live' in os.getenv('STRIPE_SECRET_KEY', '') else 'sandbox'
         }
-    
+
     @staticmethod
-    def get_paypal_config() -> Dict[str, Any]:
+    def get_paypal_config() -> dict[str, Any]:
         """
         Get PayPal configuration
-        
+
         Required environment variables:
         - PAYPAL_CLIENT_ID
         - PAYPAL_CLIENT_SECRET
@@ -74,12 +74,12 @@ class PaymentConfig:
             'return_url': os.getenv('PAYPAL_RETURN_URL', 'http://localhost:3000/funding/success'),
             'cancel_url': os.getenv('PAYPAL_CANCEL_URL', 'http://localhost:3000/funding/cancelled')
         }
-    
+
     @staticmethod
-    def get_crypto_config() -> Dict[str, Any]:
+    def get_crypto_config() -> dict[str, Any]:
         """
         Get Cryptocurrency configuration
-        
+
         Required environment variables:
         - CRYPTO_BTC_DEPOSIT_ADDRESS
         - CRYPTO_ETH_DEPOSIT_ADDRESS
@@ -104,10 +104,10 @@ class PaymentConfig:
         }
 
     @staticmethod
-    def get_alpaca_config() -> Dict[str, Any]:
+    def get_alpaca_config() -> dict[str, Any]:
         """
         Get Alpaca configuration for Bank Transfers
-        
+
         Required environment variables:
         - ALPACA_API_KEY
         - ALPACA_SECRET_KEY
@@ -118,15 +118,15 @@ class PaymentConfig:
             'secret_key': os.getenv('ALPACA_SECRET_KEY', ''),
             'base_url': os.getenv('ALPACA_BASE_URL', 'https://paper-api.alpaca.markets')
         }
-    
+
     @staticmethod
-    def get_config_for_payment_type(payment_type: str) -> Dict[str, Any]:
+    def get_config_for_payment_type(payment_type: str) -> dict[str, Any]:
         """
         Get configuration for a specific payment type
-        
+
         Args:
             payment_type: Payment method type
-            
+
         Returns:
             Configuration dictionary
         """
@@ -138,30 +138,30 @@ class PaymentConfig:
             'crypto_wallet': PaymentConfig.get_crypto_config,
             'bank_account': PaymentConfig.get_alpaca_config
         }
-        
+
         config_func = config_map.get(payment_type)
-        
+
         if not config_func:
             return {}
-        
+
         return config_func()
-    
+
     @staticmethod
     def is_payment_type_configured(payment_type: str) -> bool:
         """
         Check if a payment type is properly configured
-        
+
         Args:
             payment_type: Payment method type
-            
+
         Returns:
             True if configured with required credentials
         """
         config = PaymentConfig.get_config_for_payment_type(payment_type)
-        
+
         if not config:
             return False
-        
+
         # Check if essential keys are present and non-empty
         if payment_type == 'mpesa':
             return bool(
@@ -189,19 +189,19 @@ class PaymentConfig:
                 config.get('api_key') and
                 config.get('secret_key')
             )
-        
+
         return False
-    
+
     @staticmethod
     def get_available_payment_methods() -> list[str]:
         """
         Get list of payment methods that are properly configured
-        
+
         Returns:
             List of available payment method types
         """
         all_types = ['mpesa', 'debit_card', 'credit_card', 'paypal', 'crypto_wallet', 'bank_account']
-        
+
         return [
             payment_type
             for payment_type in all_types

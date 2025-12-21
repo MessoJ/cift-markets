@@ -5,7 +5,7 @@ Fixtures for testing with real database connections (no mocks).
 """
 
 import asyncio
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -35,16 +35,16 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     # Initialize database
     await db_manager.initialize()
-    
+
     # Create tables
     async with db_manager.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     # Provide session
     async with db_manager.get_session() as session:
         yield session
         await session.rollback()
-    
+
     # Cleanup tables after test
     async with db_manager.engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

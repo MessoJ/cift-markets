@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -12,21 +12,21 @@ from cift.metrics.performance import deflated_sharpe_ratio, prob_sharpe_ratio
 from cift.ml.evaluation.splits import PurgedKFold, build_forward_return_events
 from cift.ml.features import (
     frac_diff_ffd,
-    get_technical_features,
     get_microstructure_features,
+    get_technical_features,
 )
 from cift.ml.labeling import (
-    get_triple_barrier_labels,
-    get_meta_labels,
     apply_meta_model_sizing,
     compute_sample_weights,
+    get_meta_labels,
+    get_triple_barrier_labels,
 )
 
 
 @dataclass(frozen=True)
 class WalkForwardReport:
-    metrics: Dict[str, Any]
-    fold_metrics: list[Dict[str, Any]]
+    metrics: dict[str, Any]
+    fold_metrics: list[dict[str, Any]]
 
 
 def _load_df(path: str) -> pl.DataFrame:
@@ -131,7 +131,7 @@ def _build_features(
             # Add the new columns to feature_cols
             ta_cols = ["rsi_14", "macd_line", "macd_signal", "macd_hist", "bb_width", "bb_pct", "atr_14", "mfi_14"]
             feature_cols.extend(ta_cols)
-            
+
             # Shift TA features by 1 to avoid lookahead bias (calculated on close)
             # Actually, get_technical_features calculates on current bar.
             # If we trade at Open of next bar based on Close of this bar, we don't need to shift IF we are careful.
@@ -174,11 +174,10 @@ def _fit_predict_logreg(
     y_train: np.ndarray,
     X_test: np.ndarray,
     C: float,
-    sample_weight: Optional[np.ndarray] = None,
+    sample_weight: np.ndarray | None = None,
 ) -> np.ndarray:
     try:
         from sklearn.linear_model import LogisticRegression
-        from sklearn.pipeline import make_pipeline
         from sklearn.preprocessing import StandardScaler
     except Exception as e:  # pragma: no cover
         raise RuntimeError("scikit-learn is required for model=logreg") from e
@@ -186,7 +185,7 @@ def _fit_predict_logreg(
     scaler = StandardScaler(with_mean=True, with_std=True)
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-    
+
     clf = LogisticRegression(max_iter=300, solver="lbfgs", C=float(C))
     clf.fit(X_train_scaled, y_train, sample_weight=sample_weight)
     return clf.predict_proba(X_test_scaled)[:, 1]
@@ -200,7 +199,7 @@ def _fit_predict_xgboost(
     max_depth: int = 3,
     n_estimators: int = 100,
     learning_rate: float = 0.1,
-    sample_weight: Optional[np.ndarray] = None,
+    sample_weight: np.ndarray | None = None,
     tune: bool = False,
     **kwargs: Any,
 ) -> np.ndarray:
@@ -220,7 +219,7 @@ def _fit_predict_xgboost(
             y_tr, y_val = y_train[:split_idx], y_train[split_idx:]
             w_tr = sample_weight[:split_idx] if sample_weight is not None else None
             w_val = sample_weight[split_idx:] if sample_weight is not None else None
-            
+
             param_grid = {
                 "max_depth": [3, 4, 5, 6],
                 "learning_rate": [0.01, 0.05, 0.1, 0.2],
@@ -229,21 +228,22 @@ def _fit_predict_xgboost(
                 "colsample_bytree": [0.6, 0.8, 1.0],
                 "gamma": [0, 0.1, 0.2],
             }
-            
+
             best_score = float("inf")
             best_params = {
                 "max_depth": max_depth,
                 "n_estimators": n_estimators,
                 "learning_rate": learning_rate,
             }
-            
+
             import random
+
             from sklearn.metrics import log_loss
-            
+
             # Try 10 random combinations
             for _ in range(10):
                 params = {k: random.choice(v) for k, v in param_grid.items()}
-                
+
                 clf = xgb.XGBClassifier(
                     use_label_encoder=False,
                     eval_metric="logloss",
@@ -253,7 +253,7 @@ def _fit_predict_xgboost(
                     early_stopping_rounds=10,
                     **params,
                 )
-                
+
                 try:
                     clf.fit(
                         X_tr, y_tr,
@@ -261,10 +261,10 @@ def _fit_predict_xgboost(
                         eval_set=[(X_val, y_val)],
                         verbose=False
                     )
-                    
+
                     val_proba = clf.predict_proba(X_val)[:, 1]
                     score = log_loss(y_val, val_proba, sample_weight=w_val)
-                    
+
                     if score < best_score:
                         best_score = score
                         best_params = params
@@ -278,13 +278,13 @@ def _fit_predict_xgboost(
             n_estimators = best_params["n_estimators"]
             learning_rate = best_params["learning_rate"]
             kwargs.update({k: v for k, v in best_params.items() if k not in ["max_depth", "n_estimators", "learning_rate"]})
-            
+
             # If tuning happened, we should probably use early stopping for the final fit too
             if early_stopping_rounds is None:
                 early_stopping_rounds = 10
 
     eval_set = None
-    
+
     if early_stopping_rounds is not None:
         # Simple 90/10 split for validation (or reuse split if we want, but let's keep it consistent)
         split_idx = int(len(X_train) * 0.9)
@@ -292,9 +292,9 @@ def _fit_predict_xgboost(
         y_tr, y_val = y_train[:split_idx], y_train[split_idx:]
         w_tr = sample_weight[:split_idx] if sample_weight is not None else None
         w_val = sample_weight[split_idx:] if sample_weight is not None else None
-        
+
         eval_set = [(X_val, y_val)]
-        
+
         clf = xgb.XGBClassifier(
             max_depth=int(max_depth),
             n_estimators=int(n_estimators),
@@ -307,7 +307,7 @@ def _fit_predict_xgboost(
             **kwargs
         )
         clf.fit(
-            X_tr, y_tr, 
+            X_tr, y_tr,
             sample_weight=w_tr,
             eval_set=eval_set,
             verbose=False
@@ -324,7 +324,7 @@ def _fit_predict_xgboost(
             **kwargs
         )
         clf.fit(X_train, y_train, sample_weight=sample_weight)
-        
+
     return clf.predict_proba(X_test)[:, 1]
 
 
@@ -343,7 +343,7 @@ def _fit_predict_meta_model(
 ) -> np.ndarray:
     """
     Fit a meta-model to predict whether primary model's prediction is correct.
-    
+
     Returns probability that primary model is correct (used for bet sizing).
     """
     # Ensure we have both classes
@@ -351,13 +351,13 @@ def _fit_predict_meta_model(
     if len(unique_labels) < 2:
         # Degenerate case: return 0.5 (neutral)
         return np.full(len(X_test), 0.5, dtype=np.float64)
-    
+
     if model == "xgboost":
         try:
             import xgboost as xgb
         except Exception as e:
             raise RuntimeError("xgboost is required for meta-model") from e
-        
+
         clf = xgb.XGBClassifier(
             max_depth=3,
             n_estimators=50,  # Smaller for meta-model to avoid overfitting
@@ -377,7 +377,7 @@ def _fit_predict_meta_model(
             from sklearn.preprocessing import StandardScaler
         except Exception as e:
             raise RuntimeError("scikit-learn is required for meta-model") from e
-        
+
         clf = make_pipeline(
             StandardScaler(with_mean=True, with_std=True),
             LogisticRegression(max_iter=300, solver="lbfgs", C=1.0),
@@ -392,7 +392,7 @@ def _oos_metrics_from_stream(
     positions: np.ndarray,
     periods_per_year: int,
     n_trials: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     bt_all = backtest_positions(
         returns=np.asarray(strategy_returns, dtype=np.float64),
         positions=np.asarray(positions, dtype=np.float64),
@@ -424,7 +424,7 @@ def _oos_metrics_from_stream(
         sharpe_null=0.0,
     )
 
-    m: Dict[str, Any] = dict(bt_all.metrics)
+    m: dict[str, Any] = dict(bt_all.metrics)
     m["psr_sharpe_gt_0"] = float(psr)
     m["dsr_sharpe_gt_0"] = float(dsr)
     m["n_obs"] = int(len(oos))
@@ -573,7 +573,7 @@ def run_walkforward(
     label_ok = np.isfinite(fwd_all)
     y_all = (fwd_all > 0.0).astype(np.int32)
 
-    X_all: Optional[np.ndarray] = None
+    X_all: np.ndarray | None = None
     if model_norm in {"logreg", "xgboost"}:
         X_all = df.select(feature_cols).to_numpy()
 
@@ -593,16 +593,16 @@ def run_walkforward(
         temp_vol = df.select(
             pl.col("returns").rolling_std(window_size=20).shift(1).fill_null(0.0).alias("vol")
         )["vol"].to_numpy()
-        
+
         # Annualize
         ann_vol = temp_vol * np.sqrt(periods_per_year)
-        
+
         # Avoid div by zero
         ann_vol = np.where(ann_vol < 1e-4, 1e-4, ann_vol)
-        
+
         # Target / Realized
         raw_scaler = vol_target / ann_vol
-        
+
         # Clip leverage (max 5x to prevent explosions)
         vol_scaler = np.clip(raw_scaler, 0.0, 5.0)
 
@@ -623,7 +623,7 @@ def run_walkforward(
     eval_events = [events[int(i)] for i in eval_indices]
 
     # Compute sample weights based on label overlap (De Prado)
-    sample_weights_all: Optional[np.ndarray] = None
+    sample_weights_all: np.ndarray | None = None
     if use_sample_weights and len(df) > 0:
         t_start = np.arange(len(df), dtype=np.int64)
         t_end = t_start + int(horizon_bars)
@@ -687,17 +687,17 @@ def run_walkforward(
 
     # Outer CV OOS stream using selected params.
     splitter = PurgedKFold(n_splits=n_splits, embargo=float(embargo_bars))
-    fold_metrics: list[Dict[str, Any]] = []
+    fold_metrics: list[dict[str, Any]] = []
     all_cv_returns: list[float] = []
     all_cv_positions: list[float] = []
 
     for fold, (train_pos, test_pos) in enumerate(splitter.split(eval_positions, eval_events), start=1):
         train_idx = eval_indices[train_pos]
         test_idx = eval_indices[test_pos]
-        
+
         # Get sample weights for this fold's training data
         train_weights = sample_weights_all[train_idx] if sample_weights_all is not None else None
-        
+
         if model_norm == "baseline":
             test_returns = returns_all[test_idx]
             test_positions = df["signal"].to_numpy()[test_idx]
@@ -713,7 +713,7 @@ def run_walkforward(
                 sample_weight=train_weights,
             )
             primary_positions = _signal_from_proba(proba, threshold=float(selected_threshold))
-            
+
             if use_meta_labeling:
                 # Meta-labeling: train secondary model to filter/size bets
                 # Create meta-labels from training data primary predictions
@@ -727,7 +727,7 @@ def run_walkforward(
                 train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_idx]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
-                
+
                 # Train meta-model
                 meta_proba_test = _fit_predict_meta_model(
                     X_train=X_all[train_idx],
@@ -735,7 +735,7 @@ def run_walkforward(
                     X_test=X_all[test_idx],
                     model=meta_model,
                 )
-                
+
                 # Apply meta-model sizing/filtering
                 test_positions = apply_meta_model_sizing(
                     primary_side=primary_positions,
@@ -745,7 +745,7 @@ def run_walkforward(
                 )
             else:
                 test_positions = primary_positions
-            
+
             test_returns = returns_all[test_idx]
         else:  # xgboost
             if X_all is None:
@@ -762,7 +762,7 @@ def run_walkforward(
                 tune=tune_model,
             )
             primary_positions = _signal_from_proba(proba, threshold=float(selected_threshold))
-            
+
             if use_meta_labeling:
                 # Meta-labeling: train secondary model to filter/size bets
                 train_proba = _fit_predict_xgboost(
@@ -778,14 +778,14 @@ def run_walkforward(
                 train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_idx]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
-                
+
                 meta_proba_test = _fit_predict_meta_model(
                     X_train=X_all[train_idx],
                     meta_labels_train=meta_labels_train,
                     X_test=X_all[test_idx],
                     model=meta_model,
                 )
-                
+
                 test_positions = apply_meta_model_sizing(
                     primary_side=primary_positions,
                     meta_proba=meta_proba_test,
@@ -794,7 +794,7 @@ def run_walkforward(
                 )
             else:
                 test_positions = primary_positions
-            
+
             test_returns = returns_all[test_idx]
 
         # Apply Volatility Targeting
@@ -827,7 +827,7 @@ def run_walkforward(
         n_trials=effective_trials,
     )
 
-    metrics: Dict[str, Any] = dict(cv_metrics)
+    metrics: dict[str, Any] = dict(cv_metrics)
     metrics["n_splits"] = int(n_splits)
     metrics["horizon_bars"] = int(horizon_bars)
     metrics["embargo_bars"] = int(embargo_bars)
@@ -873,7 +873,7 @@ def run_walkforward(
 
             # Get sample weights for train universe
             holdout_train_weights = sample_weights_all[train_universe] if sample_weights_all is not None else None
-            
+
             proba = _fit_predict_logreg(
                 X_train=X_all[train_universe],
                 y_train=y_all[train_universe],
@@ -882,7 +882,7 @@ def run_walkforward(
                 sample_weight=holdout_train_weights,
             )
             primary_holdout_positions = _signal_from_proba(proba, threshold=float(selected_threshold))
-            
+
             if use_meta_labeling:
                 # Create meta-labels from train data
                 train_proba = _fit_predict_logreg(
@@ -895,14 +895,14 @@ def run_walkforward(
                 train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_universe]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
-                
+
                 meta_proba_holdout = _fit_predict_meta_model(
                     X_train=X_all[train_universe],
                     meta_labels_train=meta_labels_train,
                     X_test=X_all[holdout_universe],
                     model=meta_model,
                 )
-                
+
                 holdout_positions = apply_meta_model_sizing(
                     primary_side=primary_holdout_positions,
                     meta_proba=meta_proba_holdout,
@@ -911,7 +911,7 @@ def run_walkforward(
                 )
             else:
                 holdout_positions = primary_holdout_positions
-            
+
             holdout_returns = returns_all[holdout_universe]
         else:  # xgboost
             if X_all is None:
@@ -921,7 +921,7 @@ def run_walkforward(
 
             # Sample weights for xgboost holdout
             holdout_train_weights_xgb = sample_weights_all[train_universe] if sample_weights_all is not None else None
-            
+
             proba = _fit_predict_xgboost(
                 X_train=X_all[train_universe],
                 y_train=y_all[train_universe],
@@ -930,7 +930,7 @@ def run_walkforward(
                 tune=tune_model,
             )
             primary_holdout_positions = _signal_from_proba(proba, threshold=float(selected_threshold))
-            
+
             if use_meta_labeling:
                 train_proba = _fit_predict_xgboost(
                     X_train=X_all[train_universe],
@@ -942,14 +942,14 @@ def run_walkforward(
                 train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_universe]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
-                
+
                 meta_proba_holdout = _fit_predict_meta_model(
                     X_train=X_all[train_universe],
                     meta_labels_train=meta_labels_train,
                     X_test=X_all[holdout_universe],
                     model=meta_model,
                 )
-                
+
                 holdout_positions = apply_meta_model_sizing(
                     primary_side=primary_holdout_positions,
                     meta_proba=meta_proba_holdout,
@@ -958,7 +958,7 @@ def run_walkforward(
                 )
             else:
                 holdout_positions = primary_holdout_positions
-            
+
             holdout_returns = returns_all[holdout_universe]
 
         # Apply Volatility Targeting

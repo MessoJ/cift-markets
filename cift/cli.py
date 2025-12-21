@@ -25,7 +25,7 @@ def info():
     table = Table(title="CIFT Markets Configuration")
     table.add_column("Setting", style="cyan")
     table.add_column("Value", style="green")
-    
+
     table.add_row("Environment", settings.app_env)
     table.add_row("Debug Mode", str(settings.app_debug))
     table.add_row("API URL", settings.app_url)
@@ -34,7 +34,7 @@ def info():
     table.add_row("Redis", settings.redis_url)
     table.add_row("Kafka", settings.kafka_bootstrap_servers)
     table.add_row("MLflow", settings.mlflow_tracking_uri)
-    
+
     console.print(table)
 
 
@@ -46,7 +46,7 @@ def serve(
 ):
     """Start the FastAPI server."""
     import uvicorn
-    
+
     logger.info(f"Starting server on {host}:{port}")
     uvicorn.run(
         "cift.api.main:app",

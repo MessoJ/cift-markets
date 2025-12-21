@@ -16,11 +16,11 @@ Usage:
 """
 
 import asyncio
-import random
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
-import sys
 import os
+import random
+import sys
+from datetime import datetime, timedelta
+from typing import Any
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -66,10 +66,10 @@ def generate_ohlcv_bars(
     n_bars: int,
     timeframe: str = '1m',
     end_time: datetime = None
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Generate realistic OHLCV bars using random walk with mean reversion.
-    
+
     Args:
         symbol: Stock symbol
         base_price: Starting price
@@ -77,13 +77,13 @@ def generate_ohlcv_bars(
         n_bars: Number of bars to generate
         timeframe: Bar timeframe (1m, 5m, 15m, 1h, 1d)
         end_time: End timestamp
-        
+
     Returns:
         List of OHLCV bar dictionaries
     """
     if end_time is None:
         end_time = datetime.utcnow()
-    
+
     # Time delta per bar
     timeframe_deltas = {
         '1m': timedelta(minutes=1),
@@ -95,56 +95,56 @@ def generate_ohlcv_bars(
         '1d': timedelta(days=1),
     }
     delta = timeframe_deltas.get(timeframe, timedelta(minutes=1))
-    
+
     # Scale volatility based on timeframe
     vol_scaling = {
         '1m': 0.05, '5m': 0.12, '15m': 0.22, '30m': 0.32,
         '1h': 0.45, '4h': 0.80, '1d': 1.0,
     }
     vol = volatility * vol_scaling.get(timeframe, 0.05)
-    
+
     bars = []
     price = base_price
     mean_price = base_price
-    
+
     for i in range(n_bars):
         timestamp = end_time - delta * (n_bars - 1 - i)
-        
+
         # Skip weekends for daily bars
         if timeframe == '1d' and timestamp.weekday() >= 5:
             continue
-        
+
         # Skip non-market hours for intraday bars
         if timeframe in ['1m', '5m', '15m', '30m', '1h']:
             hour = timestamp.hour
             if hour < 9 or hour >= 16:  # Simplified market hours
                 continue
-        
+
         # Random return with mean reversion
         mean_reversion = 0.01 * (mean_price - price) / mean_price
         random_return = random.gauss(mean_reversion, vol)
-        
+
         # Generate OHLC
         open_price = price
         change = open_price * random_return
         close_price = open_price + change
-        
+
         # High/Low within the bar
         intrabar_vol = vol * 0.5
         high_deviation = abs(random.gauss(0, intrabar_vol)) * open_price
         low_deviation = abs(random.gauss(0, intrabar_vol)) * open_price
-        
+
         high_price = max(open_price, close_price) + high_deviation
         low_price = min(open_price, close_price) - low_deviation
-        
+
         # Ensure OHLC consistency
         high_price = max(high_price, open_price, close_price)
         low_price = min(low_price, open_price, close_price)
-        
+
         # Generate volume (higher for volatile moves)
         base_volume = 1000000 if symbol in ['AAPL', 'TSLA', 'NVDA', 'SPY'] else 500000
         volume = int(base_volume * (1 + abs(random_return) * 20) * random.uniform(0.5, 1.5))
-        
+
         bars.append({
             'timestamp': timestamp,
             'symbol': symbol,
@@ -154,16 +154,16 @@ def generate_ohlcv_bars(
             'close': round(close_price, 2),
             'volume': volume,
         })
-        
+
         price = close_price
-    
+
     return bars
 
 
-async def seed_to_questdb(bars: List[Dict[str, Any]]):
+async def seed_to_questdb(bars: list[dict[str, Any]]):
     """Seed bars to QuestDB ticks table."""
     from cift.core.database import questdb_manager
-    
+
     # Create table if not exists
     create_table = """
         CREATE TABLE IF NOT EXISTS ticks (
@@ -175,13 +175,13 @@ async def seed_to_questdb(bars: List[Dict[str, Any]]):
             ask DOUBLE
         ) timestamp(timestamp) PARTITION BY DAY;
     """
-    
+
     try:
         await questdb_manager.execute(create_table)
         print("✅ Created ticks table in QuestDB")
     except Exception as e:
         print(f"Table may already exist: {e}")
-    
+
     # Insert data
     for bar in bars:
         # Insert as ticks (using close price)
@@ -199,14 +199,14 @@ async def seed_to_questdb(bars: List[Dict[str, Any]]):
             bar['close'] - spread / 2,
             bar['close'] + spread / 2,
         )
-    
+
     print(f"✅ Inserted {len(bars)} ticks to QuestDB")
 
 
-async def seed_to_postgres(bars: List[Dict[str, Any]]):
+async def seed_to_postgres(bars: list[dict[str, Any]]):
     """Seed bars to PostgreSQL ohlcv_bars table as fallback."""
     from cift.core.database import db_manager
-    
+
     async with db_manager.pool.acquire() as conn:
         # Create table if not exists
         await conn.execute("""
@@ -222,32 +222,32 @@ async def seed_to_postgres(bars: List[Dict[str, Any]]):
                 volume BIGINT NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-            
-            CREATE INDEX IF NOT EXISTS idx_ohlcv_symbol_timeframe_ts 
+
+            CREATE INDEX IF NOT EXISTS idx_ohlcv_symbol_timeframe_ts
             ON ohlcv_bars(symbol, timeframe, timestamp DESC);
         """)
-        
+
         # Clear existing data for symbols
-        symbols = list(set(bar['symbol'] for bar in bars))
+        symbols = list({bar['symbol'] for bar in bars})
         await conn.execute(
             "DELETE FROM ohlcv_bars WHERE symbol = ANY($1::text[])",
             symbols
         )
-        
+
         # Insert new data
         for bar in bars:
             await conn.execute("""
                 INSERT INTO ohlcv_bars (timestamp, symbol, timeframe, open, high, low, close, volume)
                 VALUES ($1, $2, '1m', $3, $4, $5, $6, $7)
             """, bar['timestamp'], bar['symbol'], bar['open'], bar['high'], bar['low'], bar['close'], bar['volume'])
-        
+
         print(f"✅ Inserted {len(bars)} bars to PostgreSQL ohlcv_bars table")
 
 
 async def main():
     """Generate and seed historical price data."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Seed historical price data')
     parser.add_argument('--symbols', default='AAPL,MSFT,GOOGL,AMZN,NVDA,TSLA,SPY,QQQ',
                        help='Comma-separated symbols')
@@ -256,12 +256,12 @@ async def main():
     parser.add_argument('--target', default='postgres', choices=['questdb', 'postgres', 'both'],
                        help='Where to store data')
     parser.add_argument('--use-yahoo', action='store_true', help='Use Yahoo Finance for real data')
-    
+
     args = parser.parse_args()
     symbols = [s.strip().upper() for s in args.symbols.split(',')]
-    
+
     print(f"🚀 Generating {args.days} days of {args.timeframe} data for: {', '.join(symbols)}")
-    
+
     # Calculate number of bars
     bars_per_day = {
         '1m': 390,  # 6.5 hours * 60
@@ -273,18 +273,18 @@ async def main():
         '1d': 1,
     }
     n_bars = args.days * bars_per_day.get(args.timeframe, 390)
-    
+
     all_bars = []
-    
+
     if args.use_yahoo:
         try:
             import yfinance as yf
             print("📊 Fetching real data from Yahoo Finance...")
-            
+
             for symbol in symbols:
                 ticker = yf.Ticker(symbol)
                 hist = ticker.history(period=f"{args.days}d", interval=args.timeframe)
-                
+
                 for idx, row in hist.iterrows():
                     all_bars.append({
                         'timestamp': idx.to_pydatetime(),
@@ -296,18 +296,18 @@ async def main():
                         'volume': int(row['Volume']),
                     })
                 print(f"  ✓ {symbol}: {len(hist)} bars")
-                
+
         except ImportError:
             print("⚠️ yfinance not installed. Run: pip install yfinance")
             print("   Falling back to generated data...")
             args.use_yahoo = False
-    
+
     if not args.use_yahoo:
         print("📊 Generating synthetic price data...")
         for symbol in symbols:
             base_price = BASE_PRICES.get(symbol, 100.0)
             volatility = VOLATILITY.get(symbol, 0.02)
-            
+
             bars = generate_ohlcv_bars(
                 symbol=symbol,
                 base_price=base_price,
@@ -317,27 +317,27 @@ async def main():
             )
             all_bars.extend(bars)
             print(f"  ✓ {symbol}: {len(bars)} bars")
-    
+
     print(f"\n📈 Total bars generated: {len(all_bars)}")
-    
+
     # Initialize database connections
     from cift.core.database import db_manager
     await db_manager.initialize()
-    
+
     try:
         if args.target in ['postgres', 'both']:
             await seed_to_postgres(all_bars)
-        
+
         if args.target in ['questdb', 'both']:
             from cift.core.database import questdb_manager
             await questdb_manager.initialize()
             await seed_to_questdb(all_bars)
-            
+
     finally:
         await db_manager.close()
-    
+
     print("\n✅ Historical price data seeding complete!")
-    print(f"\nTo use real market data, get an API key from:")
+    print("\nTo use real market data, get an API key from:")
     print("  - Polygon.io: https://polygon.io/")
     print("  - Alpha Vantage: https://www.alphavantage.co/")
     print("  - Yahoo Finance (free): pip install yfinance")

@@ -1,7 +1,9 @@
 import argparse
-from azure.ai.ml import MLClient, command, Input
-from azure.ai.ml.entities import AmlCompute, Environment, BuildContext
+
+from azure.ai.ml import Input, MLClient, command
+from azure.ai.ml.entities import AmlCompute, BuildContext, Environment
 from azure.identity import DefaultAzureCredential
+
 
 def main():
     parser = argparse.ArgumentParser(description="Submit CIFT Walkforward Training to Azure ML")

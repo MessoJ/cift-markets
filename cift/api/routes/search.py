@@ -13,17 +13,15 @@ NO MOCK DATA - All results from PostgreSQL database.
 """
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, HTTPException, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from cift.core.auth import get_current_user_id
 from cift.core.database import get_postgres_pool
-
 
 # ============================================================================
 # ROUTER
@@ -41,11 +39,11 @@ class SearchResult(BaseModel):
     id: str
     type: str  # symbol, order, position, watchlist, news, asset
     title: str
-    subtitle: Optional[str] = None
-    description: Optional[str] = None
+    subtitle: str | None = None
+    description: str | None = None
     link: str
-    icon: Optional[str] = None
-    metadata: Optional[dict] = None
+    icon: str | None = None
+    metadata: dict | None = None
     relevance_score: float = 0.0
 
 
@@ -53,7 +51,7 @@ class SearchResponse(BaseModel):
     """Search response with categorized results"""
     query: str
     total_results: int
-    results: List[SearchResult]
+    results: list[SearchResult]
     categories: dict  # Count by type
     took_ms: float
 
@@ -66,36 +64,36 @@ class SearchResponse(BaseModel):
 async def global_search(
     q: str = Query(..., min_length=1, max_length=100, description="Search query"),
     limit: int = Query(20, ge=1, le=100, description="Max results to return"),
-    types: Optional[str] = Query(None, description="Comma-separated types to search: symbol,order,position,watchlist,news,asset"),
+    types: str | None = Query(None, description="Comma-separated types to search: symbol,order,position,watchlist,news,asset"),
     user_id: UUID = Depends(get_current_user_id),
     pool: asyncpg.Pool = Depends(get_postgres_pool),
 ):
     """
     Global search across all platform entities.
-    
+
     Searches:
     - Stock symbols (market data)
     - User orders
-    - User positions  
+    - User positions
     - User watchlists
     - News articles
     - Asset locations
-    
+
     Results are ranked by relevance and limited to requested count.
     """
     start_time = datetime.now()
-    
+
     # Parse search types filter
     search_types = types.split(',') if types else ['symbol', 'order', 'position', 'watchlist', 'news', 'asset']
     search_types = [t.strip() for t in search_types]
-    
+
     query_upper = q.upper()
     query_lower = q.lower()
     query_pattern = f"%{query_lower}%"
-    
+
     results = []
     categories = {}
-    
+
     try:
         async with pool.acquire() as conn:
             # ================================================================
@@ -120,7 +118,7 @@ async def global_search(
                         query_pattern,
                         limit
                     )
-                    
+
                     for row in symbol_rows:
                         change_indicator = "🟢" if row['change'] and row['change'] > 0 else "🔴" if row['change'] and row['change'] < 0 else "⚪"
                         results.append(SearchResult(
@@ -139,12 +137,12 @@ async def global_search(
                             },
                             relevance_score=100.0 if row['symbol'] == query_upper else 80.0
                         ))
-                    
+
                     categories['symbol'] = len(symbol_rows)
                 except Exception as e:
                     logger.warning(f"Symbol search failed: {e}")
                     categories['symbol'] = 0
-            
+
             # ================================================================
             # 2. SEARCH ORDERS
             # ================================================================
@@ -152,7 +150,7 @@ async def global_search(
                 try:
                     order_rows = await conn.fetch(
                         """
-                        SELECT 
+                        SELECT
                             id, symbol, side, order_type, quantity,
                             filled_quantity, limit_price, status,
                             created_at
@@ -170,7 +168,7 @@ async def global_search(
                         query_pattern,
                         limit
                     )
-                    
+
                     for row in order_rows:
                         status_emoji = {"pending": "⏳", "filled": "✅", "cancelled": "❌", "rejected": "🚫"}.get(row['status'], "📋")
                         results.append(SearchResult(
@@ -189,12 +187,12 @@ async def global_search(
                             },
                             relevance_score=70.0
                         ))
-                    
+
                     categories['order'] = len(order_rows)
                 except Exception as e:
                     logger.warning(f"Order search failed: {e}")
                     categories['order'] = 0
-            
+
             # ================================================================
             # 3. SEARCH POSITIONS
             # ================================================================
@@ -202,7 +200,7 @@ async def global_search(
                 try:
                     position_rows = await conn.fetch(
                         """
-                        SELECT 
+                        SELECT
                             id, symbol, quantity, avg_cost,
                             current_price, unrealized_pnl, unrealized_pnl_pct,
                             market_value
@@ -217,7 +215,7 @@ async def global_search(
                         query_pattern,
                         limit
                     )
-                    
+
                     for row in position_rows:
                         pnl_emoji = "🟢" if row['unrealized_pnl'] and row['unrealized_pnl'] > 0 else "🔴" if row['unrealized_pnl'] and row['unrealized_pnl'] < 0 else "⚪"
                         results.append(SearchResult(
@@ -236,12 +234,12 @@ async def global_search(
                             },
                             relevance_score=90.0
                         ))
-                    
+
                     categories['position'] = len(position_rows)
                 except Exception as e:
                     logger.warning(f"Position search failed: {e}")
                     categories['position'] = 0
-            
+
             # ================================================================
             # 4. SEARCH WATCHLISTS
             # ================================================================
@@ -249,7 +247,7 @@ async def global_search(
                 try:
                     watchlist_rows = await conn.fetch(
                         """
-                        SELECT 
+                        SELECT
                             id, name, description, symbols, is_default,
                             created_at
                         FROM watchlists
@@ -267,7 +265,7 @@ async def global_search(
                         query_upper,
                         limit
                     )
-                    
+
                     for row in watchlist_rows:
                         results.append(SearchResult(
                             id=str(row['id']),
@@ -283,12 +281,12 @@ async def global_search(
                             },
                             relevance_score=60.0
                         ))
-                    
+
                     categories['watchlist'] = len(watchlist_rows)
                 except Exception as e:
                     logger.warning(f"Watchlist search failed: {e}")
                     categories['watchlist'] = 0
-            
+
             # ================================================================
             # 5. SEARCH NEWS ARTICLES
             # ================================================================
@@ -296,11 +294,11 @@ async def global_search(
                 try:
                     news_rows = await conn.fetch(
                         """
-                        SELECT 
+                        SELECT
                             id, title, summary, category, sentiment,
                             published_at, url
                         FROM news_articles
-                        WHERE 
+                        WHERE
                             title ILIKE $1
                             OR summary ILIKE $1
                             OR category ILIKE $1
@@ -310,7 +308,7 @@ async def global_search(
                         query_pattern,
                         limit
                     )
-                    
+
                     for row in news_rows:
                         sentiment_emoji = {"positive": "😊", "negative": "😟", "neutral": "😐"}.get(row['sentiment'], "📰")
                         results.append(SearchResult(
@@ -328,12 +326,12 @@ async def global_search(
                             },
                             relevance_score=50.0
                         ))
-                    
+
                     categories['news'] = len(news_rows)
                 except Exception as e:
                     logger.warning(f"News search failed: {e}")
                     categories['news'] = 0
-            
+
             # ================================================================
             # 6. SEARCH ASSET LOCATIONS
             # ================================================================
@@ -341,7 +339,7 @@ async def global_search(
                 try:
                     asset_rows = await conn.fetch(
                         """
-                        SELECT 
+                        SELECT
                             id, code, name, asset_type, country,
                             city, importance_score
                         FROM asset_locations
@@ -358,7 +356,7 @@ async def global_search(
                         query_pattern,
                         limit
                     )
-                    
+
                     for row in asset_rows:
                         type_emoji = {
                             'central_bank': '🏦',
@@ -367,7 +365,7 @@ async def global_search(
                             'tech_hq': '💻',
                             'energy': '⚡'
                         }.get(row['asset_type'], '🌍')
-                        
+
                         results.append(SearchResult(
                             id=str(row['id']),
                             type='asset',
@@ -383,30 +381,30 @@ async def global_search(
                             },
                             relevance_score=float(row['importance_score']) / 100 * 50
                         ))
-                    
+
                     categories['asset'] = len(asset_rows)
                 except Exception as e:
                     logger.warning(f"Asset search failed: {e}")
                     categories['asset'] = 0
-    
+
     except Exception as e:
         logger.error(f"Global search error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Search failed"
         )
-    
+
     # Sort results by relevance score
     results.sort(key=lambda x: x.relevance_score, reverse=True)
-    
+
     # Limit total results
     results = results[:limit]
-    
+
     # Calculate elapsed time
     elapsed_ms = (datetime.now() - start_time).total_seconds() * 1000
-    
+
     logger.info(f"Search '{q}' returned {len(results)} results in {elapsed_ms:.2f}ms")
-    
+
     return SearchResponse(
         query=q,
         total_results=len(results),
@@ -416,7 +414,7 @@ async def global_search(
     )
 
 
-@router.get("/suggestions", response_model=List[str])
+@router.get("/suggestions", response_model=list[str])
 async def get_search_suggestions(
     q: str = Query(..., min_length=1, max_length=50),
     limit: int = Query(10, ge=1, le=20),
@@ -424,12 +422,12 @@ async def get_search_suggestions(
 ):
     """
     Get search suggestions/autocomplete.
-    
+
     Returns popular symbols and terms matching the query.
     Super fast for typeahead/autocomplete.
     """
     query_pattern = f"{q.upper()}%"
-    
+
     try:
         async with pool.acquire() as conn:
             # Get symbol suggestions
@@ -444,11 +442,11 @@ async def get_search_suggestions(
                 query_pattern,
                 limit
             )
-            
+
             suggestions = [row['symbol'] for row in rows]
-            
+
             return suggestions
-    
+
     except Exception as e:
         logger.error(f"Suggestions error: {e}")
         return []

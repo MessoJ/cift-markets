@@ -6,15 +6,13 @@ Phase 5-7 stack: ClickHouse + Polars + Dragonfly + PostgreSQL fallback
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from loguru import logger
 
-from cift.core.auth import get_current_active_user, User
+from cift.core.auth import User, get_current_active_user
 from cift.core.database import db_manager
-
 
 router = APIRouter(prefix="/drilldowns", tags=["Drilldowns"])
 
@@ -34,12 +32,12 @@ async def get_order_detail(
 ):
     """
     Complete order execution breakdown with fills and quality metrics.
-    
+
     **Returns:**
     - Order details with all fills
     - Execution quality (slippage, fill rate, latency)
     - Order timeline/audit trail
-    
+
     Performance: ~3-5ms
     """
     async with db_manager.pool.acquire() as conn:
@@ -47,41 +45,41 @@ async def get_order_detail(
             "SELECT * FROM orders WHERE id = $1 AND user_id = $2",
             order_id, user_id
         )
-        
+
         if not order_row:
             raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
-        
+
         order = dict(order_row)
-        
+
         # Get all fills
         fill_rows = await conn.fetch("""
-            SELECT 
+            SELECT
                 id as fill_id, fill_quantity as quantity, fill_price as price,
                 fill_value as value, commission, execution_venue as venue,
                 filled_at as timestamp, liquidity_flag
             FROM order_fills WHERE order_id = $1 ORDER BY filled_at ASC
         """, order_id)
-        
+
         fills = [dict(row) for row in fill_rows]
-        
+
         # Calculate execution quality
         if fills:
             total_qty = sum(f['quantity'] for f in fills)
             vwap = sum(f['quantity'] * f['price'] for f in fills) / total_qty
             total_comm = sum(f['commission'] for f in fills)
-            
+
             slippage_bps = None
             if order['limit_price']:
                 if order['side'] == 'buy':
                     slippage_bps = ((vwap - order['limit_price']) / order['limit_price']) * 10000
                 else:
                     slippage_bps = ((order['limit_price'] - vwap) / order['limit_price']) * 10000
-            
+
             time_to_fill_ms = None
             if order['created_at'] and fills[0]['timestamp']:
                 delta = fills[0]['timestamp'] - order['created_at']
                 time_to_fill_ms = int(delta.total_seconds() * 1000)
-            
+
             execution_quality = {
                 "avg_fill_price": round(float(vwap), 4),
                 "vwap": round(float(vwap), 4),
@@ -97,7 +95,7 @@ async def get_order_detail(
                 "fill_rate": 0, "num_fills": 0, "total_commission": 0,
                 "time_to_first_fill_ms": None
             }
-        
+
         # Build timeline
         timeline = []
         if order['created_at']:
@@ -115,7 +113,7 @@ async def get_order_detail(
             timeline.append({"event": "cancelled", "timestamp": order['cancelled_at'].isoformat()})
         if order['filled_at']:
             timeline.append({"event": "completed", "timestamp": order['filled_at'].isoformat()})
-    
+
     return {
         "order": order,
         "fills": fills,
@@ -135,14 +133,15 @@ async def get_symbol_order_history(
     Performance: ~5-10ms (PostgreSQL) or ~2-3ms (ClickHouse)
     """
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     # Try ClickHouse first (Phase 5-7)
     try:
-        from cift.core.clickhouse_manager import get_clickhouse_manager
         import polars as pl
-        
+
+        from cift.core.clickhouse_manager import get_clickhouse_manager
+
         ch = await get_clickhouse_manager()
-        
+
         query = f"""
             SELECT * FROM orders
             WHERE user_id = '{user_id}' AND symbol = '{symbol.upper()}'
@@ -150,21 +149,21 @@ async def get_symbol_order_history(
             ORDER BY created_at DESC
             FORMAT JSONEachRow
         """
-        
+
         result = await ch.query(query)
         df = pl.read_ndjson(result.encode())
         orders = df.to_dicts()
-        
+
         # Calculate stats with Polars
         filled_df = df.filter(pl.col('status').is_in(['filled', 'partial']))
         total_volume = filled_df['filled_quantity'].sum() if len(filled_df) > 0 else 0
         total_commission = filled_df['commission'].sum() if len(filled_df) > 0 else 0
-        
+
         logger.info("✅ Symbol order history via ClickHouse + Polars")
-        
+
     except Exception as e:
         logger.warning(f"ClickHouse unavailable, using PostgreSQL: {e}")
-        
+
         # Fallback to PostgreSQL
         async with db_manager.pool.acquire() as conn:
             orders = await conn.fetch("""
@@ -173,23 +172,23 @@ async def get_symbol_order_history(
                 ORDER BY created_at DESC
             """, user_id, symbol.upper(), start_date)
             orders = [dict(o) for o in orders]
-            
+
             filled = [o for o in orders if o['status'] in ('filled', 'partial')]
             total_volume = sum(float(o['filled_quantity'] or 0) for o in filled)
             total_commission = sum(float(o['commission'] or 0) for o in filled)
-    
+
     # Get P&L stats
     async with db_manager.pool.acquire() as conn:
         pnl_data = await conn.fetch("""
             SELECT realized_pnl FROM position_history
             WHERE user_id = $1 AND symbol = $2
         """, user_id, symbol.upper())
-        
+
         total_pnl = sum(float(row['realized_pnl']) for row in pnl_data)
         profitable = sum(1 for row in pnl_data if row['realized_pnl'] > 0)
         total_trades = len(pnl_data)
         win_rate = (profitable / total_trades * 100) if total_trades > 0 else 0
-    
+
     return {
         "symbol": symbol.upper(),
         "orders": orders,
@@ -222,19 +221,19 @@ async def get_position_detail(
             "SELECT * FROM positions WHERE user_id = $1 AND symbol = $2",
             user_id, symbol.upper()
         )
-        
+
         if not position_row:
             raise HTTPException(status_code=404, detail=f"No position for {symbol}")
-        
+
         position = dict(position_row)
-        
+
         # Cost basis lots
         lots = await conn.fetch("""
             SELECT * FROM position_lots
             WHERE user_id = $1 AND symbol = $2 AND is_closed = FALSE
             ORDER BY purchase_date ASC
         """, user_id, symbol.upper())
-        
+
         # Entry orders
         entry_orders = await conn.fetch("""
             SELECT id, side, quantity, filled_quantity, avg_fill_price, created_at
@@ -242,7 +241,7 @@ async def get_position_detail(
             WHERE user_id = $1 AND symbol = $2 AND side = 'buy' AND status = 'filled'
             ORDER BY created_at DESC LIMIT 10
         """, user_id, symbol.upper())
-        
+
         # P&L timeline
         pnl_timeline = await conn.fetch("""
             SELECT timestamp, unrealized_pnl, unrealized_pnl_pct, day_pnl
@@ -250,19 +249,19 @@ async def get_position_detail(
             WHERE user_id = $1 AND symbol = $2
             ORDER BY timestamp DESC LIMIT 30
         """, user_id, symbol.upper())
-        
+
         # Risk metrics
         from cift.core.trading_queries import get_portfolio_value
         portfolio_value = await get_portfolio_value(user_id)
         position_value = float(position['market_value'] or 0)
         portfolio_weight = (position_value / portfolio_value * 100) if portfolio_value > 0 else 0
-        
+
         risk_metrics = {
             "portfolio_weight_pct": round(float(portfolio_weight), 2),
             "position_value": round(position_value, 2),
             "concentration_risk": "high" if portfolio_weight > 20 else "medium" if portfolio_weight > 10 else "low"
         }
-    
+
     return {
         "position": position,
         "cost_basis_lots": [dict(l) for l in lots],
@@ -274,7 +273,7 @@ async def get_position_detail(
 
 @router.get("/positions/history")
 async def get_position_history(
-    symbol: Optional[str] = Query(None),
+    symbol: str | None = Query(None),
     days: int = Query(90, ge=1, le=365),
     user_id: UUID = Depends(get_current_user_id),
 ):
@@ -283,32 +282,32 @@ async def get_position_history(
     Performance: ~5-10ms
     """
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     query = """
         SELECT * FROM position_history
         WHERE user_id = $1 AND closed_at >= $2
     """
     params = [user_id, start_date]
-    
+
     if symbol:
         query += " AND symbol = $3"
         params.append(symbol.upper())
-    
+
     query += " ORDER BY closed_at DESC"
-    
+
     async with db_manager.pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
         positions = [dict(row) for row in rows]
-        
+
         total_pnl = sum(float(p['realized_pnl']) for p in positions)
         profitable = sum(1 for p in positions if p['realized_pnl'] > 0)
         total = len(positions)
         win_rate = (profitable / total * 100) if total > 0 else 0
-        
+
         avg_win = sum(float(p['realized_pnl']) for p in positions if p['realized_pnl'] > 0) / profitable if profitable > 0 else 0
         losing = [p for p in positions if p['realized_pnl'] < 0]
         avg_loss = sum(float(p['realized_pnl']) for p in losing) / len(losing) if losing else 0
-    
+
     return {
         "positions": positions,
         "summary": {
@@ -338,14 +337,15 @@ async def get_equity_curve(
     Performance: ~3-5ms (ClickHouse) or ~10-15ms (PostgreSQL)
     """
     start_date = datetime.utcnow() - timedelta(days=days)
-    
+
     # Try ClickHouse first
     try:
-        from cift.core.clickhouse_manager import get_clickhouse_manager
         import polars as pl
-        
+
+        from cift.core.clickhouse_manager import get_clickhouse_manager
+
         ch = await get_clickhouse_manager()
-        
+
         # Group by resolution
         if resolution == "hourly":
             group_expr = "toStartOfHour(timestamp)"
@@ -353,9 +353,9 @@ async def get_equity_curve(
             group_expr = "toStartOfWeek(timestamp)"
         else:
             group_expr = "toDate(timestamp)"
-        
+
         query = f"""
-            SELECT 
+            SELECT
                 {group_expr} as timestamp,
                 avg(total_value) as value,
                 avg(cash) as cash,
@@ -368,18 +368,18 @@ async def get_equity_curve(
             ORDER BY timestamp ASC
             FORMAT JSONEachRow
         """
-        
+
         result = await ch.query(query)
         df = pl.read_ndjson(result.encode())
-        
+
         logger.info("✅ Equity curve via ClickHouse")
         return {"data": df.to_dicts(), "resolution": resolution, "_backend": "clickhouse"}
-        
+
     except Exception:
         # Fallback to PostgreSQL
         async with db_manager.pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT 
+                SELECT
                     DATE_TRUNC('day', timestamp) as timestamp,
                     AVG(total_value) as value,
                     AVG(cash) as cash,
@@ -390,7 +390,7 @@ async def get_equity_curve(
                 GROUP BY DATE_TRUNC('day', timestamp)
                 ORDER BY timestamp ASC
             """, user_id, start_date)
-        
+
         return {"data": [dict(r) for r in rows], "resolution": resolution, "_backend": "postgresql"}
 
 
@@ -402,18 +402,18 @@ async def get_portfolio_allocation(
     Portfolio breakdown by symbol, sector, size.
     Performance: ~3-5ms
     """
-    from cift.core.trading_queries import get_user_positions, get_portfolio_value
-    
+    from cift.core.trading_queries import get_portfolio_value, get_user_positions
+
     positions = await get_user_positions(user_id)
     portfolio_value = await get_portfolio_value(user_id)
-    
+
     if portfolio_value == 0:
         return {
             "by_symbol": [],
             "by_size": {"small": [], "medium": [], "large": []},
             "cash_allocation": 100.0
         }
-    
+
     # By symbol
     by_symbol = []
     for pos in positions:
@@ -425,18 +425,18 @@ async def get_portfolio_allocation(
             "weight_pct": round(weight, 2),
             "pnl": round(float(pos['unrealized_pnl']), 2)
         })
-    
+
     # Sort by weight
     by_symbol.sort(key=lambda x: x['weight_pct'], reverse=True)
-    
+
     # By size category
     large = [p for p in by_symbol if p['weight_pct'] > 10]
     medium = [p for p in by_symbol if 5 < p['weight_pct'] <= 10]
     small = [p for p in by_symbol if p['weight_pct'] <= 5]
-    
+
     total_invested = sum(p['value'] for p in by_symbol)
     cash_pct = ((portfolio_value - total_invested) / portfolio_value * 100) if portfolio_value > 0 else 0
-    
+
     return {
         "by_symbol": by_symbol[:20],  # Top 20
         "by_size": {

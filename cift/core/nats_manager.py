@@ -4,19 +4,21 @@ Provides async message streaming with sub-millisecond latency
 """
 
 import asyncio
-from typing import Optional, Callable, Dict, Any, List
-from loguru import logger
-import nats
-from nats.js.api import StreamConfig, ConsumerConfig, RetentionPolicy
-from nats.js import JetStreamContext
-import msgpack
+from collections.abc import Callable
 from datetime import timedelta
+from typing import Any
+
+import msgpack
+import nats
+from loguru import logger
+from nats.js import JetStreamContext
+from nats.js.api import RetentionPolicy, StreamConfig
 
 
 class NATSManager:
     """
     High-performance NATS JetStream manager
-    
+
     Features:
     - Sub-millisecond message delivery
     - Persistent streams with replay capability
@@ -27,9 +29,9 @@ class NATSManager:
 
     def __init__(self, nats_url: str = "nats://localhost:4222"):
         self.nats_url = nats_url
-        self.nc: Optional[nats.NATS] = None
-        self.js: Optional[JetStreamContext] = None
-        self.subscriptions: Dict[str, Any] = {}
+        self.nc: nats.NATS | None = None
+        self.js: JetStreamContext | None = None
+        self.subscriptions: dict[str, Any] = {}
         self.streams_created: set = set()
 
     async def connect(self) -> None:
@@ -42,13 +44,13 @@ class NATSManager:
                 ping_interval=20,
                 max_outstanding_pings=5,
             )
-            
+
             self.js = self.nc.jetstream()
             logger.info(f"Connected to NATS JetStream at {self.nats_url}")
-            
+
             # Create default streams
             await self._create_default_streams()
-            
+
         except Exception as e:
             logger.error(f"Failed to connect to NATS: {e}")
             raise
@@ -62,7 +64,7 @@ class NATSManager:
 
     async def _create_default_streams(self) -> None:
         """Create default JetStream streams for trading data"""
-        
+
         # Market data stream (high-throughput)
         await self._ensure_stream(
             name="MARKET_DATA",
@@ -71,7 +73,7 @@ class NATSManager:
             max_age=timedelta(hours=24),
             retention=RetentionPolicy.LIMITS,
         )
-        
+
         # Orders stream (persistent, critical data)
         await self._ensure_stream(
             name="ORDERS",
@@ -80,7 +82,7 @@ class NATSManager:
             max_age=timedelta(days=30),
             retention=RetentionPolicy.WORK_QUEUE,
         )
-        
+
         # Signals stream (ML predictions)
         await self._ensure_stream(
             name="SIGNALS",
@@ -89,7 +91,7 @@ class NATSManager:
             max_age=timedelta(hours=48),
             retention=RetentionPolicy.LIMITS,
         )
-        
+
         # Events stream (system events)
         await self._ensure_stream(
             name="EVENTS",
@@ -102,7 +104,7 @@ class NATSManager:
     async def _ensure_stream(
         self,
         name: str,
-        subjects: List[str],
+        subjects: list[str],
         max_msgs: int = 1_000_000,
         max_age: timedelta = timedelta(hours=24),
         retention: RetentionPolicy = RetentionPolicy.LIMITS,
@@ -110,7 +112,7 @@ class NATSManager:
         """Create stream if it doesn't exist"""
         if name in self.streams_created:
             return
-            
+
         try:
             await self.js.stream_info(name)
             logger.info(f"Stream '{name}' already exists")
@@ -125,21 +127,21 @@ class NATSManager:
                 storage=nats.js.api.StorageType.FILE,
                 discard=nats.js.api.DiscardPolicy.OLD,
             )
-            
+
             await self.js.add_stream(config)
             logger.info(f"Created stream '{name}' with subjects {subjects}")
-        
+
         self.streams_created.add(name)
 
     async def publish(
         self,
         subject: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         use_msgpack: bool = True,
     ) -> None:
         """
         Publish message to NATS JetStream
-        
+
         Args:
             subject: Message subject (e.g., "market.ticks.AAPL")
             data: Message payload (will be serialized)
@@ -152,14 +154,14 @@ class NATSManager:
             else:
                 import json
                 payload = json.dumps(data).encode()
-            
+
             # Publish to JetStream (persistent)
             ack = await self.js.publish(subject, payload)
-            
+
             logger.debug(
                 f"Published to '{subject}': stream={ack.stream}, seq={ack.seq}"
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to publish to '{subject}': {e}")
             raise
@@ -167,7 +169,7 @@ class NATSManager:
     async def publish_batch(
         self,
         subject: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         use_msgpack: bool = True,
     ) -> None:
         """Publish multiple messages efficiently"""
@@ -181,13 +183,13 @@ class NATSManager:
         self,
         subject: str,
         callback: Callable,
-        durable_name: Optional[str] = None,
-        queue_group: Optional[str] = None,
+        durable_name: str | None = None,
+        queue_group: str | None = None,
         use_msgpack: bool = True,
     ) -> None:
         """
         Subscribe to NATS JetStream subject
-        
+
         Args:
             subject: Subject pattern (e.g., "market.ticks.*")
             callback: Async callback function(msg_data: dict)
@@ -204,18 +206,18 @@ class NATSManager:
                     else:
                         import json
                         data = json.loads(msg.data.decode())
-                    
+
                     # Call user callback
                     await callback(data)
-                    
+
                     # Acknowledge message
                     await msg.ack()
-                    
+
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
                     # Negative acknowledgment (will be redelivered)
                     await msg.nak()
-            
+
             # Create pull or push subscription based on parameters
             if durable_name:
                 # Durable pull subscription
@@ -223,10 +225,10 @@ class NATSManager:
                     subject,
                     durable=durable_name,
                 )
-                
+
                 # Start pull loop
                 asyncio.create_task(self._pull_messages(sub, message_handler))
-                
+
             else:
                 # Push subscription
                 sub = await self.js.subscribe(
@@ -234,10 +236,10 @@ class NATSManager:
                     cb=message_handler,
                     queue=queue_group,
                 )
-            
+
             self.subscriptions[subject] = sub
             logger.info(f"Subscribed to '{subject}' (durable={durable_name})")
-            
+
         except Exception as e:
             logger.error(f"Failed to subscribe to '{subject}': {e}")
             raise
@@ -248,14 +250,14 @@ class NATSManager:
             try:
                 # Fetch batch of messages
                 messages = await subscription.fetch(batch=10, timeout=1.0)
-                
+
                 # Process messages concurrently
                 await asyncio.gather(
                     *[handler(msg) for msg in messages],
                     return_exceptions=True
                 )
-                
-            except asyncio.TimeoutError:
+
+            except TimeoutError:
                 # No messages available, continue
                 await asyncio.sleep(0.1)
             except Exception as e:
@@ -265,18 +267,18 @@ class NATSManager:
     async def request(
         self,
         subject: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         timeout: float = 1.0,
         use_msgpack: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Request-reply pattern (synchronous RPC)
-        
+
         Args:
             subject: Request subject
             data: Request data
             timeout: Response timeout in seconds
-            
+
         Returns:
             Response data
         """
@@ -287,29 +289,29 @@ class NATSManager:
             else:
                 import json
                 payload = json.dumps(data).encode()
-            
+
             # Send request and wait for response
             response = await self.nc.request(
                 subject,
                 payload,
                 timeout=timeout,
             )
-            
+
             # Deserialize response
             if use_msgpack:
                 return msgpack.unpackb(response.data, raw=False)
             else:
                 import json
                 return json.loads(response.data.decode())
-            
-        except asyncio.TimeoutError:
+
+        except TimeoutError:
             logger.error(f"Request to '{subject}' timed out")
             raise
         except Exception as e:
             logger.error(f"Request to '{subject}' failed: {e}")
             raise
 
-    async def get_stream_info(self, stream_name: str) -> Dict[str, Any]:
+    async def get_stream_info(self, stream_name: str) -> dict[str, Any]:
         """Get information about a stream"""
         try:
             info = await self.js.stream_info(stream_name)
@@ -360,26 +362,26 @@ class NATSManager:
 
 
 # Global NATS manager instance
-_nats_manager: Optional[NATSManager] = None
+_nats_manager: NATSManager | None = None
 
 
 async def get_nats_manager() -> NATSManager:
     """Get or create global NATS manager instance"""
     global _nats_manager
-    
+
     if _nats_manager is None:
         import os
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
         _nats_manager = NATSManager(nats_url)
         await _nats_manager.connect()
-    
+
     return _nats_manager
 
 
 async def close_nats_manager() -> None:
     """Close global NATS manager"""
     global _nats_manager
-    
+
     if _nats_manager is not None:
         await _nats_manager.disconnect()
         _nats_manager = None

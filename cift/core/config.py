@@ -7,7 +7,7 @@ Centralized configuration using Pydantic Settings for type safety and validation
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
     alpaca_base_url: str = "https://paper-api.alpaca.markets"
-    
+
     @property
     def is_alpaca_configured(self) -> bool:
         """Check if Alpaca is configured."""
@@ -145,11 +145,11 @@ class Settings(BaseSettings):
     # SMS Configuration
     sms_provider: Literal["twilio", "africas_talking", "aws_sns"] = "twilio"
     sms_from_number: str = ""
-    
+
     # Twilio
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
-    
+
     # Africa's Talking
     africas_talking_username: str = ""
     africas_talking_api_key: str = ""
@@ -230,7 +230,7 @@ class Settings(BaseSettings):
         return v
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()

@@ -1,9 +1,10 @@
 import asyncio
-import asyncpg
 import os
 import random
-from decimal import Decimal
 from datetime import datetime, timedelta
+from decimal import Decimal
+
+import asyncpg
 
 # DB Config
 DB_USER = os.getenv("POSTGRES_USER", "cift_user")
@@ -29,7 +30,7 @@ async def generate_activity():
     if not row:
         print("No existing transactions found. Cannot link activity.")
         return
-        
+
     user_id = row['user_id']
     account_id = row['account_id']
 
@@ -40,15 +41,15 @@ async def generate_activity():
         date = base_date - timedelta(days=30 * (i + 1))
         # Check if fee exists for this month
         exists = await conn.fetchval("""
-            SELECT 1 FROM transactions 
-            WHERE transaction_type = 'fee' 
+            SELECT 1 FROM transactions
+            WHERE transaction_type = 'fee'
             AND date_trunc('month', transaction_date) = date_trunc('month', $1::timestamp)
         """, date)
-        
+
         if not exists:
             await conn.execute("""
                 INSERT INTO transactions (
-                    user_id, account_id, transaction_type, amount, balance_after, 
+                    user_id, account_id, transaction_type, amount, balance_after,
                     description, transaction_date, created_at
                 ) VALUES ($1, $2, 'fee', -15.00, 0, 'Monthly Platform Data Fee', $3, NOW())
             """, user_id, account_id, date)
@@ -61,10 +62,10 @@ async def generate_activity():
         for i in range(2): # Last 2 quarters
             date = base_date - timedelta(days=90 * (i + 1))
             amount = Decimal(random.uniform(15.0, 45.0)).quantize(Decimal("0.01"))
-            
+
             await conn.execute("""
                 INSERT INTO transactions (
-                    user_id, account_id, transaction_type, amount, balance_after, 
+                    user_id, account_id, transaction_type, amount, balance_after,
                     symbol, description, transaction_date, created_at
                 ) VALUES ($1, $2, 'dividend', $3, 0, $4, $5, $6, NOW())
             """, user_id, account_id, amount, stock, f"{stock} Quarterly Dividend", date)
@@ -75,7 +76,7 @@ async def generate_activity():
     w_date = base_date - timedelta(days=45)
     await conn.execute("""
         INSERT INTO transactions (
-            user_id, account_id, transaction_type, amount, balance_after, 
+            user_id, account_id, transaction_type, amount, balance_after,
             description, transaction_date, created_at
         ) VALUES ($1, $2, 'withdrawal', -2500.00, 0, 'Wire Transfer to Bank ****8821', $3, NOW())
     """, user_id, account_id, w_date)
@@ -84,13 +85,13 @@ async def generate_activity():
     # 4. Recalculate ALL Balances (Crucial)
     print("Recalculating all balances...")
     txns = await conn.fetch("SELECT id, amount FROM transactions ORDER BY transaction_date ASC")
-    
+
     balance = Decimal(0)
     for txn in txns:
         amount = txn['amount']
         balance += amount
         await conn.execute("UPDATE transactions SET balance_after = $1 WHERE id = $2", balance, txn['id'])
-        
+
     print(f"Balances updated for {len(txns)} transactions.")
     await conn.close()
 

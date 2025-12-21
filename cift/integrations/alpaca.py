@@ -5,7 +5,7 @@ Real-time market data and trading execution via Alpaca API.
 
 Features:
 - Real-time market data streaming
-- Historical data retrieval  
+- Historical data retrieval
 - Order submission and management
 - Account information
 - WebSocket streaming
@@ -15,15 +15,13 @@ API Documentation: https://alpaca.markets/docs/api-documentation/
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
 from enum import Enum
+from typing import Any
 
 import aiohttp
 from loguru import logger
 
 from cift.core.config import settings
-from cift.core.database import questdb_manager, redis_manager
-
 
 # ============================================================================
 # CONSTANTS
@@ -53,19 +51,19 @@ class TimeFrame(str, Enum):
 class AlpacaClient:
     """
     Async Alpaca API client for market data and trading.
-    
+
     High-performance async implementation with connection pooling.
     """
-    
+
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        secret_key: Optional[str] = None,
+        api_key: str | None = None,
+        secret_key: str | None = None,
         paper_trading: bool = True
     ):
         """
         Initialize Alpaca client.
-        
+
         Args:
             api_key: Alpaca API key (defaults to config)
             secret_key: Alpaca secret key (defaults to config)
@@ -73,93 +71,93 @@ class AlpacaClient:
         """
         self.api_key = api_key or settings.alpaca_api_key
         self.secret_key = secret_key or settings.alpaca_secret_key
-        
+
         # Don't raise error here, check in _request or is_configured
-        
+
         self.base_url = (
             AlpacaEndpoint.PAPER if paper_trading else AlpacaEndpoint.LIVE
         )
         self.data_url = AlpacaEndpoint.DATA
-        
-        self.session: Optional[aiohttp.ClientSession] = None
+
+        self.session: aiohttp.ClientSession | None = None
         self._initialized = False
-    
+
     @property
     def is_configured(self) -> bool:
         """Check if API keys are configured."""
         return bool(self.api_key and self.secret_key)
-    
+
     async def initialize(self):
         """Initialize HTTP session with connection pooling."""
         if self._initialized:
             return
-            
+
         if not self.is_configured:
             logger.warning("Alpaca client initialized without API keys")
-        
+
         connector = aiohttp.TCPConnector(
             limit=100,  # Max connections
             limit_per_host=30,
             ttl_dns_cache=300
         )
-        
+
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
-        
+
         self.session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
             headers=self._get_headers()
         )
-        
+
         self._initialized = True
         logger.info("Alpaca client initialized")
-    
+
     async def close(self):
         """Close HTTP session."""
         if self.session:
             await self.session.close()
             self._initialized = False
             logger.info("Alpaca client closed")
-    
-    def _get_headers(self) -> Dict[str, str]:
+
+    def _get_headers(self) -> dict[str, str]:
         """Get authentication headers."""
         return {
             "APCA-API-KEY-ID": self.api_key,
             "APCA-API-SECRET-KEY": self.secret_key,
         }
-    
+
     async def _request(
         self,
         method: str,
         endpoint: str,
-        params: Optional[Dict] = None,
-        json: Optional[Dict] = None,
-        base_url: Optional[str] = None
-    ) -> Dict[str, Any]:
+        params: dict | None = None,
+        json: dict | None = None,
+        base_url: str | None = None
+    ) -> dict[str, Any]:
         """
         Make HTTP request to Alpaca API.
-        
+
         Args:
             method: HTTP method
             endpoint: API endpoint
             params: Query parameters
             json: JSON body
             base_url: Override base URL
-            
+
         Returns:
             JSON response
-            
+
         Raises:
             Exception: If request fails
         """
         if not self._initialized:
             await self.initialize()
-            
+
         if not self.is_configured:
             raise ValueError("Alpaca API keys not configured. Please set ALPACA_API_KEY and ALPACA_SECRET_KEY.")
-        
+
         url = f"{base_url or self.base_url}{endpoint}"
-        
+
         try:
             async with self.session.request(
                 method,
@@ -169,63 +167,63 @@ class AlpacaClient:
             ) as response:
                 response.raise_for_status()
                 return await response.json()
-        
+
         except aiohttp.ClientResponseError as e:
             logger.error(f"Alpaca API error: {e.status} - {e.message}")
             raise
-        
+
         except Exception as e:
             logger.error(f"Alpaca request failed: {e}")
             raise
-    
+
     # ========================================================================
     # MARKET DATA
     # ========================================================================
-    
-    async def get_latest_quote(self, symbol: str) -> Dict[str, Any]:
+
+    async def get_latest_quote(self, symbol: str) -> dict[str, Any]:
         """
         Get latest quote for a symbol.
-        
+
         Args:
             symbol: Stock symbol
-            
+
         Returns:
             Latest quote data
         """
         endpoint = f"/v2/stocks/{symbol}/quotes/latest"
         return await self._request("GET", endpoint, base_url=self.data_url)
-    
-    async def get_latest_trade(self, symbol: str) -> Dict[str, Any]:
+
+    async def get_latest_trade(self, symbol: str) -> dict[str, Any]:
         """
         Get latest trade for a symbol.
-        
+
         Args:
             symbol: Stock symbol
-            
+
         Returns:
             Latest trade data
         """
         endpoint = f"/v2/stocks/{symbol}/trades/latest"
         return await self._request("GET", endpoint, base_url=self.data_url)
-    
+
     async def get_bars(
         self,
-        symbols: List[str],
+        symbols: list[str],
         timeframe: TimeFrame = TimeFrame.MIN_1,
-        start: Optional[datetime] = None,
-        end: Optional[datetime] = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
         limit: int = 1000
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get historical bars (OHLCV) for symbols.
-        
+
         Args:
             symbols: List of symbols
             timeframe: Bar timeframe
             start: Start date
             end: End date
             limit: Max bars to return
-            
+
         Returns:
             Historical bar data
         """
@@ -234,33 +232,33 @@ class AlpacaClient:
             "timeframe": timeframe.value,
             "limit": limit,
         }
-        
+
         if start:
             params["start"] = start.isoformat()
         if end:
             params["end"] = end.isoformat()
-        
+
         endpoint = "/v2/stocks/bars"
         return await self._request("GET", endpoint, params=params, base_url=self.data_url)
-    
-    async def get_snapshot(self, symbols: List[str]) -> Dict[str, Any]:
+
+    async def get_snapshot(self, symbols: list[str]) -> dict[str, Any]:
         """
         Get market snapshot for symbols (quotes, trades, bars).
-        
+
         Args:
             symbols: List of symbols
-            
+
         Returns:
             Snapshot data for all symbols
         """
         params = {"symbols": ",".join(symbols)}
         endpoint = "/v2/stocks/snapshots"
         return await self._request("GET", endpoint, params=params, base_url=self.data_url)
-    
+
     # ========================================================================
     # TRADING
     # ========================================================================
-    
+
     async def submit_order(
         self,
         symbol: str,
@@ -268,13 +266,13 @@ class AlpacaClient:
         side: str,
         order_type: str = "market",
         time_in_force: str = "day",
-        limit_price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-        client_order_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        limit_price: float | None = None,
+        stop_price: float | None = None,
+        client_order_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Submit order to Alpaca.
-        
+
         Args:
             symbol: Stock symbol
             qty: Order quantity
@@ -284,7 +282,7 @@ class AlpacaClient:
             limit_price: Limit price (for limit orders)
             stop_price: Stop price (for stop orders)
             client_order_id: Client-assigned order ID
-            
+
         Returns:
             Order data
         """
@@ -295,76 +293,76 @@ class AlpacaClient:
             "type": order_type,
             "time_in_force": time_in_force,
         }
-        
+
         if limit_price:
             data["limit_price"] = limit_price
         if stop_price:
             data["stop_price"] = stop_price
         if client_order_id:
             data["client_order_id"] = client_order_id
-        
+
         endpoint = "/v2/orders"
         return await self._request("POST", endpoint, json=data)
-    
-    async def get_order(self, order_id: str) -> Dict[str, Any]:
+
+    async def get_order(self, order_id: str) -> dict[str, Any]:
         """Get order by ID."""
         endpoint = f"/v2/orders/{order_id}"
         return await self._request("GET", endpoint)
-    
-    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+
+    async def cancel_order(self, order_id: str) -> dict[str, Any]:
         """Cancel order by ID."""
         endpoint = f"/v2/orders/{order_id}"
         return await self._request("DELETE", endpoint)
-    
-    async def get_open_orders(self) -> List[Dict[str, Any]]:
+
+    async def get_open_orders(self) -> list[dict[str, Any]]:
         """Get all open orders."""
         endpoint = "/v2/orders"
         params = {"status": "open"}
         return await self._request("GET", endpoint, params=params)
-    
-    async def get_positions(self) -> List[Dict[str, Any]]:
+
+    async def get_positions(self) -> list[dict[str, Any]]:
         """Get all positions."""
         endpoint = "/v2/positions"
         return await self._request("GET", endpoint)
-    
-    async def get_position(self, symbol: str) -> Dict[str, Any]:
+
+    async def get_position(self, symbol: str) -> dict[str, Any]:
         """Get position for symbol."""
         endpoint = f"/v2/positions/{symbol}"
         return await self._request("GET", endpoint)
-    
-    async def close_position(self, symbol: str) -> Dict[str, Any]:
+
+    async def close_position(self, symbol: str) -> dict[str, Any]:
         """Close position for symbol."""
         endpoint = f"/v2/positions/{symbol}"
         return await self._request("DELETE", endpoint)
-    
+
     # ========================================================================
     # ACCOUNT
     # ========================================================================
-    
-    async def get_account(self) -> Dict[str, Any]:
+
+    async def get_account(self) -> dict[str, Any]:
         """
         Get account information.
-        
+
         Returns:
             Account data (cash, buying power, equity, etc.)
         """
         endpoint = "/v2/account"
         return await self._request("GET", endpoint)
-    
+
     async def get_account_activities(
         self,
-        activity_types: Optional[List[str]] = None,
-        date: Optional[datetime] = None
-    ) -> List[Dict[str, Any]]:
+        activity_types: list[str] | None = None,
+        date: datetime | None = None
+    ) -> list[dict[str, Any]]:
         """Get account activities (trades, transactions, etc.)."""
         endpoint = "/v2/account/activities"
         params = {}
-        
+
         if activity_types:
             params["activity_types"] = ",".join(activity_types)
         if date:
             params["date"] = date.date().isoformat()
-        
+
         return await self._request("GET", endpoint, params=params)
 
 
@@ -373,13 +371,13 @@ class AlpacaClient:
 # ============================================================================
 
 async def ingest_historical_data(
-    symbols: List[str],
+    symbols: list[str],
     days: int = 30,
     timeframe: TimeFrame = TimeFrame.MIN_1
 ):
     """
     Ingest historical data from Alpaca to QuestDB.
-    
+
     Args:
         symbols: List of symbols to ingest
         days: Number of days of history
@@ -387,13 +385,13 @@ async def ingest_historical_data(
     """
     client = AlpacaClient()
     await client.initialize()
-    
+
     try:
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        
+
         logger.info(f"Ingesting {days} days of data for {len(symbols)} symbols...")
-        
+
         for symbol in symbols:
             try:
                 # Get bars from Alpaca
@@ -403,39 +401,39 @@ async def ingest_historical_data(
                     start=start_date,
                     end=end_date
                 )
-                
+
                 bars = response.get("bars", {}).get(symbol, [])
-                
+
                 if not bars:
                     logger.warning(f"No data for {symbol}")
                     continue
-                
+
                 # Insert to QuestDB
                 await _insert_bars_to_questdb(symbol, bars)
-                
+
                 logger.info(f"Ingested {len(bars)} bars for {symbol}")
-                
+
                 # Rate limiting
                 await asyncio.sleep(0.1)
-            
+
             except Exception as e:
                 logger.error(f"Error ingesting {symbol}: {e}")
                 continue
-    
+
     finally:
         await client.close()
 
 
-async def _insert_bars_to_questdb(symbol: str, bars: List[Dict]):
+async def _insert_bars_to_questdb(symbol: str, bars: list[dict]):
     """Insert bars to QuestDB using InfluxDB line protocol."""
     if not bars:
         return
-    
+
     # Build InfluxDB line protocol messages
     lines = []
     for bar in bars:
         timestamp = int(datetime.fromisoformat(bar["t"].replace("Z", "+00:00")).timestamp() * 1_000_000_000)
-        
+
         line = (
             f"ticks,symbol={symbol} "
             f"price={bar['c']},volume={bar['v']},"
@@ -443,7 +441,7 @@ async def _insert_bars_to_questdb(symbol: str, bars: List[Dict]):
             f"{timestamp}"
         )
         lines.append(line)
-    
+
     # Send to QuestDB via InfluxDB line protocol (port 9009)
     # TODO: Implement InfluxDB line protocol sender
     logger.debug(f"Would insert {len(lines)} bars for {symbol}")
@@ -456,25 +454,25 @@ async def _insert_bars_to_questdb(symbol: str, bars: List[Dict]):
 class AlpacaStreamer:
     """
     WebSocket stream for real-time market data.
-    
+
     TODO: Implement WebSocket streaming for Phase 2.
     """
-    
+
     def __init__(self, api_key: str, secret_key: str):
         self.api_key = api_key
         self.secret_key = secret_key
         self.ws = None
-    
+
     async def connect(self):
         """Connect to Alpaca WebSocket."""
         # TODO: Implement WebSocket connection
         pass
-    
-    async def subscribe(self, symbols: List[str]):
+
+    async def subscribe(self, symbols: list[str]):
         """Subscribe to symbols."""
         # TODO: Implement subscription
         pass
-    
+
     async def on_trade(self, callback):
         """Register trade callback."""
         # TODO: Implement callback

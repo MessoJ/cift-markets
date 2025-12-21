@@ -5,8 +5,6 @@ Production-grade database models with relationships, indexes, and validation.
 """
 
 import uuid
-from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     JSON,
@@ -15,7 +13,6 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
-    Integer,
     String,
     Text,
     func,
@@ -24,7 +21,6 @@ from sqlalchemy.dialects.postgresql import ARRAY, INET, UUID
 from sqlalchemy.orm import relationship
 
 from cift.core.database import Base
-
 
 # ============================================================================
 # USER MODELS
