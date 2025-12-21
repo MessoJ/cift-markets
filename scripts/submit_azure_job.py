@@ -41,6 +41,9 @@ def main():
 
     # Define the job
     # We use the Dockerfile.training to build the environment
+    import datetime
+    env_version = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    
     job = command(
         code="./",  # Upload current directory
         command="""python -m cift.cli walkforward \
@@ -65,7 +68,7 @@ def main():
         environment=Environment(
             build=BuildContext(path="./", dockerfile_path="Dockerfile.training"),
             name="cift-training-env",
-            version="1.0"
+            version=env_version
         ),
         compute=args.compute_name,
         display_name="cift-walkforward-brutal",
