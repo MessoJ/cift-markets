@@ -193,7 +193,7 @@ async def get_asset_locations(
 
     except Exception as e:
         logger.error(f"Error fetching asset locations: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch asset data")
+        raise HTTPException(status_code=500, detail="Failed to fetch asset data") from e
 
 
 @router.get("/{asset_id}")
@@ -307,7 +307,7 @@ async def get_asset_detail(
         raise
     except Exception as e:
         logger.error(f"Error fetching asset detail: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch asset detail")
+        raise HTTPException(status_code=500, detail="Failed to fetch asset detail") from e
 
 
 @router.get("/types/summary")
@@ -347,4 +347,4 @@ async def get_asset_types_summary(
 
     except Exception as e:
         logger.error(f"Error fetching asset types summary: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch types summary")
+        raise HTTPException(status_code=500, detail="Failed to fetch types summary") from e

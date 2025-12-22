@@ -101,7 +101,7 @@ async def register(request: RegisterRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create user account"
-        )
+        ) from e
 
 
 # ============================================================================
@@ -440,7 +440,7 @@ async def refresh_token(request: RefreshTokenRequest):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token"
-        )
+        ) from e
 
 
 @router.get("/me", response_model=User)
@@ -536,7 +536,7 @@ async def create_api_key(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create API key"
-        )
+        ) from e
 
 
 @router.get("/api-keys")

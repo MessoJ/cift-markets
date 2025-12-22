@@ -182,8 +182,8 @@ async def create_template(
             )
         except Exception as e:
             if "unique_user_template_name" in str(e):
-                raise HTTPException(status_code=400, detail="Template name already exists")
-            raise HTTPException(status_code=500, detail=f"Failed to create template: {str(e)}")
+                raise HTTPException(status_code=400, detail="Template name already exists") from e
+            raise HTTPException(status_code=500, detail=f"Failed to create template: {str(e)}") from e
 
 
 @router.patch("/{template_id}", response_model=ChartTemplateResponse)
@@ -266,8 +266,8 @@ async def update_template(
             )
         except Exception as e:
             if "unique_user_template_name" in str(e):
-                raise HTTPException(status_code=400, detail="Template name already exists")
-            raise HTTPException(status_code=500, detail=f"Failed to update template: {str(e)}")
+                raise HTTPException(status_code=400, detail="Template name already exists") from e
+            raise HTTPException(status_code=500, detail=f"Failed to update template: {str(e)}") from e
 
 
 @router.delete("/{template_id}")

@@ -823,7 +823,7 @@ async def create_withdrawal(
                 "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
                 row['id']
             )
-            raise HTTPException(status_code=500, detail="Withdrawal processing failed")
+            raise HTTPException(status_code=500, detail="Withdrawal processing failed") from e
 
         return FundingTransaction(
             id=row['id'],
@@ -983,7 +983,7 @@ async def download_receipt(
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to generate receipt: {str(e)}"
-                )
+                ) from fallback_error
 
 
 @router.post("/payment-methods/{payment_method_id}/verify/initiate")
@@ -1025,10 +1025,10 @@ async def initiate_payment_verification(
             )
             return result
         except VerificationError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
             logger.error(f"Verification initiation error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to initiate verification")
+            raise HTTPException(status_code=500, detail="Failed to initiate verification") from e
 
 
 @router.post("/payment-methods/{payment_method_id}/verify/complete")
@@ -1060,10 +1060,10 @@ async def complete_payment_verification(
             )
             return result
         except VerificationError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:
             logger.error(f"Verification completion error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to complete verification")
+            raise HTTPException(status_code=500, detail="Failed to complete verification") from e
 
 
 @router.get("/payment-methods/{payment_method_id}/verification-status")
