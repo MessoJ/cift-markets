@@ -7,7 +7,7 @@ Centralized configuration using Pydantic Settings for type safety and validation
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,10 +57,27 @@ class Settings(BaseSettings):
         return f"postgresql://admin:quest@{self.questdb_host}:{self.questdb_pg_port}/qdb"
 
     # Dragonfly (Redis-compatible, 25x faster)
-    dragonfly_host: str = "localhost"
-    dragonfly_port: int = 6379
-    dragonfly_password: str | None = None
-    dragonfly_db: int = 0
+    # Accept legacy `REDIS_*` env vars and `redis_*` kwargs for compatibility.
+    dragonfly_host: str = Field(
+        default="localhost",
+        validation_alias=AliasChoices("dragonfly_host", "redis_host", "REDIS_HOST"),
+    )
+    dragonfly_port: int = Field(
+        default=6379,
+        validation_alias=AliasChoices("dragonfly_port", "redis_port", "REDIS_PORT"),
+    )
+    dragonfly_password: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "dragonfly_password",
+            "redis_password",
+            "REDIS_PASSWORD",
+        ),
+    )
+    dragonfly_db: int = Field(
+        default=0,
+        validation_alias=AliasChoices("dragonfly_db", "redis_db", "REDIS_DB"),
+    )
 
     @property
     def dragonfly_url(self) -> str:
@@ -75,12 +92,23 @@ class Settings(BaseSettings):
         """Alias for dragonfly_url (backward compatibility)."""
         return self.dragonfly_url
 
+    @property
+    def redis_db(self) -> int:
+        """Legacy alias for dragonfly_db."""
+        return self.dragonfly_db
+
     # NATS JetStream (5-10x lower latency than Kafka)
     nats_url: str = "nats://localhost:4222"
     nats_stream_market_data: str = "MARKET_DATA"
     nats_stream_orders: str = "ORDERS"
     nats_stream_signals: str = "SIGNALS"
     nats_stream_events: str = "EVENTS"
+
+    # Kafka (legacy compatibility)
+    kafka_topic_market_data: str = "market-data"
+    kafka_topic_predictions: str = "predictions"
+    kafka_topic_orders: str = "orders"
+    kafka_topic_positions: str = "positions"
 
     # ClickHouse (100x faster analytics)
     clickhouse_host: str = "localhost"
@@ -237,9 +265,10 @@ class Settings(BaseSettings):
 
     @field_validator("secret_key", "jwt_secret_key")
     @classmethod
-    def validate_secrets(cls, v: str) -> str:
+    def validate_secrets(cls, v: str, info) -> str:
         """Validate secret keys are strong enough."""
-        if v.startswith("change-this") and cls.model_config.get("app_env") == "production":
+        app_env = (info.data or {}).get("app_env")
+        if app_env == "production" and v.startswith("change-this"):
             raise ValueError("Secret keys must be changed in production!")
         if len(v) < 32:
             raise ValueError("Secret keys must be at least 32 characters long")
