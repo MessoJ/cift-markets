@@ -238,7 +238,7 @@ services:
   # CIFT API - FastAPI application (Phase 1+)
   # Use Dockerfile.dev for fast builds (no Rust) or Dockerfile.prod for optimized production
   api:
-    image: ghcr.io/mesof/cift-markets/api:latest
+    image: ghcr.io/messoj/cift-markets/api:latest
     build:
       context: .
       dockerfile: ${API_DOCKERFILE:-Dockerfile.dev}
@@ -295,7 +295,7 @@ services:
 
   # Frontend - SolidJS Application
   frontend:
-    image: ghcr.io/mesof/cift-markets/frontend:latest
+    image: ghcr.io/messoj/cift-markets/frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
