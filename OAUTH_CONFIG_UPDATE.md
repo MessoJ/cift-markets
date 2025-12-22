@@ -6,8 +6,8 @@ I have updated the configuration to include the GitHub OAuth credentials and the
 
 1.  **`cift/core/config.py`**: Added fields for OAuth credentials and URLs to the `Settings` class.
 2.  **`docker-compose.yml`**: Added the following environment variables to the `api` service with the provided values as defaults:
-    *   `GITHUB_CLIENT_ID`: `Ov23liKhbfcXw0MTCR97`
-    *   `GITHUB_CLIENT_SECRET`: `f5377d213e5171b1833938b839fcdb17b563405d`
+    *   `GITHUB_CLIENT_ID`: `your_github_oauth_client_id`
+    *   `GITHUB_CLIENT_SECRET`: `your_github_oauth_client_secret`
     *   `FRONTEND_URL`: `http://20.250.40.67:3000`
     *   `API_BASE_URL`: `http://20.250.40.67:8000`
 
@@ -22,4 +22,4 @@ I have updated the configuration to include the GitHub OAuth credentials and the
 2.  **Deploy:** The GitHub Actions workflow should pick up the changes and deploy to the Azure VM.
 3.  **Verify:** Once deployed, try logging in with GitHub on the live site.
 
-**Note:** Hardcoding secrets in `docker-compose.yml` is generally not recommended for production security, but it will work for your current setup. For better security in the future, consider using GitHub Secrets and passing them as environment variables during the build/deploy process.
+**Note:** Do not hardcode real secrets in `docker-compose.yml` or documentation. Use GitHub Secrets and inject them during deploy.

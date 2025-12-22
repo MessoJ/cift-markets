@@ -142,8 +142,8 @@ docker-compose up -d
 ### **Step 2: Fetch News (Already Done)**
 ```bash
 # We already fetched 206 articles from NewsAPI
-# To fetch more or update:
-docker-compose exec api python scripts/fetch_news.py --api newsapi --api-key d888b7199f80455abfd9b27e47cec5bb
+# To fetch more or update (use your real key from GitHub Secrets / local `.env`):
+docker-compose exec api python scripts/fetch_news.py --api newsapi --api-key <NEWSAPI_KEY>
 ```
 
 ### **Step 3: View Globe**
