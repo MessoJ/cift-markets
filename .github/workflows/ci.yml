@@ -93,8 +93,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install -e ".[test]"
+          python -m pip install --upgrade pip
+          # Avoid installing the full project dependency set in CI (too large for runner disk).
+          # Install the package itself (editable) without deps, then add only what tests need.
+          python -m pip install --no-cache-dir -e . --no-deps
+          python -m pip install --no-cache-dir \
+            pytest pytest-cov pytest-asyncio pytest-mock pytest-timeout \
+            faker freezegun responses \
+            numpy polars xgboost scikit-learn \
+            asyncpg "sqlalchemy[asyncio]" greenlet redis \
+            pydantic pydantic-settings loguru
 
       - name: Wait for QuestDB
         run: |
