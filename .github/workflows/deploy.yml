@@ -65,6 +65,9 @@ jobs:
             ${{ steps.meta-frontend.outputs.tags }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
           labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            VITE_API_URL=/api/v1
+            VITE_WS_URL=/api/v1/ws
 
   deploy:
     needs: build-and-push
