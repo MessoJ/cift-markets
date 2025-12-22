@@ -105,4 +105,4 @@ async def verify_transaction(transaction_id: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail="An error occurred while verifying the transaction"
-        )
+        ) from e
