@@ -11,6 +11,7 @@ from loguru import logger
 # Import Rust core modules (compiled via PyO3)
 try:
     from cift_core import FastMarketData, FastOrderBook, FastRiskEngine
+
     RUST_AVAILABLE = True
     logger.info("✓ Rust core modules loaded successfully")
 except ImportError as e:
@@ -39,6 +40,7 @@ class RustOrderBookManager:
             else:
                 # Fallback to Python implementation
                 from cift.core.order_book_fallback import PythonOrderBook
+
                 self.books[symbol] = PythonOrderBook(symbol)
                 logger.debug(f"Created Python order book for {symbol}")
 
@@ -161,21 +163,18 @@ class RustMarketDataProcessor:
         """Calculate VWAP from tick data"""
         if self.use_rust:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None, self.processor.calculate_vwap, ticks
-            )
+            return await loop.run_in_executor(None, self.processor.calculate_vwap, ticks)
         else:
             # Use Numba fallback
             import numpy as np
 
             from cift.core.features_numba import calculate_vwap
+
             prices = np.array([t[0] for t in ticks])
             volumes = np.array([t[1] for t in ticks])
             return calculate_vwap(prices, volumes)
 
-    async def calculate_ofi(
-        self, bid_volumes: list[float], ask_volumes: list[float]
-    ) -> float:
+    async def calculate_ofi(self, bid_volumes: list[float], ask_volumes: list[float]) -> float:
         """Calculate Order Flow Imbalance"""
         if self.use_rust:
             loop = asyncio.get_event_loop()
@@ -187,6 +186,7 @@ class RustMarketDataProcessor:
             import numpy as np
 
             from cift.core.features_numba import calculate_ofi
+
             bids = np.array(bid_volumes)
             asks = np.array(ask_volumes)
             return calculate_ofi(bids, asks, levels=len(bid_volumes))
@@ -274,9 +274,7 @@ class RustRiskManager:
                 symbol, side, quantity, price, current_position, account_value
             )
 
-    def _check_order_python(
-        self, symbol, side, quantity, price, current_position, account_value
-    ):
+    def _check_order_python(self, symbol, side, quantity, price, current_position, account_value):
         """Python fallback for risk checks"""
         new_position = current_position + quantity if side == "buy" else current_position - quantity
 

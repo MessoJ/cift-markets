@@ -39,6 +39,7 @@ from loguru import logger
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class AlternativeDataFeatures:
     """Alternative data features for XGBoost."""
@@ -52,11 +53,11 @@ class AlternativeDataFeatures:
     options_volume_ratio: float
 
     # Sentiment features
-    news_sentiment: float           # -1 to 1
-    social_sentiment: float         # -1 to 1
-    sentiment_momentum: float       # Change in sentiment
-    earnings_surprise: float        # Actual - Expected
-    analyst_revision: float         # Upgrade/downgrade indicator
+    news_sentiment: float  # -1 to 1
+    social_sentiment: float  # -1 to 1
+    sentiment_momentum: float  # Change in sentiment
+    earnings_surprise: float  # Actual - Expected
+    analyst_revision: float  # Upgrade/downgrade indicator
 
     # Whale/institutional features
     large_order_imbalance: float
@@ -81,35 +82,38 @@ class AlternativeDataFeatures:
     realized_vol: float
 
     def to_numpy(self) -> np.ndarray:
-        return np.array([
-            self.put_call_ratio,
-            self.unusual_volume_score,
-            self.gamma_exposure,
-            self.iv_rank,
-            self.iv_skew,
-            self.options_volume_ratio,
-            self.news_sentiment,
-            self.social_sentiment,
-            self.sentiment_momentum,
-            self.earnings_surprise,
-            self.analyst_revision,
-            self.large_order_imbalance,
-            self.dark_pool_ratio,
-            self.block_trade_bias,
-            self.smart_money_flow,
-            self.sector_momentum,
-            self.market_breadth,
-            self.vix_level,
-            self.vix_term_structure,
-            self.bond_equity_correlation,
-            self.dollar_strength,
-            self.order_flow_imbalance,
-            self.vpin,
-            self.kyle_lambda,
-            self.spread_percentile,
-            self.volume_ratio,
-            self.realized_vol,
-        ], dtype=np.float32)
+        return np.array(
+            [
+                self.put_call_ratio,
+                self.unusual_volume_score,
+                self.gamma_exposure,
+                self.iv_rank,
+                self.iv_skew,
+                self.options_volume_ratio,
+                self.news_sentiment,
+                self.social_sentiment,
+                self.sentiment_momentum,
+                self.earnings_surprise,
+                self.analyst_revision,
+                self.large_order_imbalance,
+                self.dark_pool_ratio,
+                self.block_trade_bias,
+                self.smart_money_flow,
+                self.sector_momentum,
+                self.market_breadth,
+                self.vix_level,
+                self.vix_term_structure,
+                self.bond_equity_correlation,
+                self.dollar_strength,
+                self.order_flow_imbalance,
+                self.vpin,
+                self.kyle_lambda,
+                self.spread_percentile,
+                self.volume_ratio,
+                self.realized_vol,
+            ],
+            dtype=np.float32,
+        )
 
     @classmethod
     def feature_names(cls) -> list[str]:
@@ -147,16 +151,17 @@ class AlternativeDataFeatures:
 @dataclass
 class XGBoostPrediction:
     """Prediction output from XGBoost model."""
+
     timestamp: float
 
     # Direction predictions per horizon
-    direction_500ms: float          # Probability of up
+    direction_500ms: float  # Probability of up
     direction_1s: float
     direction_5s: float
     direction_30s: float
 
     # Magnitude predictions
-    magnitude_500ms: float          # Expected return
+    magnitude_500ms: float  # Expected return
     magnitude_1s: float
     magnitude_5s: float
     magnitude_30s: float
@@ -171,14 +176,15 @@ class XGBoostPrediction:
     top_features: dict[str, float]
 
     # Alternative data signals
-    options_signal: float           # -1 to 1
-    sentiment_signal: float         # -1 to 1
-    whale_signal: float             # -1 to 1
+    options_signal: float  # -1 to 1
+    sentiment_signal: float  # -1 to 1
+    whale_signal: float  # -1 to 1
 
 
 # ============================================================================
 # CALIBRATION
 # ============================================================================
+
 
 class IsotonicCalibrator:
     """
@@ -247,6 +253,7 @@ class IsotonicCalibrator:
 # XGBOOST MODEL
 # ============================================================================
 
+
 class XGBoostFusion:
     """
     XGBoost-based Alternative Data Fusion Model.
@@ -264,31 +271,31 @@ class XGBoostFusion:
     # Monotonic constraints for features (1 = positive, -1 = negative, 0 = none)
     # Based on economic intuition from research literature
     MONOTONIC_CONSTRAINTS = {
-        "put_call_ratio": -1,          # Higher PC ratio → bearish
-        "unusual_volume_score": 0,      # Direction unclear
-        "gamma_exposure": 1,            # Higher gamma → potential squeeze
-        "iv_rank": 0,                   # High IV can be bullish or bearish
-        "iv_skew": -1,                  # Higher skew → fear → bearish
+        "put_call_ratio": -1,  # Higher PC ratio → bearish
+        "unusual_volume_score": 0,  # Direction unclear
+        "gamma_exposure": 1,  # Higher gamma → potential squeeze
+        "iv_rank": 0,  # High IV can be bullish or bearish
+        "iv_skew": -1,  # Higher skew → fear → bearish
         "options_volume_ratio": 0,
-        "news_sentiment": 1,            # Positive sentiment → bullish
-        "social_sentiment": 1,          # Positive sentiment → bullish
-        "sentiment_momentum": 1,        # Improving sentiment → bullish
-        "earnings_surprise": 1,         # Positive surprise → bullish
-        "analyst_revision": 1,          # Upgrades → bullish
-        "large_order_imbalance": 1,     # Buy imbalance → bullish
+        "news_sentiment": 1,  # Positive sentiment → bullish
+        "social_sentiment": 1,  # Positive sentiment → bullish
+        "sentiment_momentum": 1,  # Improving sentiment → bullish
+        "earnings_surprise": 1,  # Positive surprise → bullish
+        "analyst_revision": 1,  # Upgrades → bullish
+        "large_order_imbalance": 1,  # Buy imbalance → bullish
         "dark_pool_ratio": 0,
-        "block_trade_bias": 1,          # Buy blocks → bullish
-        "smart_money_flow": 1,          # Smart money buying → bullish
-        "sector_momentum": 1,           # Strong sector → bullish
-        "market_breadth": 1,            # Broad participation → bullish
-        "vix_level": -1,                # High VIX → bearish
-        "vix_term_structure": 1,        # Contango → bullish
+        "block_trade_bias": 1,  # Buy blocks → bullish
+        "smart_money_flow": 1,  # Smart money buying → bullish
+        "sector_momentum": 1,  # Strong sector → bullish
+        "market_breadth": 1,  # Broad participation → bullish
+        "vix_level": -1,  # High VIX → bearish
+        "vix_term_structure": 1,  # Contango → bullish
         "bond_equity_correlation": 0,
         "dollar_strength": 0,
-        "order_flow_imbalance": 1,      # Buy imbalance → bullish
-        "vpin": 0,                       # High VPIN → informed trading (direction unclear)
-        "kyle_lambda": -1,              # High lambda → illiquid → bearish for short-term
-        "spread_percentile": -1,        # Wide spreads → bearish
+        "order_flow_imbalance": 1,  # Buy imbalance → bullish
+        "vpin": 0,  # High VPIN → informed trading (direction unclear)
+        "kyle_lambda": -1,  # High lambda → illiquid → bearish for short-term
+        "spread_percentile": -1,  # Wide spreads → bearish
         "volume_ratio": 0,
         "realized_vol": 0,
     }
@@ -298,9 +305,9 @@ class XGBoostFusion:
         n_features: int = 27,
         horizons: list[str] = None,
         xgb_params: dict[str, Any] | None = None,
-        use_monotonic: bool = True,       # NEW: Enable monotonic constraints
-        use_purged_cv: bool = True,       # NEW: Enable purged CV
-        purge_gap: int = 10,              # Number of periods to purge between train/val
+        use_monotonic: bool = True,  # NEW: Enable monotonic constraints
+        use_purged_cv: bool = True,  # NEW: Enable purged CV
+        purge_gap: int = 10,  # Number of periods to purge between train/val
     ):
         self.n_features = n_features
         self.horizons = horizons or ["500ms", "1s", "5s", "30s"]
@@ -349,11 +356,15 @@ class XGBoostFusion:
             self._monotonic_tuple = tuple(
                 self.MONOTONIC_CONSTRAINTS.get(fn, 0) for fn in self.feature_names
             )
-            logger.info(f"Monotonic constraints enabled: {sum(1 for m in self._monotonic_tuple if m != 0)}/{len(self._monotonic_tuple)} features constrained")
+            logger.info(
+                f"Monotonic constraints enabled: {sum(1 for m in self._monotonic_tuple if m != 0)}/{len(self._monotonic_tuple)} features constrained"
+            )
         else:
             self._monotonic_tuple = None
 
-        logger.info(f"XGBoostFusion initialized ({len(self.horizons)} horizons, {n_features} features, monotonic={use_monotonic}, purged_cv={use_purged_cv})")
+        logger.info(
+            f"XGBoostFusion initialized ({len(self.horizons)} horizons, {n_features} features, monotonic={use_monotonic}, purged_cv={use_purged_cv})"
+        )
 
     def _get_purged_cv_splits(
         self,
@@ -389,10 +400,9 @@ class XGBoostFusion:
             purge_start = max(0, val_start - self.purge_gap)
             purge_end = min(n_samples, val_end + self.purge_gap)
 
-            train_indices = np.concatenate([
-                np.arange(0, purge_start),
-                np.arange(purge_end, n_samples)
-            ])
+            train_indices = np.concatenate(
+                [np.arange(0, purge_start), np.arange(purge_end, n_samples)]
+            )
 
             if len(train_indices) > 0:
                 splits.append((train_indices, val_indices))
@@ -438,16 +448,12 @@ class XGBoostFusion:
             logger.info(f"Training direction model for {horizon}...")
 
             # Direction model
-            dtrain = xgb.DMatrix(
-                X, label=y_direction[horizon],
-                feature_names=self.feature_names
-            )
+            dtrain = xgb.DMatrix(X, label=y_direction[horizon], feature_names=self.feature_names)
 
             evals = [(dtrain, "train")]
             if X_val is not None and y_val_direction is not None:
                 dval = xgb.DMatrix(
-                    X_val, label=y_val_direction[horizon],
-                    feature_names=self.feature_names
+                    X_val, label=y_val_direction[horizon], feature_names=self.feature_names
                 )
                 evals.append((dval, "val"))
 
@@ -473,8 +479,7 @@ class XGBoostFusion:
                 mag_params["eval_metric"] = ["rmse"]
 
                 dtrain_mag = xgb.DMatrix(
-                    X, label=y_magnitude[horizon],
-                    feature_names=self.feature_names
+                    X, label=y_magnitude[horizon], feature_names=self.feature_names
                 )
 
                 self.magnitude_models[horizon] = xgb.train(
@@ -559,6 +564,7 @@ class XGBoostFusion:
 
                 # Simple AUC calculation
                 from sklearn.metrics import roc_auc_score
+
                 try:
                     auc = roc_auc_score(y_val, preds)
                     cv_scores[horizon].append(auc)
@@ -678,11 +684,11 @@ class XGBoostFusion:
         # Normalize put/call ratio (lower = bullish)
         signals = np.zeros(6)
         signals[0] = -np.tanh(features[0] - 1.0)  # P/C ratio
-        signals[1] = np.tanh(features[1])          # Unusual volume
-        signals[2] = np.tanh(features[2])          # Gamma exposure
-        signals[3] = -np.tanh(features[3] - 0.5)   # IV rank (high = bearish)
-        signals[4] = -np.tanh(features[4])         # IV skew
-        signals[5] = np.tanh(features[5] - 1.0)    # Volume ratio
+        signals[1] = np.tanh(features[1])  # Unusual volume
+        signals[2] = np.tanh(features[2])  # Gamma exposure
+        signals[3] = -np.tanh(features[3] - 0.5)  # IV rank (high = bearish)
+        signals[4] = -np.tanh(features[4])  # IV skew
+        signals[5] = np.tanh(features[5] - 1.0)  # Volume ratio
 
         return float(np.dot(weights, signals) / weights.sum())
 
@@ -779,6 +785,7 @@ class XGBoostFusion:
 # ============================================================================
 # TRAINING UTILITIES
 # ============================================================================
+
 
 class XGBoostTrainer:
     """Training helper with data preparation."""

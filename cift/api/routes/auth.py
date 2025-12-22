@@ -44,13 +44,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # MODELS
 # ============================================================================
 
+
 class RefreshTokenRequest(BaseModel):
     """Refresh token request."""
+
     refresh_token: str
 
 
 class APIKeyResponse(BaseModel):
     """API key creation response."""
+
     api_key: str
     key_id: str
     name: str
@@ -60,6 +63,7 @@ class APIKeyResponse(BaseModel):
 
 class APIKeyCreateRequest(BaseModel):
     """API key creation request."""
+
     name: str
     scopes: list[str] = []
     expires_in_days: int | None = None
@@ -68,6 +72,7 @@ class APIKeyCreateRequest(BaseModel):
 # ============================================================================
 # AUTHENTICATION ENDPOINTS
 # ============================================================================
+
 
 @router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 async def register(request: RegisterRequest):
@@ -86,7 +91,7 @@ async def register(request: RegisterRequest):
             email=request.email,
             username=request.username,
             password=request.password,
-            full_name=request.full_name
+            full_name=request.full_name,
         )
 
         logger.info(f"User registered: {user_data['email']}")
@@ -100,7 +105,7 @@ async def register(request: RegisterRequest):
         logger.error(f"Registration error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create user account"
+            detail="Failed to create user account",
         ) from e
 
 
@@ -108,9 +113,11 @@ async def register(request: RegisterRequest):
 # OAUTH HELPERS
 # ============================================================================
 
+
 def generate_random_password(length=32):
     alphabet = string.ascii_letters + string.digits + string.punctuation
-    return ''.join(secrets.choice(alphabet) for i in range(length))
+    return "".join(secrets.choice(alphabet) for i in range(length))
+
 
 async def get_or_create_oauth_user(email: str, username: str, full_name: str = None):
     """Find existing user by email or create a new one."""
@@ -144,6 +151,7 @@ async def get_or_create_oauth_user(email: str, username: str, full_name: str = N
             user = await conn.fetchrow(query, email)
         return dict(user)
 
+
 async def complete_oauth_login(user_data: dict):
     """Generate tokens and redirect to frontend."""
     user_id = user_data["id"]
@@ -151,7 +159,9 @@ async def complete_oauth_login(user_data: dict):
     refresh_token = create_refresh_token(user_id=user_id)
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    redirect_url = f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+    redirect_url = (
+        f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+    )
 
     return RedirectResponse(url=redirect_url)
 
@@ -159,6 +169,7 @@ async def complete_oauth_login(user_data: dict):
 # ============================================================================
 # OAUTH ENDPOINTS
 # ============================================================================
+
 
 @router.get("/github/login")
 @limiter.limit("10/minute")
@@ -168,10 +179,13 @@ async def github_login(request: Request):
     if not client_id:
         raise HTTPException(status_code=500, detail="GitHub Client ID not configured")
 
-    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/github/callback"
+    redirect_uri = (
+        f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/github/callback"
+    )
     return {
         "url": f"https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope=user:email"
     }
+
 
 @router.get("/github/callback")
 @limiter.limit("10/minute")
@@ -192,7 +206,7 @@ async def github_callback(request: Request, code: str):
                 "client_id": client_id,
                 "client_secret": client_secret,
                 "code": code,
-            }
+            },
         )
         token_data = token_resp.json()
         if "error" in token_data:
@@ -202,15 +216,14 @@ async def github_callback(request: Request, code: str):
 
         # Get user info
         user_resp = await client.get(
-            "https://api.github.com/user",
-            headers={"Authorization": f"Bearer {access_token}"}
+            "https://api.github.com/user", headers={"Authorization": f"Bearer {access_token}"}
         )
         user_data = user_resp.json()
 
         # Get email (if private)
         email_resp = await client.get(
             "https://api.github.com/user/emails",
-            headers={"Authorization": f"Bearer {access_token}"}
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         emails = email_resp.json()
         primary_email = next((e["email"] for e in emails if e["primary"]), None)
@@ -220,12 +233,11 @@ async def github_callback(request: Request, code: str):
 
         # Create or login user
         user = await get_or_create_oauth_user(
-            email=primary_email,
-            username=user_data["login"],
-            full_name=user_data.get("name")
+            email=primary_email, username=user_data["login"], full_name=user_data.get("name")
         )
 
         return await complete_oauth_login(user)
+
 
 @router.get("/microsoft/login")
 @limiter.limit("10/minute")
@@ -241,12 +253,15 @@ async def microsoft_login(request: Request):
         "url": f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&response_mode=query&scope=User.Read"
     }
 
+
 @router.get("/microsoft/callback")
 @limiter.limit("10/minute")
 async def microsoft_callback(request: Request, code: str):
     """Handle Microsoft OAuth callback."""
     client_id = getattr(settings, "microsoft_client_id", os.getenv("MICROSOFT_CLIENT_ID"))
-    client_secret = getattr(settings, "microsoft_client_secret", os.getenv("MICROSOFT_CLIENT_SECRET"))
+    client_secret = getattr(
+        settings, "microsoft_client_secret", os.getenv("MICROSOFT_CLIENT_SECRET")
+    )
 
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Microsoft credentials not configured")
@@ -264,18 +279,20 @@ async def microsoft_callback(request: Request, code: str):
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
                 "client_secret": client_secret,
-            }
+            },
         )
         token_data = token_resp.json()
         if "error" in token_data:
-            raise HTTPException(status_code=400, detail=token_data.get("error_description", "Login failed"))
+            raise HTTPException(
+                status_code=400, detail=token_data.get("error_description", "Login failed")
+            )
 
         access_token = token_data["access_token"]
 
         # Get user info
         user_resp = await client.get(
             "https://graph.microsoft.com/v1.0/me",
-            headers={"Authorization": f"Bearer {access_token}"}
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         user_data = user_resp.json()
 
@@ -287,10 +304,11 @@ async def microsoft_callback(request: Request, code: str):
         user = await get_or_create_oauth_user(
             email=email,
             username=user_data.get("displayName", email.split("@")[0]),
-            full_name=user_data.get("displayName")
+            full_name=user_data.get("displayName"),
         )
 
         return await complete_oauth_login(user)
+
 
 @router.get("/google/login")
 @limiter.limit("10/minute")
@@ -300,10 +318,13 @@ async def google_login(request: Request):
     if not client_id:
         raise HTTPException(status_code=500, detail="Google Client ID not configured")
 
-    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/google/callback"
+    redirect_uri = (
+        f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/google/callback"
+    )
     return {
         "url": f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope=email%20profile"
     }
+
 
 @router.get("/google/callback")
 @limiter.limit("10/minute")
@@ -315,7 +336,9 @@ async def google_callback(request: Request, code: str):
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Google credentials not configured")
 
-    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/google/callback"
+    redirect_uri = (
+        f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/google/callback"
+    )
 
     async with httpx.AsyncClient() as client:
         # Exchange code for token
@@ -327,18 +350,20 @@ async def google_callback(request: Request, code: str):
                 "code": code,
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
-            }
+            },
         )
         token_data = token_resp.json()
         if "error" in token_data:
-            raise HTTPException(status_code=400, detail=token_data.get("error_description", "Login failed"))
+            raise HTTPException(
+                status_code=400, detail=token_data.get("error_description", "Login failed")
+            )
 
         access_token = token_data["access_token"]
 
         # Get user info
         user_resp = await client.get(
             "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"}
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         user_data = user_resp.json()
 
@@ -348,13 +373,10 @@ async def google_callback(request: Request, code: str):
 
         # Create or login user
         user = await get_or_create_oauth_user(
-            email=email,
-            username=email.split("@")[0],
-            full_name=user_data.get("name")
+            email=email, username=email.split("@")[0], full_name=user_data.get("name")
         )
 
         return await complete_oauth_login(user)
-
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -382,8 +404,8 @@ async def login(request: LoginRequest):
         )
 
     # Create tokens
-    access_token = create_access_token(user_id=user['id'])
-    refresh_token = create_refresh_token(user_id=user['id'])
+    access_token = create_access_token(user_id=user["id"])
+    refresh_token = create_refresh_token(user_id=user["id"])
 
     logger.info(f"User logged in: {user['email']}")
 
@@ -414,8 +436,7 @@ async def refresh_token(request: RefreshTokenRequest):
         # Verify it's a refresh token
         if token_data.type != "refresh":
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type"
             )
 
         # Create new tokens
@@ -438,15 +459,12 @@ async def refresh_token(request: RefreshTokenRequest):
     except Exception as e:
         logger.error(f"Token refresh error: {e}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         ) from e
 
 
 @router.get("/me", response_model=User)
-async def get_current_user_info(
-    current_user: User = Depends(get_current_active_user)
-):
+async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """
     Get current authenticated user information.
 
@@ -473,20 +491,17 @@ async def logout(current_user: User = Depends(get_current_active_user)):
     """
     logger.info(f"User logged out: {current_user.email}")
 
-    return {
-        "message": "Successfully logged out",
-        "user_id": str(current_user.id)
-    }
+    return {"message": "Successfully logged out", "user_id": str(current_user.id)}
 
 
 # ============================================================================
 # API KEY MANAGEMENT
 # ============================================================================
 
+
 @router.post("/api-keys", response_model=APIKeyResponse, status_code=status.HTTP_201_CREATED)
 async def create_api_key(
-    request: APIKeyCreateRequest,
-    current_user: User = Depends(get_current_active_user)
+    request: APIKeyCreateRequest, current_user: User = Depends(get_current_active_user)
 ):
     """
     Create new API key for authenticated user.
@@ -515,7 +530,7 @@ async def create_api_key(
             user_id=current_user.id,
             name=request.name,
             scopes=request.scopes,
-            expires_in_days=request.expires_in_days
+            expires_in_days=request.expires_in_days,
         )
 
         expires_at = None
@@ -525,17 +540,13 @@ async def create_api_key(
         logger.info(f"API key created for user {current_user.email}: {request.name}")
 
         return APIKeyResponse(
-            api_key=api_key,
-            key_id=key_id,
-            name=request.name,
-            expires_at=expires_at
+            api_key=api_key, key_id=key_id, name=request.name, expires_at=expires_at
         )
 
     except Exception as e:
         logger.error(f"API key creation error: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create API key"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create API key"
         ) from e
 
 
@@ -562,10 +573,7 @@ async def list_api_keys(current_user: User = Depends(get_current_active_user)):
 
 
 @router.delete("/api-keys/{key_id}")
-async def revoke_api_key(
-    key_id: UUID,
-    current_user: User = Depends(get_current_active_user)
-):
+async def revoke_api_key(key_id: UUID, current_user: User = Depends(get_current_active_user)):
     """
     Revoke (deactivate) an API key.
 
@@ -584,33 +592,28 @@ async def revoke_api_key(
         result = await conn.fetchrow(query, key_id, current_user.id)
 
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
 
     logger.info(f"API key revoked: {key_id} by user {current_user.email}")
 
-    return {
-        "message": "API key revoked successfully",
-        "key_id": str(key_id)
-    }
+    return {"message": "API key revoked successfully", "key_id": str(key_id)}
 
 
 # ============================================================================
 # PASSWORD MANAGEMENT
 # ============================================================================
 
+
 class ChangePasswordRequest(BaseModel):
     """Change password request."""
+
     current_password: str
     new_password: str
 
 
 @router.post("/change-password")
 async def change_password(
-    request: ChangePasswordRequest,
-    current_user: User = Depends(get_current_active_user)
+    request: ChangePasswordRequest, current_user: User = Depends(get_current_active_user)
 ):
     """
     Change user password.
@@ -627,16 +630,12 @@ async def change_password(
         result = await conn.fetchrow(query, current_user.id)
 
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # Verify current password
-    if not verify_password(request.current_password, result['hashed_password']):
+    if not verify_password(request.current_password, result["hashed_password"]):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect current password"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password"
         )
 
     # Hash new password
@@ -654,14 +653,13 @@ async def change_password(
 
     logger.info(f"Password changed for user: {current_user.email}")
 
-    return {
-        "message": "Password changed successfully"
-    }
+    return {"message": "Password changed successfully"}
 
 
 # ============================================================================
 # ADMIN ENDPOINTS
 # ============================================================================
+
 
 @router.get("/users", dependencies=[Depends(get_current_active_user)])
 async def list_users(

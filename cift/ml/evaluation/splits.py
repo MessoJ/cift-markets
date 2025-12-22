@@ -105,7 +105,9 @@ def build_forward_return_events(
 
     timestamps should be monotonic and in the same time units as horizon.
     """
-    ts = np.asarray(list(timestamps) if not isinstance(timestamps, np.ndarray) else timestamps, dtype=np.float64)
+    ts = np.asarray(
+        list(timestamps) if not isinstance(timestamps, np.ndarray) else timestamps, dtype=np.float64
+    )
     if ts.ndim != 1:
         raise ValueError("timestamps must be 1D")
     if ts.size == 0:

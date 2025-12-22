@@ -2,6 +2,7 @@
 Alpaca Sync Service
 Synchronizes local database with Alpaca Brokerage Account
 """
+
 from decimal import Decimal
 from uuid import UUID
 
@@ -34,7 +35,7 @@ class AlpacaSyncService:
 
         for user in users:
             try:
-                await self.sync_user_account(user['id'], user['alpaca_account_id'])
+                await self.sync_user_account(user["id"], user["alpaca_account_id"])
             except Exception as e:
                 logger.error(f"Failed to sync user {user['id']}: {str(e)}")
 
@@ -72,10 +73,10 @@ class AlpacaSyncService:
                     updated_at = NOW()
                 WHERE id = $4
                 """,
-                Decimal(account.get('cash', 0)),
-                Decimal(account.get('buying_power', 0)),
-                Decimal(account.get('equity', 0)),
-                local_account_id
+                Decimal(account.get("cash", 0)),
+                Decimal(account.get("buying_power", 0)),
+                Decimal(account.get("equity", 0)),
+                local_account_id,
             )
 
             # 3. Sync Positions
@@ -84,19 +85,19 @@ class AlpacaSyncService:
             # Get current local positions to detect closed ones
             local_positions = await conn.fetch(
                 "SELECT symbol FROM positions WHERE account_id = $1 AND quantity != 0",
-                local_account_id
+                local_account_id,
             )
-            local_symbols = {row['symbol'] for row in local_positions}
+            local_symbols = {row["symbol"] for row in local_positions}
             remote_symbols = set()
 
             for pos in positions:
-                symbol = pos['symbol']
+                symbol = pos["symbol"]
                 remote_symbols.add(symbol)
-                qty = Decimal(pos['qty'])
-                market_value = Decimal(pos['market_value'])
-                avg_entry_price = Decimal(pos['avg_entry_price'])
-                current_price = Decimal(pos['current_price'])
-                unrealized_pl = Decimal(pos['unrealized_pl'])
+                qty = Decimal(pos["qty"])
+                market_value = Decimal(pos["market_value"])
+                avg_entry_price = Decimal(pos["avg_entry_price"])
+                current_price = Decimal(pos["current_price"])
+                unrealized_pl = Decimal(pos["unrealized_pl"])
 
                 # Upsert Position
                 await conn.execute(
@@ -121,7 +122,7 @@ class AlpacaSyncService:
                     current_price,
                     market_value,
                     unrealized_pl,
-                    'long' if qty > 0 else 'short'
+                    "long" if qty > 0 else "short",
                 )
 
             # 4. Handle Closed Positions
@@ -133,7 +134,9 @@ class AlpacaSyncService:
                     SET quantity = 0, market_value = 0, updated_at = NOW()
                     WHERE account_id = $1 AND symbol = $2
                     """,
-                    local_account_id, symbol
+                    local_account_id,
+                    symbol,
                 )
+
 
 alpaca_sync_service = AlpacaSyncService()

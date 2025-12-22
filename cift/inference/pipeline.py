@@ -45,6 +45,7 @@ from cift.ml.ensemble import EnsembleMetaModel, EnsemblePrediction, build_ensemb
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class PipelineConfig:
     """Configuration for inference pipeline."""
@@ -55,12 +56,12 @@ class PipelineConfig:
     symbols: list[str] = field(default_factory=lambda: ["SPY"])
 
     # Feature extraction
-    tick_window: int = 100          # Ticks for feature rolling window
-    second_window: int = 60         # Seconds for aggregation
-    minute_window: int = 30         # Minutes for trend features
+    tick_window: int = 100  # Ticks for feature rolling window
+    second_window: int = 60  # Seconds for aggregation
+    minute_window: int = 30  # Minutes for trend features
 
     # Model inference
-    batch_size: int = 100           # Max events before batch inference
+    batch_size: int = 100  # Max events before batch inference
     batch_timeout_ms: float = 10.0  # Max time before inference
 
     # Ensemble settings
@@ -80,20 +81,22 @@ class PipelineConfig:
 @dataclass
 class InferenceResult:
     """Result of inference pipeline."""
+
     timestamp: float
     symbol: str
     prediction: EnsemblePrediction
 
     # Timing
-    data_latency_ms: float          # Time from market event to pipeline
-    feature_latency_ms: float       # Feature extraction time
-    model_latency_ms: float         # Model inference time
-    total_latency_ms: float         # Total pipeline latency
+    data_latency_ms: float  # Time from market event to pipeline
+    feature_latency_ms: float  # Feature extraction time
+    model_latency_ms: float  # Model inference time
+    total_latency_ms: float  # Total pipeline latency
 
 
 @dataclass
 class FeatureBuffer:
     """Rolling window buffer for features."""
+
     tick_features: deque = field(default_factory=lambda: deque(maxlen=100))
     second_features: deque = field(default_factory=lambda: deque(maxlen=60))
     minute_features: deque = field(default_factory=lambda: deque(maxlen=30))
@@ -108,6 +111,7 @@ class FeatureBuffer:
 # ============================================================================
 # FEATURE EXTRACTION
 # ============================================================================
+
 
 class FeatureExtractor:
     """
@@ -235,10 +239,10 @@ class FeatureExtractor:
 
         # OHLC from prices
         prices = tick_array[:, 0]
-        features[0] = prices[0]      # Open
-        features[1] = prices.max()   # High
-        features[2] = prices.min()   # Low
-        features[3] = prices[-1]     # Close
+        features[0] = prices[0]  # Open
+        features[1] = prices.max()  # High
+        features[2] = prices.min()  # Low
+        features[3] = prices[-1]  # Close
 
         # Volume
         features[4] = tick_array[:, 4].sum()  # Total volume
@@ -283,10 +287,10 @@ class FeatureExtractor:
 
         # Minute OHLC
         closes = second_array[:, 3]
-        features[0] = second_array[0, 0]   # Open
+        features[0] = second_array[0, 0]  # Open
         features[1] = second_array[:, 1].max()  # High
         features[2] = second_array[:, 2].min()  # Low
-        features[3] = closes[-1]           # Close
+        features[3] = closes[-1]  # Close
 
         # Volume
         features[4] = second_array[:, 4].sum()
@@ -358,15 +362,22 @@ class FeatureExtractor:
         """Build feature dictionary for all models."""
         return {
             "tick_features": np.array(list(buffer.tick_features)),
-            "second_features": np.array(list(buffer.second_features)) if buffer.second_features else None,
-            "minute_features": np.array(list(buffer.minute_features)) if buffer.minute_features else None,
-            "regime_features": np.array(list(buffer.regime_features)[-1]) if buffer.regime_features else None,
+            "second_features": (
+                np.array(list(buffer.second_features)) if buffer.second_features else None
+            ),
+            "minute_features": (
+                np.array(list(buffer.minute_features)) if buffer.minute_features else None
+            ),
+            "regime_features": (
+                np.array(list(buffer.regime_features)[-1]) if buffer.regime_features else None
+            ),
         }
 
 
 # ============================================================================
 # INFERENCE ENGINE
 # ============================================================================
+
 
 class InferenceEngine:
     """
@@ -405,17 +416,19 @@ class InferenceEngine:
 
         May trigger batch inference if conditions met.
         """
-        self.pending.append({
-            "symbol": symbol,
-            "features": features,
-            "data_timestamp": data_timestamp,
-            "submit_time": time.time(),
-        })
+        self.pending.append(
+            {
+                "symbol": symbol,
+                "features": features,
+                "data_timestamp": data_timestamp,
+                "submit_time": time.time(),
+            }
+        )
 
         # Check if we should run inference
         should_infer = (
-            len(self.pending) >= self.config.batch_size or
-            (time.time() - self.last_inference_time) * 1000 >= self.config.batch_timeout_ms
+            len(self.pending) >= self.config.batch_size
+            or (time.time() - self.last_inference_time) * 1000 >= self.config.batch_timeout_ms
         )
 
         if should_infer:
@@ -468,7 +481,11 @@ class InferenceEngine:
         transformer_features = None
         if features.get("tick_features") is not None:
             # Combine multi-timeframe features
-            tick_f = features["tick_features"][-50:] if len(features["tick_features"]) > 50 else features["tick_features"]
+            tick_f = (
+                features["tick_features"][-50:]
+                if len(features["tick_features"]) > 50
+                else features["tick_features"]
+            )
 
             # Pad if needed
             if len(tick_f) < 50:
@@ -477,8 +494,16 @@ class InferenceEngine:
 
             transformer_features = {
                 "tick": tick_f[:, :32],  # First 32 features
-                "second": features.get("second_features", np.zeros((60, 16)))[-60:] if features.get("second_features") is not None else np.zeros((60, 16)),
-                "minute": features.get("minute_features", np.zeros((30, 8)))[-30:] if features.get("minute_features") is not None else np.zeros((30, 8)),
+                "second": (
+                    features.get("second_features", np.zeros((60, 16)))[-60:]
+                    if features.get("second_features") is not None
+                    else np.zeros((60, 16))
+                ),
+                "minute": (
+                    features.get("minute_features", np.zeros((30, 8)))[-30:]
+                    if features.get("minute_features") is not None
+                    else np.zeros((30, 8))
+                ),
             }
 
         # HMM features
@@ -495,9 +520,13 @@ class InferenceEngine:
             xgboost_features[21] = np.mean([t[7] for t in recent])  # Order flow imbalance
             xgboost_features[22] = 0.5  # VPIN placeholder
             xgboost_features[23] = 0.1  # Kyle lambda placeholder
-            xgboost_features[24] = np.mean([t[3] for t in recent]) / (recent[-1][0] + 1e-8) * 10000  # Spread percentile
+            xgboost_features[24] = (
+                np.mean([t[3] for t in recent]) / (recent[-1][0] + 1e-8) * 10000
+            )  # Spread percentile
             xgboost_features[25] = 1.0  # Volume ratio placeholder
-            xgboost_features[26] = np.std([t[8] for t in recent]) if len(recent) > 1 else 0  # Realized vol
+            xgboost_features[26] = (
+                np.std([t[8] for t in recent]) if len(recent) > 1 else 0
+            )  # Realized vol
 
         feature_time = time.time()
 
@@ -527,6 +556,7 @@ class InferenceEngine:
 # ============================================================================
 # MAIN PIPELINE
 # ============================================================================
+
 
 class InferencePipeline:
     """
@@ -578,9 +608,7 @@ class InferencePipeline:
         self.data_aggregator.on_tick(self._handle_tick)
 
         # Start data connection
-        self._tasks.append(
-            asyncio.create_task(self.data_aggregator.start())
-        )
+        self._tasks.append(asyncio.create_task(self.data_aggregator.start()))
 
         logger.info(f"Pipeline started for symbols: {self.config.symbols}")
 
@@ -634,6 +662,7 @@ class InferencePipeline:
 # WEBSOCKET BROADCASTER (optional)
 # ============================================================================
 
+
 class WebSocketBroadcaster:
     """
     WebSocket server for broadcasting predictions.
@@ -673,17 +702,19 @@ class WebSocketBroadcaster:
 
         import json
 
-        message = json.dumps({
-            "type": "prediction",
-            "timestamp": result.timestamp,
-            "symbol": result.symbol,
-            "direction": result.prediction.direction,
-            "probability": result.prediction.direction_probability,
-            "confidence": result.prediction.confidence,
-            "should_trade": result.prediction.should_trade,
-            "position_size": result.prediction.position_size,
-            "latency_ms": result.total_latency_ms,
-        })
+        message = json.dumps(
+            {
+                "type": "prediction",
+                "timestamp": result.timestamp,
+                "symbol": result.symbol,
+                "direction": result.prediction.direction,
+                "probability": result.prediction.direction_probability,
+                "confidence": result.prediction.confidence,
+                "should_trade": result.prediction.should_trade,
+                "position_size": result.prediction.position_size,
+                "latency_ms": result.total_latency_ms,
+            }
+        )
 
         for client in self.clients.copy():
             try:

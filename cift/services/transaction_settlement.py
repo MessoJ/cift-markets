@@ -2,6 +2,7 @@
 Transaction Settlement Service - RULES COMPLIANT
 Background service to clear and settle pending funding transactions
 """
+
 import asyncio
 from datetime import datetime, timedelta
 
@@ -46,8 +47,8 @@ class TransactionSettlement:
                     # Credit user account
                     await conn.execute(
                         "UPDATE accounts SET cash = cash + $1 WHERE user_id = $2 AND is_active = true",
-                        txn['amount'],
-                        txn['user_id'],
+                        txn["amount"],
+                        txn["user_id"],
                     )
 
                     # Mark transaction as completed
@@ -57,18 +58,20 @@ class TransactionSettlement:
                         SET status = 'completed', completed_at = NOW()
                         WHERE id = $1::uuid
                         """,
-                        txn['id']
+                        txn["id"],
                     )
 
                     completed_count += 1
-                    logger.info(f"Cleared deposit transaction {txn['id']} for user {txn['user_id']}")
+                    logger.info(
+                        f"Cleared deposit transaction {txn['id']} for user {txn['user_id']}"
+                    )
 
                 except Exception as e:
                     logger.error(f"Error clearing deposit {txn['id']}: {str(e)}")
                     # Mark as failed
                     await conn.execute(
                         "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
-                        txn['id']
+                        txn["id"],
                     )
 
             if completed_count > 0:
@@ -115,24 +118,26 @@ class TransactionSettlement:
                         SET status = 'completed', completed_at = NOW()
                         WHERE id = $1::uuid
                         """,
-                        txn['id']
+                        txn["id"],
                     )
 
                     completed_count += 1
-                    logger.info(f"Cleared withdrawal transaction {txn['id']} for user {txn['user_id']}")
+                    logger.info(
+                        f"Cleared withdrawal transaction {txn['id']} for user {txn['user_id']}"
+                    )
 
                 except Exception as e:
                     logger.error(f"Error clearing withdrawal {txn['id']}: {str(e)}")
                     # Mark as failed and refund
                     await conn.execute(
                         "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
-                        txn['id']
+                        txn["id"],
                     )
                     # Refund to user account
                     await conn.execute(
                         "UPDATE accounts SET cash = cash + $1 WHERE user_id = $2 AND is_active = true",
-                        txn['amount'] + txn['fee'],
-                        txn['user_id'],
+                        txn["amount"] + txn["fee"],
+                        txn["user_id"],
                     )
                     logger.info(f"Refunded failed withdrawal {txn['id']}")
 
@@ -167,7 +172,7 @@ class TransactionSettlement:
                 ORDER BY created_at ASC
                 LIMIT 50
                 """,
-                stuck_cutoff
+                stuck_cutoff,
             )
 
             failed_count = 0
@@ -176,19 +181,21 @@ class TransactionSettlement:
                     # Mark as failed
                     await conn.execute(
                         "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
-                        txn['id']
+                        txn["id"],
                     )
 
                     # Refund if withdrawal
-                    if txn['type'] == 'withdrawal':
+                    if txn["type"] == "withdrawal":
                         await conn.execute(
                             "UPDATE accounts SET cash = cash + $1 WHERE user_id = $2 AND is_active = true",
-                            txn['amount'] + txn['fee'],
-                            txn['user_id'],
+                            txn["amount"] + txn["fee"],
+                            txn["user_id"],
                         )
 
                     failed_count += 1
-                    logger.warning(f"Auto-failed stuck transaction {txn['id']} (created: {txn['created_at']})")
+                    logger.warning(
+                        f"Auto-failed stuck transaction {txn['id']} (created: {txn['created_at']})"
+                    )
 
                 except Exception as e:
                     logger.error(f"Error failing stuck transaction {txn['id']}: {str(e)}")
@@ -211,18 +218,18 @@ class TransactionSettlement:
             withdrawals = await TransactionSettlement.process_pending_withdrawals()
             stuck = await TransactionSettlement.check_stuck_transactions()
 
-            logger.info(f"Settlement cycle complete: {deposits} deposits, {withdrawals} withdrawals, {stuck} stuck")
+            logger.info(
+                f"Settlement cycle complete: {deposits} deposits, {withdrawals} withdrawals, {stuck} stuck"
+            )
 
             return {
-                'deposits_cleared': deposits,
-                'withdrawals_cleared': withdrawals,
-                'stuck_failed': stuck
+                "deposits_cleared": deposits,
+                "withdrawals_cleared": withdrawals,
+                "stuck_failed": stuck,
             }
         except Exception as e:
             logger.error(f"Settlement cycle error: {str(e)}")
-            return {
-                'error': str(e)
-            }
+            return {"error": str(e)}
 
     @staticmethod
     async def start_background_settlement(interval_seconds: int = 60):

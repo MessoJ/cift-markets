@@ -526,6 +526,7 @@ async def get_clickhouse_manager() -> ClickHouseManager:
 
     if _clickhouse_manager is None:
         import os
+
         host = os.getenv("CLICKHOUSE_HOST", "localhost")
         port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
         database = os.getenv("CLICKHOUSE_DB", "cift_analytics")

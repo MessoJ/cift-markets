@@ -153,14 +153,13 @@ class NATSManager:
                 payload = msgpack.packb(data, use_bin_type=True)
             else:
                 import json
+
                 payload = json.dumps(data).encode()
 
             # Publish to JetStream (persistent)
             ack = await self.js.publish(subject, payload)
 
-            logger.debug(
-                f"Published to '{subject}': stream={ack.stream}, seq={ack.seq}"
-            )
+            logger.debug(f"Published to '{subject}': stream={ack.stream}, seq={ack.seq}")
 
         except Exception as e:
             logger.error(f"Failed to publish to '{subject}': {e}")
@@ -173,10 +172,7 @@ class NATSManager:
         use_msgpack: bool = True,
     ) -> None:
         """Publish multiple messages efficiently"""
-        tasks = [
-            self.publish(subject, msg, use_msgpack)
-            for msg in messages
-        ]
+        tasks = [self.publish(subject, msg, use_msgpack) for msg in messages]
         await asyncio.gather(*tasks)
 
     async def subscribe(
@@ -198,6 +194,7 @@ class NATSManager:
             use_msgpack: Expect MessagePack encoded messages
         """
         try:
+
             async def message_handler(msg):
                 try:
                     # Deserialize message
@@ -205,6 +202,7 @@ class NATSManager:
                         data = msgpack.unpackb(msg.data, raw=False)
                     else:
                         import json
+
                         data = json.loads(msg.data.decode())
 
                     # Call user callback
@@ -252,10 +250,7 @@ class NATSManager:
                 messages = await subscription.fetch(batch=10, timeout=1.0)
 
                 # Process messages concurrently
-                await asyncio.gather(
-                    *[handler(msg) for msg in messages],
-                    return_exceptions=True
-                )
+                await asyncio.gather(*[handler(msg) for msg in messages], return_exceptions=True)
 
             except TimeoutError:
                 # No messages available, continue
@@ -288,6 +283,7 @@ class NATSManager:
                 payload = msgpack.packb(data, use_bin_type=True)
             else:
                 import json
+
                 payload = json.dumps(data).encode()
 
             # Send request and wait for response
@@ -302,6 +298,7 @@ class NATSManager:
                 return msgpack.unpackb(response.data, raw=False)
             else:
                 import json
+
                 return json.loads(response.data.decode())
 
         except TimeoutError:
@@ -371,6 +368,7 @@ async def get_nats_manager() -> NATSManager:
 
     if _nats_manager is None:
         import os
+
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
         _nats_manager = NATSManager(nats_url)
         await _nats_manager.connect()

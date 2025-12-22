@@ -22,9 +22,9 @@ router = APIRouter(prefix="/stream", tags=["streaming"])
 # SERVER-SENT EVENTS FOR REAL-TIME PRICES
 # ============================================================================
 
+
 async def price_stream_generator(
-    symbols: list[str],
-    interval: float = 1.0
+    symbols: list[str], interval: float = 1.0
 ) -> AsyncGenerator[str, None]:
     """
     Generate SSE stream of real-time price updates.
@@ -36,6 +36,7 @@ async def price_stream_generator(
     try:
         # Import the Finnhub service
         from cift.api.routes.admin import get_finnhub_service
+
         service = await get_finnhub_service()
 
         last_prices = {}
@@ -49,15 +50,18 @@ async def price_stream_generator(
                 # Only send if price changed
                 if price is not None and price != last_prices.get(symbol):
                     last_prices[symbol] = price
-                    updates.append({
-                        "symbol": symbol,
-                        "price": price,
-                        "timestamp": asyncio.get_event_loop().time()
-                    })
+                    updates.append(
+                        {
+                            "symbol": symbol,
+                            "price": price,
+                            "timestamp": asyncio.get_event_loop().time(),
+                        }
+                    )
 
             if updates:
                 # SSE format: data: {json}\n\n
                 import json
+
                 for update in updates:
                     yield f"data: {json.dumps(update)}\n\n"
             else:
@@ -107,7 +111,7 @@ async def stream_prices(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
-        }
+        },
     )
 
 
@@ -115,9 +119,9 @@ async def stream_prices(
 # DATABASE POLLING STREAM (Fallback when WebSocket not available)
 # ============================================================================
 
+
 async def db_price_stream_generator(
-    symbols: list[str],
-    interval: float = 2.0
+    symbols: list[str], interval: float = 2.0
 ) -> AsyncGenerator[str, None]:
     """
     Generate SSE stream from database cache (polling fallback).
@@ -136,22 +140,24 @@ async def db_price_stream_generator(
                     FROM market_data_cache
                     WHERE symbol = ANY($1)
                     """,
-                    symbols
+                    symbols,
                 )
 
                 updates = []
                 for row in rows:
-                    symbol = row['symbol']
-                    price = float(row['price'])
+                    symbol = row["symbol"]
+                    price = float(row["price"])
 
                     if price != last_prices.get(symbol):
                         last_prices[symbol] = price
-                        updates.append({
-                            "symbol": symbol,
-                            "price": price,
-                            "change_pct": float(row['change_pct']) if row['change_pct'] else 0,
-                            "timestamp": row['updated_at'].isoformat()
-                        })
+                        updates.append(
+                            {
+                                "symbol": symbol,
+                                "price": price,
+                                "change_pct": float(row["change_pct"]) if row["change_pct"] else 0,
+                                "timestamp": row["updated_at"].isoformat(),
+                            }
+                        )
 
                 if updates:
                     for update in updates:
@@ -196,7 +202,7 @@ async def stream_cached_prices(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -204,9 +210,9 @@ async def stream_cached_prices(
 # NEWS STREAM
 # ============================================================================
 
+
 async def news_stream_generator(
-    symbols: list[str] | None = None,
-    interval: float = 30.0
+    symbols: list[str] | None = None, interval: float = 30.0
 ) -> AsyncGenerator[str, None]:
     """
     Generate SSE stream of news updates.
@@ -232,7 +238,7 @@ async def news_stream_generator(
                         LIMIT 10
                         """,
                         last_check,
-                        symbols
+                        symbols,
                     )
                 else:
                     rows = await conn.fetch(
@@ -244,20 +250,22 @@ async def news_stream_generator(
                         ORDER BY published_at DESC
                         LIMIT 10
                         """,
-                        last_check
+                        last_check,
                     )
 
                 if rows:
                     last_check = datetime.utcnow()
                     for row in rows:
                         article = {
-                            "id": str(row['id']),
-                            "title": row['title'],
-                            "source": row['source_name'],
-                            "url": row['source_url'],
-                            "category": row['category'],
-                            "sentiment": float(row['sentiment_score']) if row['sentiment_score'] else None,
-                            "published_at": row['published_at'].isoformat()
+                            "id": str(row["id"]),
+                            "title": row["title"],
+                            "source": row["source_name"],
+                            "url": row["source_url"],
+                            "category": row["category"],
+                            "sentiment": (
+                                float(row["sentiment_score"]) if row["sentiment_score"] else None
+                            ),
+                            "published_at": row["published_at"].isoformat(),
                         }
                         yield f"event: news\ndata: {json.dumps(article)}\n\n"
                 else:
@@ -302,5 +310,5 @@ async def stream_news(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )

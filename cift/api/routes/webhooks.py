@@ -24,10 +24,10 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 # STRIPE WEBHOOKS
 # ============================================================================
 
+
 @router.post("/stripe")
 async def stripe_webhook(
-    request: Request,
-    stripe_signature: str = Header(None, alias="Stripe-Signature")
+    request: Request, stripe_signature: str = Header(None, alias="Stripe-Signature")
 ):
     """
     Handle Stripe webhook events
@@ -45,18 +45,18 @@ async def stripe_webhook(
 
     try:
         event = json.loads(body)
-        event_type = event.get('type')
-        data = event.get('data', {}).get('object', {})
+        event_type = event.get("type")
+        data = event.get("data", {}).get("object", {})
 
         logger.info(f"Received Stripe webhook: {event_type}")
 
-        if event_type == 'payment_intent.succeeded':
+        if event_type == "payment_intent.succeeded":
             await handle_stripe_payment_succeeded(data)
-        elif event_type == 'payment_intent.failed':
+        elif event_type == "payment_intent.failed":
             await handle_stripe_payment_failed(data)
-        elif event_type == 'payment_method.attached':
+        elif event_type == "payment_method.attached":
             await handle_stripe_payment_method_attached(data)
-        elif event_type == 'setup_intent.succeeded':
+        elif event_type == "setup_intent.succeeded":
             await handle_stripe_setup_succeeded(data)
         else:
             logger.info(f"Unhandled Stripe event type: {event_type}")
@@ -71,11 +71,11 @@ async def stripe_webhook(
 
 async def handle_stripe_payment_succeeded(data: dict[str, Any]):
     """Handle successful Stripe payment"""
-    payment_intent_id = data.get('id')
-    data.get('amount', 0) / 100  # Convert from cents
-    metadata = data.get('metadata', {})
+    payment_intent_id = data.get("id")
+    data.get("amount", 0) / 100  # Convert from cents
+    metadata = data.get("metadata", {})
 
-    transaction_id = metadata.get('transaction_id')
+    transaction_id = metadata.get("transaction_id")
     if not transaction_id:
         logger.warning(f"No transaction_id in Stripe payment metadata: {payment_intent_id}")
         return
@@ -111,10 +111,10 @@ async def handle_stripe_payment_succeeded(data: dict[str, Any]):
         if user_data:
             # Send email notification
             await email_service.send_transaction_completed(
-                email=user_data['email'],
-                transaction_type=user_data['type'],
-                amount=float(user_data['amount']),
-                transaction_id=transaction_id
+                email=user_data["email"],
+                transaction_type=user_data["type"],
+                amount=float(user_data["amount"]),
+                transaction_id=transaction_id,
             )
 
     logger.info(f"Stripe payment succeeded: {transaction_id}")
@@ -122,11 +122,11 @@ async def handle_stripe_payment_succeeded(data: dict[str, Any]):
 
 async def handle_stripe_payment_failed(data: dict[str, Any]):
     """Handle failed Stripe payment"""
-    payment_intent_id = data.get('id')
-    failure_message = data.get('last_payment_error', {}).get('message', 'Payment failed')
-    metadata = data.get('metadata', {})
+    payment_intent_id = data.get("id")
+    failure_message = data.get("last_payment_error", {}).get("message", "Payment failed")
+    metadata = data.get("metadata", {})
 
-    transaction_id = metadata.get('transaction_id')
+    transaction_id = metadata.get("transaction_id")
     if not transaction_id:
         return
 
@@ -152,10 +152,10 @@ async def handle_stripe_payment_failed(data: dict[str, Any]):
 
 async def handle_stripe_payment_method_attached(data: dict[str, Any]):
     """Handle payment method attachment"""
-    payment_method_id = data.get('id')
-    metadata = data.get('metadata', {})
+    payment_method_id = data.get("id")
+    metadata = data.get("metadata", {})
 
-    our_payment_method_id = metadata.get('payment_method_id')
+    our_payment_method_id = metadata.get("payment_method_id")
     if not our_payment_method_id:
         return
 
@@ -181,11 +181,11 @@ async def handle_stripe_payment_method_attached(data: dict[str, Any]):
 
 async def handle_stripe_setup_succeeded(data: dict[str, Any]):
     """Handle successful setup intent (card verification)"""
-    data.get('id')
-    payment_method = data.get('payment_method')
-    metadata = data.get('metadata', {})
+    data.get("id")
+    payment_method = data.get("payment_method")
+    metadata = data.get("metadata", {})
 
-    our_payment_method_id = metadata.get('payment_method_id')
+    our_payment_method_id = metadata.get("payment_method_id")
     if not our_payment_method_id:
         return
 
@@ -219,8 +219,7 @@ async def handle_stripe_setup_succeeded(data: dict[str, Any]):
 
         if user_email:
             await email_service.send_payment_method_verified(
-                email=user_email,
-                payment_method_type='card'
+                email=user_email, payment_method_type="card"
             )
 
     logger.info(f"Stripe setup succeeded: {our_payment_method_id}")
@@ -228,19 +227,19 @@ async def handle_stripe_setup_succeeded(data: dict[str, Any]):
 
 def verify_stripe_signature(payload: bytes, signature: str) -> bool:
     """Verify Stripe webhook signature"""
-    if not signature or not hasattr(settings, 'STRIPE_WEBHOOK_SECRET'):
+    if not signature or not hasattr(settings, "STRIPE_WEBHOOK_SECRET"):
         return False
 
     try:
         # Extract timestamp and signature from header
-        parts = signature.split(',')
+        parts = signature.split(",")
         timestamp = None
         signatures = []
 
         for part in parts:
-            if part.startswith('t='):
+            if part.startswith("t="):
                 timestamp = part[2:]
-            elif part.startswith('v1='):
+            elif part.startswith("v1="):
                 signatures.append(part[3:])
 
         if not timestamp or not signatures:
@@ -249,9 +248,7 @@ def verify_stripe_signature(payload: bytes, signature: str) -> bool:
         # Compute expected signature
         signed_payload = f"{timestamp}.{payload.decode()}"
         expected_sig = hmac.new(
-            settings.STRIPE_WEBHOOK_SECRET.encode(),
-            signed_payload.encode(),
-            hashlib.sha256
+            settings.STRIPE_WEBHOOK_SECRET.encode(), signed_payload.encode(), hashlib.sha256
         ).hexdigest()
 
         # Compare signatures
@@ -265,6 +262,7 @@ def verify_stripe_signature(payload: bytes, signature: str) -> bool:
 # ============================================================================
 # PAYPAL WEBHOOKS
 # ============================================================================
+
 
 @router.post("/paypal")
 async def paypal_webhook(request: Request):
@@ -281,16 +279,16 @@ async def paypal_webhook(request: Request):
 
     try:
         event = json.loads(body)
-        event_type = event.get('event_type')
-        resource = event.get('resource', {})
+        event_type = event.get("event_type")
+        resource = event.get("resource", {})
 
         logger.info(f"Received PayPal webhook: {event_type}")
 
-        if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+        if event_type == "PAYMENT.CAPTURE.COMPLETED":
             await handle_paypal_payment_completed(resource)
-        elif event_type == 'PAYMENT.CAPTURE.DENIED':
+        elif event_type == "PAYMENT.CAPTURE.DENIED":
             await handle_paypal_payment_denied(resource)
-        elif event_type == 'CUSTOMER.DISPUTE.CREATED':
+        elif event_type == "CUSTOMER.DISPUTE.CREATED":
             await handle_paypal_dispute(resource)
         else:
             logger.info(f"Unhandled PayPal event type: {event_type}")
@@ -304,9 +302,9 @@ async def paypal_webhook(request: Request):
 
 async def handle_paypal_payment_completed(resource: dict[str, Any]):
     """Handle completed PayPal payment"""
-    capture_id = resource.get('id')
-    float(resource.get('amount', {}).get('value', 0))
-    custom_id = resource.get('custom_id')  # Our transaction ID
+    capture_id = resource.get("id")
+    float(resource.get("amount", {}).get("value", 0))
+    custom_id = resource.get("custom_id")  # Our transaction ID
 
     if not custom_id:
         logger.warning(f"No custom_id in PayPal payment: {capture_id}")
@@ -333,8 +331,8 @@ async def handle_paypal_payment_completed(resource: dict[str, Any]):
 
 async def handle_paypal_payment_denied(resource: dict[str, Any]):
     """Handle denied PayPal payment"""
-    capture_id = resource.get('id')
-    custom_id = resource.get('custom_id')
+    capture_id = resource.get("id")
+    custom_id = resource.get("custom_id")
 
     if not custom_id:
         return
@@ -360,8 +358,8 @@ async def handle_paypal_payment_denied(resource: dict[str, Any]):
 
 async def handle_paypal_dispute(resource: dict[str, Any]):
     """Handle PayPal dispute"""
-    dispute_id = resource.get('dispute_id')
-    transaction_id = resource.get('disputed_transactions', [{}])[0].get('seller_transaction_id')
+    dispute_id = resource.get("dispute_id")
+    transaction_id = resource.get("disputed_transactions", [{}])[0].get("seller_transaction_id")
 
     logger.warning(f"PayPal dispute created: {dispute_id} for transaction {transaction_id}")
     # TODO: Notify admin, freeze user account if needed
@@ -370,6 +368,7 @@ async def handle_paypal_dispute(resource: dict[str, Any]):
 # ============================================================================
 # M-PESA WEBHOOKS
 # ============================================================================
+
 
 @router.post("/mpesa/callback")
 async def mpesa_callback(request: Request):
@@ -383,11 +382,11 @@ async def mpesa_callback(request: Request):
         data = json.loads(body)
 
         # Extract STK callback data
-        callback_data = data.get('Body', {}).get('stkCallback', {})
-        result_code = callback_data.get('ResultCode')
-        result_desc = callback_data.get('ResultDesc')
-        merchant_request_id = callback_data.get('MerchantRequestID')
-        checkout_request_id = callback_data.get('CheckoutRequestID')
+        callback_data = data.get("Body", {}).get("stkCallback", {})
+        result_code = callback_data.get("ResultCode")
+        result_desc = callback_data.get("ResultDesc")
+        merchant_request_id = callback_data.get("MerchantRequestID")
+        checkout_request_id = callback_data.get("CheckoutRequestID")
 
         logger.info(f"M-Pesa callback: {merchant_request_id} - Result: {result_code}")
 
@@ -408,18 +407,18 @@ async def mpesa_callback(request: Request):
 async def handle_mpesa_success(checkout_request_id: str, callback_data: dict[str, Any]):
     """Handle successful M-Pesa transaction"""
     # Extract payment details
-    callback_metadata = callback_data.get('CallbackMetadata', {}).get('Item', [])
+    callback_metadata = callback_data.get("CallbackMetadata", {}).get("Item", [])
     amount = None
     mpesa_receipt = None
 
     for item in callback_metadata:
-        name = item.get('Name')
-        if name == 'Amount':
-            amount = item.get('Value')
-        elif name == 'MpesaReceiptNumber':
-            mpesa_receipt = item.get('Value')
-        elif name == 'PhoneNumber':
-            item.get('Value')
+        name = item.get("Name")
+        if name == "Amount":
+            amount = item.get("Value")
+        elif name == "MpesaReceiptNumber":
+            mpesa_receipt = item.get("Value")
+        elif name == "PhoneNumber":
+            item.get("Value")
 
     pool = await get_postgres_pool()
     async with pool.acquire() as conn:
@@ -447,15 +446,15 @@ async def handle_mpesa_success(checkout_request_id: str, callback_data: dict[str
                 WHERE id = $2
                 """,
                 f"M-Pesa Receipt: {mpesa_receipt}",
-                transaction['id'],
+                transaction["id"],
             )
 
             # Send SMS notification
-            if transaction['phone']:
+            if transaction["phone"]:
                 await sms_service.send_transaction_completed(
-                    phone=transaction['phone'],
+                    phone=transaction["phone"],
                     amount=float(amount) if amount else 0,
-                    receipt=mpesa_receipt
+                    receipt=mpesa_receipt,
                 )
 
             logger.info(f"M-Pesa payment succeeded: {checkout_request_id}")
@@ -484,20 +483,19 @@ async def handle_mpesa_success(checkout_request_id: str, callback_data: dict[str
                     updated_at = NOW()
                 WHERE id = $1
                 """,
-                payment_method['id'],
+                payment_method["id"],
             )
 
             # Delete verification record
             await conn.execute(
                 "DELETE FROM payment_verification WHERE payment_method_id = $1",
-                payment_method['id'],
+                payment_method["id"],
             )
 
             # Send email notification
-            if payment_method['email']:
+            if payment_method["email"]:
                 await email_service.send_payment_method_verified(
-                    email=payment_method['email'],
-                    payment_method_type='M-Pesa'
+                    email=payment_method["email"], payment_method_type="M-Pesa"
                 )
 
             logger.info(f"M-Pesa payment method verified: {payment_method['id']}")
@@ -540,10 +538,8 @@ async def handle_mpesa_failure(checkout_request_id: str, result_desc: str):
 # GENERIC WEBHOOK UTILITIES
 # ============================================================================
 
+
 @router.get("/health")
 async def webhook_health():
     """Health check for webhook endpoints"""
-    return {
-        "status": "healthy",
-        "endpoints": ["stripe", "paypal", "mpesa/callback"]
-    }
+    return {"status": "healthy", "endpoints": ["stripe", "paypal", "mpesa/callback"]}

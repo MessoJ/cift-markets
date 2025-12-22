@@ -19,19 +19,15 @@ class EmailService:
     """
 
     def __init__(self):
-        self.smtp_host = getattr(settings, 'SMTP_HOST', 'smtp.gmail.com')
-        self.smtp_port = getattr(settings, 'SMTP_PORT', 587)
-        self.smtp_user = getattr(settings, 'SMTP_USER', None)
-        self.smtp_password = getattr(settings, 'SMTP_PASSWORD', None)
-        self.from_email = getattr(settings, 'FROM_EMAIL', 'noreply@ciftmarkets.com')
-        self.from_name = getattr(settings, 'FROM_NAME', 'CIFT Markets')
+        self.smtp_host = getattr(settings, "SMTP_HOST", "smtp.gmail.com")
+        self.smtp_port = getattr(settings, "SMTP_PORT", 587)
+        self.smtp_user = getattr(settings, "SMTP_USER", None)
+        self.smtp_password = getattr(settings, "SMTP_PASSWORD", None)
+        self.from_email = getattr(settings, "FROM_EMAIL", "noreply@ciftmarkets.com")
+        self.from_name = getattr(settings, "FROM_NAME", "CIFT Markets")
 
     async def send_email(
-        self,
-        to_email: str,
-        subject: str,
-        html_body: str,
-        text_body: str | None = None
+        self, to_email: str, subject: str, html_body: str, text_body: str | None = None
     ) -> bool:
         """
         Send email via SMTP
@@ -52,15 +48,15 @@ class EmailService:
 
         try:
             # Create message
-            msg = MIMEMultipart('alternative')
-            msg['From'] = f"{self.from_name} <{self.from_email}>"
-            msg['To'] = to_email
-            msg['Subject'] = subject
+            msg = MIMEMultipart("alternative")
+            msg["From"] = f"{self.from_name} <{self.from_email}>"
+            msg["To"] = to_email
+            msg["Subject"] = subject
 
             # Add text and HTML parts
             if text_body:
-                msg.attach(MIMEText(text_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
+                msg.attach(MIMEText(text_body, "plain"))
+            msg.attach(MIMEText(html_body, "html"))
 
             # Send via SMTP
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
@@ -80,7 +76,7 @@ class EmailService:
         email: str,
         payment_method_type: str,
         verification_type: str,
-        verification_details: dict
+        verification_details: dict,
     ):
         """
         Send payment method verification instructions
@@ -93,7 +89,7 @@ class EmailService:
         """
         subject = f"Verify Your {payment_method_type.replace('_', ' ').title()}"
 
-        if verification_type == 'micro_deposit':
+        if verification_type == "micro_deposit":
             html_body = """
             <html>
             <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -118,7 +114,7 @@ class EmailService:
             </html>
             """
 
-        elif verification_type == 'stk_push':
+        elif verification_type == "stk_push":
             html_body = f"""
             <html>
             <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -139,8 +135,8 @@ class EmailService:
             </html>
             """
 
-        elif verification_type == 'oauth':
-            oauth_url = verification_details.get('oauth_url', '')
+        elif verification_type == "oauth":
+            oauth_url = verification_details.get("oauth_url", "")
             html_body = f"""
             <html>
             <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -174,11 +170,7 @@ class EmailService:
 
         await self.send_email(email, subject, html_body)
 
-    async def send_payment_method_verified(
-        self,
-        email: str,
-        payment_method_type: str
-    ):
+    async def send_payment_method_verified(self, email: str, payment_method_type: str):
         """Send notification that payment method was verified"""
         subject = f"{payment_method_type.replace('_', ' ').title()} Verified Successfully"
 
@@ -207,14 +199,10 @@ class EmailService:
         await self.send_email(email, subject, html_body)
 
     async def send_transaction_completed(
-        self,
-        email: str,
-        transaction_type: str,
-        amount: float,
-        transaction_id: str
+        self, email: str, transaction_type: str, amount: float, transaction_id: str
     ):
         """Send notification that transaction completed"""
-        action = "Deposit" if transaction_type == 'deposit' else "Withdrawal"
+        action = "Deposit" if transaction_type == "deposit" else "Withdrawal"
         subject = f"{action} Completed - ${amount:,.2f}"
 
         html_body = f"""
@@ -246,14 +234,10 @@ class EmailService:
         await self.send_email(email, subject, html_body)
 
     async def send_transaction_failed(
-        self,
-        email: str,
-        transaction_type: str,
-        amount: float,
-        reason: str
+        self, email: str, transaction_type: str, amount: float, reason: str
     ):
         """Send notification that transaction failed"""
-        action = "Deposit" if transaction_type == 'deposit' else "Withdrawal"
+        action = "Deposit" if transaction_type == "deposit" else "Withdrawal"
         subject = f"{action} Failed - ${amount:,.2f}"
 
         html_body = f"""

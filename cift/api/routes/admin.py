@@ -22,8 +22,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # MODELS
 # ============================================================================
 
+
 class DataUpdateRequest(BaseModel):
     """Request to update market data."""
+
     symbols: list[str] | None = None
     update_quotes: bool = True
     update_news: bool = True
@@ -33,6 +35,7 @@ class DataUpdateRequest(BaseModel):
 
 class DataUpdateResponse(BaseModel):
     """Response from data update."""
+
     status: str
     quotes_updated: int = 0
     news_stored: int = 0
@@ -44,17 +47,15 @@ class DataUpdateResponse(BaseModel):
 # HELPER: Check admin status
 # ============================================================================
 
+
 async def require_admin(user_id: UUID = Depends(get_current_user_id)) -> UUID:
     """Verify user is an admin."""
     pool = await get_postgres_pool()
 
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT is_superuser FROM users WHERE id = $1",
-            user_id
-        )
+        row = await conn.fetchrow("SELECT is_superuser FROM users WHERE id = $1", user_id)
 
-        if not row or not row['is_superuser']:
+        if not row or not row["is_superuser"]:
             raise HTTPException(status_code=403, detail="Admin access required")
 
     return user_id
@@ -63,6 +64,7 @@ async def require_admin(user_id: UUID = Depends(get_current_user_id)) -> UUID:
 # ============================================================================
 # ENDPOINTS - MARKET DATA
 # ============================================================================
+
 
 @router.post("/update-market-data")
 async def update_market_data(
@@ -81,11 +83,7 @@ async def update_market_data(
         service = PolygonRealtimeService()
         await service.initialize()
 
-        results = {
-            "quotes_updated": 0,
-            "news_stored": 0,
-            "bars_stored": 0
-        }
+        results = {"quotes_updated": 0, "news_stored": 0, "bars_stored": 0}
 
         try:
             if request.update_quotes:
@@ -95,8 +93,7 @@ async def update_market_data(
 
             if request.update_news:
                 results["news_stored"] = await service.fetch_and_store_news(
-                    symbols=request.symbols,
-                    limit=50
+                    symbols=request.symbols, limit=50
                 )
 
             if request.update_bars:
@@ -105,10 +102,7 @@ async def update_market_data(
                     try:
                         svc = PolygonRealtimeService()
                         await svc.initialize()
-                        await svc.update_ohlcv_bars(
-                            symbols=request.symbols,
-                            days=request.days
-                        )
+                        await svc.update_ohlcv_bars(symbols=request.symbols, days=request.days)
                         await svc.close()
                     except Exception as e:
                         logger.error(f"Background bar fetch failed: {e}")
@@ -124,7 +118,7 @@ async def update_market_data(
             quotes_updated=results["quotes_updated"],
             news_stored=results["news_stored"],
             bars_stored=results["bars_stored"],
-            message=f"Market data updated. Bars: {'running in background' if results['bars_stored'] == -1 else results['bars_stored']}"
+            message=f"Market data updated. Bars: {'running in background' if results['bars_stored'] == -1 else results['bars_stored']}",
         )
 
     except Exception as e:
@@ -149,32 +143,22 @@ async def get_market_data_status(
             # Get cache stats
             pool = await get_postgres_pool()
             async with pool.acquire() as conn:
-                cache_count = await conn.fetchval(
-                    "SELECT COUNT(*) FROM market_data_cache"
-                )
-                latest_update = await conn.fetchval(
-                    "SELECT MAX(updated_at) FROM market_data_cache"
-                )
+                cache_count = await conn.fetchval("SELECT COUNT(*) FROM market_data_cache")
+                latest_update = await conn.fetchval("SELECT MAX(updated_at) FROM market_data_cache")
                 news_count = await conn.fetchval(
                     "SELECT COUNT(*) FROM news_articles WHERE published_at > NOW() - INTERVAL '24 hours'"
                 )
-                bars_count = await conn.fetchval(
-                    "SELECT COUNT(*) FROM ohlcv_bars"
-                )
+                bars_count = await conn.fetchval("SELECT COUNT(*) FROM ohlcv_bars")
 
             return {
                 "polygon_configured": bool(service.api_key),
                 "market_status": market_status,
                 "cache": {
                     "symbols_cached": cache_count,
-                    "last_updated": latest_update.isoformat() if latest_update else None
+                    "last_updated": latest_update.isoformat() if latest_update else None,
                 },
-                "news": {
-                    "articles_24h": news_count
-                },
-                "historical": {
-                    "total_bars": bars_count
-                }
+                "news": {"articles_24h": news_count},
+                "historical": {"total_bars": bars_count},
             }
 
         finally:
@@ -198,7 +182,7 @@ async def start_realtime_worker(
         return {
             "status": "started",
             "message": "Real-time market data worker started",
-            "update_interval": polygon_worker.update_interval
+            "update_interval": polygon_worker.update_interval,
         }
 
     except Exception as e:
@@ -216,10 +200,7 @@ async def stop_realtime_worker(
 
         await polygon_worker.stop()
 
-        return {
-            "status": "stopped",
-            "message": "Real-time market data worker stopped"
-        }
+        return {"status": "stopped", "message": "Real-time market data worker stopped"}
 
     except Exception as e:
         logger.error(f"Failed to stop worker: {e}")
@@ -239,6 +220,7 @@ async def get_finnhub_service():
     global _finnhub_service
     if _finnhub_service is None:
         from cift.services.finnhub_realtime_service import FinnhubRealtimeService
+
         _finnhub_service = FinnhubRealtimeService()
     return _finnhub_service
 
@@ -260,7 +242,7 @@ async def connect_websocket(
         return {
             "status": "connected",
             "message": "WebSocket connected to Finnhub",
-            "subscribed_symbols": list(service.subscribed_symbols)
+            "subscribed_symbols": list(service.subscribed_symbols),
         }
 
     except Exception as e:
@@ -277,10 +259,7 @@ async def disconnect_websocket(
         service = await get_finnhub_service()
         await service.disconnect()
 
-        return {
-            "status": "disconnected",
-            "message": "WebSocket disconnected"
-        }
+        return {"status": "disconnected", "message": "WebSocket disconnected"}
 
     except Exception as e:
         logger.error(f"WebSocket disconnection failed: {e}")
@@ -289,6 +268,7 @@ async def disconnect_websocket(
 
 class SubscribeRequest(BaseModel):
     """WebSocket subscription request."""
+
     symbols: list[str]
 
 
@@ -304,7 +284,7 @@ async def subscribe_symbols(
         if not service.connected:
             raise HTTPException(
                 status_code=400,
-                detail="WebSocket not connected. Call /admin/websocket/connect first"
+                detail="WebSocket not connected. Call /admin/websocket/connect first",
             )
 
         for symbol in request.symbols:
@@ -313,7 +293,7 @@ async def subscribe_symbols(
         return {
             "status": "subscribed",
             "symbols": request.symbols,
-            "total_subscribed": len(service.subscribed_symbols)
+            "total_subscribed": len(service.subscribed_symbols),
         }
 
     except HTTPException:
@@ -338,7 +318,7 @@ async def unsubscribe_symbols(
         return {
             "status": "unsubscribed",
             "symbols": request.symbols,
-            "remaining_subscribed": len(service.subscribed_symbols)
+            "remaining_subscribed": len(service.subscribed_symbols),
         }
 
     except Exception as e:
@@ -362,7 +342,7 @@ async def get_websocket_status(
             "latest_prices": {
                 s: service.last_prices.get(s)
                 for s in list(service.subscribed_symbols)[:10]  # First 10
-            }
+            },
         }
 
     except Exception as e:
@@ -386,21 +366,15 @@ async def get_realtime_price(
             # Check if subscribed
             if symbol not in service.subscribed_symbols:
                 raise HTTPException(
-                    status_code=404,
-                    detail=f"Symbol {symbol} not subscribed. Subscribe first."
+                    status_code=404, detail=f"Symbol {symbol} not subscribed. Subscribe first."
                 )
             return {
                 "symbol": symbol,
                 "price": None,
-                "message": "Price not yet received, waiting for next trade"
+                "message": "Price not yet received, waiting for next trade",
             }
 
-        return {
-            "symbol": symbol,
-            "price": price,
-            "source": "finnhub_websocket",
-            "realtime": True
-        }
+        return {"symbol": symbol, "price": price, "source": "finnhub_websocket", "realtime": True}
 
     except HTTPException:
         raise
@@ -412,6 +386,7 @@ async def get_realtime_price(
 # ============================================================================
 # ENDPOINTS - SYSTEM
 # ============================================================================
+
 
 @router.get("/system-stats")
 async def get_system_stats(
@@ -436,17 +411,8 @@ async def get_system_stats(
         news_count = await conn.fetchval("SELECT COUNT(*) FROM news_articles")
 
         return {
-            "users": {
-                "total": user_count,
-                "active_7d": active_users
-            },
-            "trading": {
-                "total_orders": order_count,
-                "open_positions": position_count
-            },
-            "data": {
-                "symbols_tracked": symbol_count,
-                "news_articles": news_count
-            },
-            "timestamp": datetime.utcnow().isoformat()
+            "users": {"total": user_count, "active_7d": active_users},
+            "trading": {"total_orders": order_count, "open_positions": position_count},
+            "data": {"symbols_tracked": symbol_count, "news_articles": news_count},
+            "timestamp": datetime.utcnow().isoformat(),
         }

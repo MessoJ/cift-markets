@@ -27,8 +27,10 @@ from cift.core.config import settings
 # CONSTANTS
 # ============================================================================
 
+
 class AlpacaEndpoint(str, Enum):
     """Alpaca API endpoints."""
+
     PAPER = "https://paper-api.alpaca.markets"
     LIVE = "https://api.alpaca.markets"
     DATA = "https://data.alpaca.markets"
@@ -37,6 +39,7 @@ class AlpacaEndpoint(str, Enum):
 
 class TimeFrame(str, Enum):
     """Alpaca bar timeframes."""
+
     MIN_1 = "1Min"
     MIN_5 = "5Min"
     MIN_15 = "15Min"
@@ -48,6 +51,7 @@ class TimeFrame(str, Enum):
 # ALPACA CLIENT
 # ============================================================================
 
+
 class AlpacaClient:
     """
     Async Alpaca API client for market data and trading.
@@ -56,10 +60,7 @@ class AlpacaClient:
     """
 
     def __init__(
-        self,
-        api_key: str | None = None,
-        secret_key: str | None = None,
-        paper_trading: bool = True
+        self, api_key: str | None = None, secret_key: str | None = None, paper_trading: bool = True
     ):
         """
         Initialize Alpaca client.
@@ -74,9 +75,7 @@ class AlpacaClient:
 
         # Don't raise error here, check in _request or is_configured
 
-        self.base_url = (
-            AlpacaEndpoint.PAPER if paper_trading else AlpacaEndpoint.LIVE
-        )
+        self.base_url = AlpacaEndpoint.PAPER if paper_trading else AlpacaEndpoint.LIVE
         self.data_url = AlpacaEndpoint.DATA
 
         self.session: aiohttp.ClientSession | None = None
@@ -96,17 +95,13 @@ class AlpacaClient:
             logger.warning("Alpaca client initialized without API keys")
 
         connector = aiohttp.TCPConnector(
-            limit=100,  # Max connections
-            limit_per_host=30,
-            ttl_dns_cache=300
+            limit=100, limit_per_host=30, ttl_dns_cache=300  # Max connections
         )
 
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
 
         self.session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-            headers=self._get_headers()
+            connector=connector, timeout=timeout, headers=self._get_headers()
         )
 
         self._initialized = True
@@ -132,7 +127,7 @@ class AlpacaClient:
         endpoint: str,
         params: dict | None = None,
         json: dict | None = None,
-        base_url: str | None = None
+        base_url: str | None = None,
     ) -> dict[str, Any]:
         """
         Make HTTP request to Alpaca API.
@@ -154,17 +149,14 @@ class AlpacaClient:
             await self.initialize()
 
         if not self.is_configured:
-            raise ValueError("Alpaca API keys not configured. Please set ALPACA_API_KEY and ALPACA_SECRET_KEY.")
+            raise ValueError(
+                "Alpaca API keys not configured. Please set ALPACA_API_KEY and ALPACA_SECRET_KEY."
+            )
 
         url = f"{base_url or self.base_url}{endpoint}"
 
         try:
-            async with self.session.request(
-                method,
-                url,
-                params=params,
-                json=json
-            ) as response:
+            async with self.session.request(method, url, params=params, json=json) as response:
                 response.raise_for_status()
                 return await response.json()
 
@@ -212,7 +204,7 @@ class AlpacaClient:
         timeframe: TimeFrame = TimeFrame.MIN_1,
         start: datetime | None = None,
         end: datetime | None = None,
-        limit: int = 1000
+        limit: int = 1000,
     ) -> dict[str, Any]:
         """
         Get historical bars (OHLCV) for symbols.
@@ -268,7 +260,7 @@ class AlpacaClient:
         time_in_force: str = "day",
         limit_price: float | None = None,
         stop_price: float | None = None,
-        client_order_id: str | None = None
+        client_order_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Submit order to Alpaca.
@@ -350,9 +342,7 @@ class AlpacaClient:
         return await self._request("GET", endpoint)
 
     async def get_account_activities(
-        self,
-        activity_types: list[str] | None = None,
-        date: datetime | None = None
+        self, activity_types: list[str] | None = None, date: datetime | None = None
     ) -> list[dict[str, Any]]:
         """Get account activities (trades, transactions, etc.)."""
         endpoint = "/v2/account/activities"
@@ -370,10 +360,9 @@ class AlpacaClient:
 # DATA INGESTION
 # ============================================================================
 
+
 async def ingest_historical_data(
-    symbols: list[str],
-    days: int = 30,
-    timeframe: TimeFrame = TimeFrame.MIN_1
+    symbols: list[str], days: int = 30, timeframe: TimeFrame = TimeFrame.MIN_1
 ):
     """
     Ingest historical data from Alpaca to QuestDB.
@@ -396,10 +385,7 @@ async def ingest_historical_data(
             try:
                 # Get bars from Alpaca
                 response = await client.get_bars(
-                    symbols=[symbol],
-                    timeframe=timeframe,
-                    start=start_date,
-                    end=end_date
+                    symbols=[symbol], timeframe=timeframe, start=start_date, end=end_date
                 )
 
                 bars = response.get("bars", {}).get(symbol, [])
@@ -432,7 +418,9 @@ async def _insert_bars_to_questdb(symbol: str, bars: list[dict]):
     # Build InfluxDB line protocol messages
     lines = []
     for bar in bars:
-        timestamp = int(datetime.fromisoformat(bar["t"].replace("Z", "+00:00")).timestamp() * 1_000_000_000)
+        timestamp = int(
+            datetime.fromisoformat(bar["t"].replace("Z", "+00:00")).timestamp() * 1_000_000_000
+        )
 
         line = (
             f"ticks,symbol={symbol} "
@@ -450,6 +438,7 @@ async def _insert_bars_to_questdb(symbol: str, bars: list[dict]):
 # ============================================================================
 # REAL-TIME STREAMING
 # ============================================================================
+
 
 class AlpacaStreamer:
     """

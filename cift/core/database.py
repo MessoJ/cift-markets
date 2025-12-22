@@ -30,6 +30,7 @@ Base = declarative_base()
 # POSTGRESQL CONNECTION (SQLAlchemy)
 # ============================================================================
 
+
 class DatabaseManager:
     """Manage PostgreSQL connections with pooling and health checks."""
 
@@ -52,7 +53,7 @@ class DatabaseManager:
                 pool_size=20,
                 max_overflow=10,
                 pool_pre_ping=True,  # Verify connections before using
-                pool_recycle=3600,   # Recycle connections after 1 hour
+                pool_recycle=3600,  # Recycle connections after 1 hour
                 echo=settings.debug_sql,
                 connect_args={"timeout": 3},  # 3 second connection timeout
             )
@@ -70,7 +71,7 @@ class DatabaseManager:
                     command_timeout=60,
                     timeout=3,  # 3 second timeout
                 ),
-                timeout=5.0  # Overall timeout for pool creation
+                timeout=5.0,  # Overall timeout for pool creation
             )
 
             # Create session factory
@@ -138,6 +139,7 @@ class DatabaseManager:
 # ============================================================================
 # QUESTDB CONNECTION (asyncpg)
 # ============================================================================
+
 
 class QuestDBManager:
     """Manage QuestDB connections for time-series data."""
@@ -222,6 +224,7 @@ class QuestDBManager:
 # ============================================================================
 # DRAGONFLY CONNECTION (Redis-compatible, 25x faster)
 # ============================================================================
+
 
 class RedisManager:
     """
@@ -325,6 +328,7 @@ async def get_clickhouse():
     global _clickhouse_manager
     if _clickhouse_manager is None:
         from cift.core.clickhouse_manager import get_clickhouse_manager
+
         _clickhouse_manager = await get_clickhouse_manager()
     return _clickhouse_manager
 
@@ -334,6 +338,7 @@ async def get_nats():
     global _nats_manager
     if _nats_manager is None:
         from cift.core.nats_manager import get_nats_manager
+
         _nats_manager = await get_nats_manager()
     return _nats_manager
 
@@ -341,6 +346,7 @@ async def get_nats():
 # ============================================================================
 # DEPENDENCY INJECTION
 # ============================================================================
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database sessions."""
@@ -390,6 +396,7 @@ async def get_questdb_pool() -> asyncpg.Pool:
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
+
 
 async def check_all_connections() -> dict[str, str]:
     """Check health of all database connections (Phase 5-7)."""
@@ -482,6 +489,7 @@ async def close_all_connections() -> None:
     # Close Phase 5-7 services if initialized
     if _clickhouse_manager is not None:
         from cift.core.clickhouse_manager import close_clickhouse_manager
+
         await close_clickhouse_manager()
 
     if _nats_manager is not None:

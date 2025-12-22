@@ -41,9 +41,11 @@ from loguru import logger
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class AssetNode:
     """Single asset in the graph."""
+
     symbol: str
     node_id: int
 
@@ -58,28 +60,32 @@ class AssetNode:
     kyle_lambda: float
 
     def to_array(self) -> np.ndarray:
-        return np.array([
-            self.order_flow_imbalance,
-            self.vpin,
-            self.realized_vol,
-            self.return_1m,
-            self.return_5m,
-            self.spread,
-            self.volume_ratio,
-            self.kyle_lambda,
-        ], dtype=np.float32)
+        return np.array(
+            [
+                self.order_flow_imbalance,
+                self.vpin,
+                self.realized_vol,
+                self.return_1m,
+                self.return_5m,
+                self.spread,
+                self.volume_ratio,
+                self.kyle_lambda,
+            ],
+            dtype=np.float32,
+        )
 
 
 @dataclass
 class CrossAssetPrediction:
     """Prediction output from GNN model."""
+
     timestamp: float
 
     # Per-asset predictions
     asset_predictions: dict[str, dict[str, float]]  # symbol -> {direction, magnitude, confidence}
 
     # Cross-asset signals
-    lead_lag_pairs: list[tuple[str, str, float]]    # (leader, lagger, confidence)
+    lead_lag_pairs: list[tuple[str, str, float]]  # (leader, lagger, confidence)
     correlation_changes: dict[tuple[str, str], float]  # Correlation delta predictions
 
     # Portfolio signals
@@ -90,6 +96,7 @@ class CrossAssetPrediction:
 # ============================================================================
 # GRAPH ATTENTION LAYER
 # ============================================================================
+
 
 class GraphAttentionLayer(nn.Module):
     """
@@ -127,7 +134,7 @@ class GraphAttentionLayer(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        gain = nn.init.calculate_gain('leaky_relu', self.negative_slope)
+        gain = nn.init.calculate_gain("leaky_relu", self.negative_slope)
         nn.init.xavier_uniform_(self.W, gain=gain)
         nn.init.xavier_uniform_(self.a_src, gain=gain)
         nn.init.xavier_uniform_(self.a_dst, gain=gain)
@@ -155,21 +162,18 @@ class GraphAttentionLayer(nn.Module):
         # x: [num_nodes, in_features]
         # W: [num_heads, in_features, out_features]
         # h: [num_heads, num_nodes, out_features]
-        h = torch.einsum('ni,hio->hno', x, self.W)
+        h = torch.einsum("ni,hio->hno", x, self.W)
 
         # Compute attention scores
         # Source attention: [num_heads, num_nodes, 1]
-        attn_src = torch.einsum('hno,hod->hnd', h, self.a_src)
-        attn_dst = torch.einsum('hno,hod->hnd', h, self.a_dst)
+        attn_src = torch.einsum("hno,hod->hnd", h, self.a_src)
+        attn_dst = torch.einsum("hno,hod->hnd", h, self.a_dst)
 
         # Get source and target indices
         src_idx, dst_idx = edge_index[0], edge_index[1]
 
         # Compute edge attention: [num_heads, num_edges]
-        edge_attn = (
-            attn_src[:, src_idx, 0] +
-            attn_dst[:, dst_idx, 0]
-        )
+        edge_attn = attn_src[:, src_idx, 0] + attn_dst[:, dst_idx, 0]
         edge_attn = F.leaky_relu(edge_attn, negative_slope=self.negative_slope)
 
         # Apply edge weights if provided
@@ -182,7 +186,9 @@ class GraphAttentionLayer(nn.Module):
 
         # Sum of attention for each destination
         attention_sum = torch.zeros(self.num_heads, num_nodes, device=x.device)
-        attention_sum.scatter_add_(1, dst_idx.unsqueeze(0).expand(self.num_heads, -1), edge_attn_exp)
+        attention_sum.scatter_add_(
+            1, dst_idx.unsqueeze(0).expand(self.num_heads, -1), edge_attn_exp
+        )
 
         # Normalize
         alpha = edge_attn_exp / (attention_sum[:, dst_idx] + 1e-10)
@@ -196,14 +202,14 @@ class GraphAttentionLayer(nn.Module):
         # Aggregate to destination nodes
         out = torch.zeros(self.num_heads, num_nodes, self.out_features, device=x.device)
         out.scatter_add_(
-            1,
-            dst_idx.unsqueeze(0).unsqueeze(-1).expand(self.num_heads, -1, self.out_features),
-            msg
+            1, dst_idx.unsqueeze(0).unsqueeze(-1).expand(self.num_heads, -1, self.out_features), msg
         )
 
         # Concat or average heads
         if self.concat:
-            out = out.transpose(0, 1).reshape(num_nodes, -1)  # [num_nodes, num_heads * out_features]
+            out = out.transpose(0, 1).reshape(
+                num_nodes, -1
+            )  # [num_nodes, num_heads * out_features]
         else:
             out = out.mean(dim=0)  # [num_nodes, out_features]
 
@@ -226,9 +232,7 @@ class TemporalGraphLayer(nn.Module):
     ):
         super().__init__()
 
-        self.gat = GraphAttentionLayer(
-            node_features, hidden_dim, num_heads, dropout, concat=True
-        )
+        self.gat = GraphAttentionLayer(node_features, hidden_dim, num_heads, dropout, concat=True)
 
         # Temporal GRU
         self.gru = nn.GRU(
@@ -300,7 +304,7 @@ class DynamicGraphLearning(nn.Module):
         num_nodes: int,
         embed_dim: int = 16,
         static_graph_weight: float = 0.3,  # α in combination formula
-        top_k: int | None = None,       # Sparsify to top-k edges per node
+        top_k: int | None = None,  # Sparsify to top-k edges per node
         learn_from_features: bool = True,  # Also condition on node features
         feature_dim: int | None = None,
     ):
@@ -326,7 +330,9 @@ class DynamicGraphLearning(nn.Module):
         else:
             self.feature_edge_net = None
 
-        logger.info(f"DynamicGraphLearning: {num_nodes} nodes, embed_dim={embed_dim}, static_weight={static_graph_weight}")
+        logger.info(
+            f"DynamicGraphLearning: {num_nodes} nodes, embed_dim={embed_dim}, static_weight={static_graph_weight}"
+        )
 
     def forward(
         self,
@@ -375,15 +381,17 @@ class DynamicGraphLearning(nn.Module):
             # Normalize static adj
             static_norm = static_adj / (static_adj.sum(dim=-1, keepdim=True) + 1e-8)
             combined_adj = (
-                self.static_graph_weight * static_norm +
-                (1 - self.static_graph_weight) * adaptive_adj
+                self.static_graph_weight * static_norm
+                + (1 - self.static_graph_weight) * adaptive_adj
             )
         else:
             combined_adj = adaptive_adj
 
         return combined_adj
 
-    def to_edge_index(self, adj: torch.Tensor, threshold: float = 0.01) -> tuple[torch.Tensor, torch.Tensor]:
+    def to_edge_index(
+        self, adj: torch.Tensor, threshold: float = 0.01
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Convert adjacency matrix to edge_index format.
 
@@ -405,6 +413,7 @@ class DynamicGraphLearning(nn.Module):
 # ============================================================================
 # GRAPH NEURAL NETWORK MODEL
 # ============================================================================
+
 
 class CrossAssetGNN(nn.Module):
     """
@@ -436,10 +445,10 @@ class CrossAssetGNN(nn.Module):
         num_heads: int = 4,
         dropout: float = 0.1,
         use_temporal: bool = True,
-        use_dynamic_graph: bool = True,     # NEW: Enable dynamic graph learning
-        num_nodes: int = 50,                # Number of assets for dynamic graph
+        use_dynamic_graph: bool = True,  # NEW: Enable dynamic graph learning
+        num_nodes: int = 50,  # Number of assets for dynamic graph
         dynamic_graph_embed_dim: int = 16,  # Embedding dimension for graph learning
-        static_graph_weight: float = 0.3,   # Weight for static vs learned graph
+        static_graph_weight: float = 0.3,  # Weight for static vs learned graph
     ):
         super().__init__()
 
@@ -476,16 +485,17 @@ class CrossAssetGNN(nn.Module):
             in_dim = hidden_dim if i == 0 else hidden_dim * num_heads
             self.gat_layers.append(
                 GraphAttentionLayer(
-                    in_dim, hidden_dim, num_heads, dropout,
-                    concat=(i < num_layers - 1)  # Don't concat at last layer
+                    in_dim,
+                    hidden_dim,
+                    num_heads,
+                    dropout,
+                    concat=(i < num_layers - 1),  # Don't concat at last layer
                 )
             )
 
         # Temporal layer
         if use_temporal:
-            self.temporal = TemporalGraphLayer(
-                hidden_dim, hidden_dim, num_heads, dropout
-            )
+            self.temporal = TemporalGraphLayer(hidden_dim, hidden_dim, num_heads, dropout)
 
         # Node prediction head (direction + magnitude)
         self.node_predictor = nn.Sequential(
@@ -511,7 +521,9 @@ class CrossAssetGNN(nn.Module):
             nn.Linear(hidden_dim, 3),  # leader_prob, lagger_prob, neutral_prob
         )
 
-        logger.info(f"CrossAssetGNN initialized ({num_layers} layers, {num_heads} heads, dynamic_graph={use_dynamic_graph})")
+        logger.info(
+            f"CrossAssetGNN initialized ({num_layers} layers, {num_heads} heads, dynamic_graph={use_dynamic_graph})"
+        )
 
     def forward(
         self,
@@ -751,8 +763,9 @@ class CrossAssetGNN(nn.Module):
                     pred_j = asset_predictions[symbol_j]
 
                     # Opposite directions with high confidence
-                    if (pred_i["direction"] > 0.6 and pred_j["direction"] < 0.4) or \
-                       (pred_i["direction"] < 0.4 and pred_j["direction"] > 0.6):
+                    if (pred_i["direction"] > 0.6 and pred_j["direction"] < 0.4) or (
+                        pred_i["direction"] < 0.4 and pred_j["direction"] > 0.6
+                    ):
                         conf = min(pred_i["confidence"], pred_j["confidence"])
                         if conf > 0.5:
                             # Ratio based on volatility
@@ -760,7 +773,11 @@ class CrossAssetGNN(nn.Module):
                             suggested_hedge_pairs.append((symbol_i, symbol_j, ratio))
 
             # Contagion risk
-            avg_corr = np.mean([abs(v) for v in correlation_changes.values()]) if correlation_changes else 0.5
+            avg_corr = (
+                np.mean([abs(v) for v in correlation_changes.values()])
+                if correlation_changes
+                else 0.5
+            )
             contagion_risk = float(avg_corr)
 
             return CrossAssetPrediction(
@@ -776,6 +793,7 @@ class CrossAssetGNN(nn.Module):
 # ============================================================================
 # TRAINING UTILITIES
 # ============================================================================
+
 
 class GNNLoss(nn.Module):
     """Combined loss for GNN training."""
@@ -803,9 +821,7 @@ class GNNLoss(nn.Module):
         leadlag_targets: torch.Tensor,
     ) -> torch.Tensor:
         # Direction loss (binary cross-entropy)
-        direction_loss = F.binary_cross_entropy_with_logits(
-            node_pred[:, 0], node_targets[:, 0]
-        )
+        direction_loss = F.binary_cross_entropy_with_logits(node_pred[:, 0], node_targets[:, 0])
 
         # Magnitude loss (MSE)
         magnitude_loss = F.mse_loss(node_pred[:, 1], node_targets[:, 1])
@@ -817,10 +833,10 @@ class GNNLoss(nn.Module):
         leadlag_loss = F.cross_entropy(leadlag_pred, leadlag_targets)
 
         total_loss = (
-            self.direction_weight * direction_loss +
-            self.magnitude_weight * magnitude_loss +
-            self.correlation_weight * correlation_loss +
-            self.leadlag_weight * leadlag_loss
+            self.direction_weight * direction_loss
+            + self.magnitude_weight * magnitude_loss
+            + self.correlation_weight * correlation_loss
+            + self.leadlag_weight * leadlag_loss
         )
 
         return total_loss

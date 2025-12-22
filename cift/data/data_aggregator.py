@@ -37,12 +37,14 @@ from cift.data.polygon_l2_connector import (
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class MarketTick:
     """Unified market tick representation."""
+
     symbol: str
     timestamp: int  # Nanoseconds
-    source: str     # "polygon", "databento"
+    source: str  # "polygon", "databento"
 
     # Price data
     bid_price: float
@@ -67,6 +69,7 @@ class AggregatedFeatures:
 
     This is the input to the ML models.
     """
+
     symbol: str
     timestamp: int
 
@@ -97,31 +100,37 @@ class AggregatedFeatures:
 
     def to_numpy(self) -> np.ndarray:
         """Convert all features to numpy array."""
-        return np.concatenate([
-            self.book_features,
-            np.array([
-                self.price_returns_1s,
-                self.price_returns_5s,
-                self.price_returns_30s,
-                self.price_returns_1m,
-                self.volatility_1m,
-                self.volatility_5m,
-                self.volume_1m,
-                self.buy_volume_1m,
-                self.sell_volume_1m,
-                self.volume_imbalance_1m,
-                self.bar_close,
-                self.bar_vwap,
-                self.bar_range,
-                self.bar_body,
-                1.0 if self.bar_is_bullish else 0.0,
-            ], dtype=np.float32)
-        ])
+        return np.concatenate(
+            [
+                self.book_features,
+                np.array(
+                    [
+                        self.price_returns_1s,
+                        self.price_returns_5s,
+                        self.price_returns_30s,
+                        self.price_returns_1m,
+                        self.volatility_1m,
+                        self.volatility_5m,
+                        self.volume_1m,
+                        self.buy_volume_1m,
+                        self.sell_volume_1m,
+                        self.volume_imbalance_1m,
+                        self.bar_close,
+                        self.bar_vwap,
+                        self.bar_range,
+                        self.bar_body,
+                        1.0 if self.bar_is_bullish else 0.0,
+                    ],
+                    dtype=np.float32,
+                ),
+            ]
+        )
 
 
 # ============================================================================
 # MARKET DATA AGGREGATOR
 # ============================================================================
+
 
 class MarketDataAggregator:
     """
@@ -183,7 +192,9 @@ class MarketDataAggregator:
         self._running = False
         self._subscribed_symbols: set[str] = set()
 
-        logger.info(f"MarketDataAggregator initialized (polygon={use_polygon}, databento={use_databento})")
+        logger.info(
+            f"MarketDataAggregator initialized (polygon={use_polygon}, databento={use_databento})"
+        )
 
     # ========================================================================
     # CONNECTION MANAGEMENT
@@ -480,19 +491,14 @@ class MarketDataAggregator:
 
         returns = []
         for i in range(1, len(prices)):
-            if prices[i-1] > 0:
-                returns.append((prices[i] - prices[i-1]) / prices[i-1])
+            if prices[i - 1] > 0:
+                returns.append((prices[i] - prices[i - 1]) / prices[i - 1])
 
         if returns:
             return float(np.std(returns))
         return 0.0
 
-    def _compute_volume_stats(
-        self,
-        symbol: str,
-        window_ns: int,
-        current_ts: int
-    ) -> tuple:
+    def _compute_volume_stats(self, symbol: str, window_ns: int, current_ts: int) -> tuple:
         """Compute volume statistics over window."""
         history = self._volume_history[symbol]
 

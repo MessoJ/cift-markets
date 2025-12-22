@@ -54,9 +54,7 @@ class TestUserModel:
         await db_session.commit()
 
         # Query from database
-        result = await db_session.execute(
-            select(User).where(User.email == "query@test.com")
-        )
+        result = await db_session.execute(select(User).where(User.email == "query@test.com"))
         queried_user = result.scalar_one()
 
         assert queried_user.email == "query@test.com"

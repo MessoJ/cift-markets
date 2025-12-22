@@ -48,7 +48,7 @@ class FinnhubRealtimeService:
 
     def __init__(self, api_key: str | None = None):
         """Initialize Finnhub service."""
-        self.api_key = api_key or getattr(settings, 'finnhub_api_key', '')
+        self.api_key = api_key or getattr(settings, "finnhub_api_key", "")
 
         if not self.api_key:
             logger.warning("Finnhub API key not configured - real-time streaming unavailable")
@@ -119,10 +119,7 @@ class FinnhubRealtimeService:
             return None
 
     async def get_company_news(
-        self,
-        symbol: str,
-        from_date: str = None,
-        to_date: str = None
+        self, symbol: str, from_date: str = None, to_date: str = None
     ) -> list[dict]:
         """Get company news (complements Polygon news)."""
         if not self._available:
@@ -136,12 +133,7 @@ class FinnhubRealtimeService:
             to_date = datetime.utcnow().strftime("%Y-%m-%d")
 
         url = f"{self.REST_URL}/company-news"
-        params = {
-            "symbol": symbol,
-            "from": from_date,
-            "to": to_date,
-            "token": self.api_key
-        }
+        params = {"symbol": symbol, "from": from_date, "to": to_date, "token": self.api_key}
 
         try:
             async with self.session.get(url, params=params) as response:
@@ -199,10 +191,7 @@ class FinnhubRealtimeService:
 
         for symbol in symbols:
             if symbol not in self._subscribed_symbols:
-                await self.ws.send_json({
-                    "type": "subscribe",
-                    "symbol": symbol
-                })
+                await self.ws.send_json({"type": "subscribe", "symbol": symbol})
                 self._subscribed_symbols.add(symbol)
                 logger.debug(f"Subscribed to {symbol}")
 
@@ -215,10 +204,7 @@ class FinnhubRealtimeService:
 
         for symbol in symbols:
             if symbol in self._subscribed_symbols:
-                await self.ws.send_json({
-                    "type": "unsubscribe",
-                    "symbol": symbol
-                })
+                await self.ws.send_json({"type": "unsubscribe", "symbol": symbol})
                 self._subscribed_symbols.discard(symbol)
                 logger.debug(f"Unsubscribed from {symbol}")
 
@@ -232,10 +218,7 @@ class FinnhubRealtimeService:
 
         # Default symbols to track
         if symbols is None:
-            symbols = [
-                "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
-                "TSLA", "META", "SPY", "QQQ", "JPM"
-            ]
+            symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY", "QQQ", "JPM"]
 
         # Connect and subscribe
         await self.subscribe(symbols)
@@ -319,7 +302,7 @@ class FinnhubRealtimeService:
                             "price": price,
                             "volume": volume,
                             "timestamp": timestamp,
-                            "updated_at": datetime.utcnow()
+                            "updated_at": datetime.utcnow(),
                         }
 
                         # Call registered callbacks
@@ -359,11 +342,15 @@ class FinnhubRealtimeService:
 
             pool = await get_postgres_pool()
             async with pool.acquire() as conn:
-                await conn.execute("""
+                await conn.execute(
+                    """
                     UPDATE market_data_cache
                     SET price = $1, updated_at = NOW()
                     WHERE symbol = $2
-                """, price, symbol)
+                """,
+                    price,
+                    symbol,
+                )
 
             self._last_prices[symbol]["last_db_update"] = datetime.utcnow()
 
@@ -397,6 +384,7 @@ def get_finnhub_service() -> FinnhubRealtimeService:
 # ============================================================================
 # CLI TEST
 # ============================================================================
+
 
 async def main():
     """Test Finnhub service."""

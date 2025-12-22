@@ -28,9 +28,8 @@ router = APIRouter(prefix="/funding", tags=["funding"])
 # DEPENDENCY INJECTION
 # ============================================================================
 
-async def get_current_user_id(
-    current_user: User = Depends(get_current_active_user)
-) -> UUID:
+
+async def get_current_user_id(current_user: User = Depends(get_current_active_user)) -> UUID:
     """Get current authenticated user ID."""
     return current_user.id
 
@@ -39,8 +38,10 @@ async def get_current_user_id(
 # MODELS
 # ============================================================================
 
+
 class PaymentMethod(BaseModel):
     """Payment method model - RULES COMPLIANT: supports all payment types"""
+
     id: str
     user_id: str | None = None
     type: str  # 'bank_account', 'debit_card', 'credit_card', 'paypal', 'mpesa', 'crypto_wallet'
@@ -77,6 +78,7 @@ class PaymentMethod(BaseModel):
 
 class FundingTransaction(BaseModel):
     """Funding transaction model"""
+
     id: str
     type: str  # 'deposit', 'withdrawal'
     method: str
@@ -92,6 +94,7 @@ class FundingTransaction(BaseModel):
 
 class TransferLimit(BaseModel):
     """Transfer limits model"""
+
     daily_deposit_limit: Decimal
     daily_deposit_remaining: Decimal
     daily_withdrawal_limit: Decimal
@@ -102,6 +105,7 @@ class TransferLimit(BaseModel):
 
 class DepositRequest(BaseModel):
     """Deposit request"""
+
     amount: Decimal = Field(..., gt=0, description="Amount to deposit")
     payment_method_id: str
     transfer_type: str = Field(..., pattern="^(instant|standard)$")
@@ -109,13 +113,17 @@ class DepositRequest(BaseModel):
 
 class WithdrawalRequest(BaseModel):
     """Withdrawal request"""
+
     amount: Decimal = Field(..., gt=0, description="Amount to withdraw")
     payment_method_id: str
 
 
 class AddPaymentMethodRequest(BaseModel):
     """Add payment method request - RULES COMPLIANT: accepts all payment types"""
-    type: str = Field(..., pattern="^(bank_account|debit_card|credit_card|paypal|cashapp|mpesa|crypto_wallet)$")
+
+    type: str = Field(
+        ..., pattern="^(bank_account|debit_card|credit_card|paypal|cashapp|mpesa|crypto_wallet)$"
+    )
     # Bank account fields
     bank_name: str | None = None
     account_type: str | None = None
@@ -144,6 +152,7 @@ class AddPaymentMethodRequest(BaseModel):
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
+
 
 @router.get("/transactions")
 async def get_funding_transactions(
@@ -193,17 +202,17 @@ async def get_funding_transactions(
 
         transactions = [
             FundingTransaction(
-                id=row['id'],
-                type=row['type'],
-                method=row['method'],
-                amount=row['amount'],
-                fee=row['fee'],
-                status=row['status'],
-                created_at=row['created_at'],
-                completed_at=row['completed_at'],
-                expected_arrival=row['expected_arrival'],
-                payment_method_id=row['payment_method_id'],
-                notes=row['notes'],
+                id=row["id"],
+                type=row["type"],
+                method=row["method"],
+                amount=row["amount"],
+                fee=row["fee"],
+                status=row["status"],
+                created_at=row["created_at"],
+                completed_at=row["completed_at"],
+                expected_arrival=row["expected_arrival"],
+                payment_method_id=row["payment_method_id"],
+                notes=row["notes"],
             )
             for row in rows
         ]
@@ -245,17 +254,17 @@ async def get_funding_transaction(
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         return FundingTransaction(
-            id=row['id'],
-            type=row['type'],
-            method=row['method'],
-            amount=row['amount'],
-            fee=row['fee'],
-            status=row['status'],
-            created_at=row['created_at'],
-            completed_at=row['completed_at'],
-            expected_arrival=row['expected_arrival'],
-            payment_method_id=row['payment_method_id'],
-            notes=row['notes'],
+            id=row["id"],
+            type=row["type"],
+            method=row["method"],
+            amount=row["amount"],
+            fee=row["fee"],
+            status=row["status"],
+            created_at=row["created_at"],
+            completed_at=row["completed_at"],
+            expected_arrival=row["expected_arrival"],
+            payment_method_id=row["payment_method_id"],
+            notes=row["notes"],
         )
 
 
@@ -300,44 +309,46 @@ async def get_payment_methods(
         # RULES COMPLIANT: Return data from database with proper field mapping
         def compute_status(row):
             """Compute status from is_verified and is_active"""
-            if not row['is_active']:
-                return 'removed'
-            elif row['is_verified']:
-                return 'verified'
+            if not row["is_active"]:
+                return "removed"
+            elif row["is_verified"]:
+                return "verified"
             else:
-                return 'pending_verification'
+                return "pending_verification"
 
         return {
             "payment_methods": [
                 PaymentMethod(
-                    id=row['id'],
+                    id=row["id"],
                     user_id=str(user_id),
-                    type=row['type'],
+                    type=row["type"],
                     status=compute_status(row),
-                    name=row['name'],
-                    last_four=row['last_four'],
+                    name=row["name"],
+                    last_four=row["last_four"],
                     # Map account fields properly
-                    bank_name=row['bank_name'],
-                    account_type=row['account_type'],
-                    account_last4=row['last_four'] if row['type'] == 'bank_account' else None,
-                    routing_number=row['routing_number'],
+                    bank_name=row["bank_name"],
+                    account_type=row["account_type"],
+                    account_last4=row["last_four"] if row["type"] == "bank_account" else None,
+                    routing_number=row["routing_number"],
                     # Map card fields
-                    card_brand=row['card_brand'],
-                    card_last4=row['last_four'] if row['type'] in ('debit_card', 'credit_card') else None,
-                    card_exp_month=row['card_exp_month'],
-                    card_exp_year=row['card_exp_year'],
-                    paypal_email=row['paypal_email'],
-                    cashapp_tag=row['cashapp_tag'],
-                    mpesa_phone=row['mpesa_phone'],
-                    mpesa_country=row['mpesa_country'],
+                    card_brand=row["card_brand"],
+                    card_last4=(
+                        row["last_four"] if row["type"] in ("debit_card", "credit_card") else None
+                    ),
+                    card_exp_month=row["card_exp_month"],
+                    card_exp_year=row["card_exp_year"],
+                    paypal_email=row["paypal_email"],
+                    cashapp_tag=row["cashapp_tag"],
+                    mpesa_phone=row["mpesa_phone"],
+                    mpesa_country=row["mpesa_country"],
                     # Crypto fields
-                    crypto_address=row['crypto_address'],
-                    crypto_network=row['crypto_network'],
+                    crypto_address=row["crypto_address"],
+                    crypto_network=row["crypto_network"],
                     # Status fields
-                    is_verified=row['is_verified'],
-                    is_default=row['is_default'],
-                    is_active=row['is_active'],
-                    created_at=row['created_at'],
+                    is_verified=row["is_verified"],
+                    is_default=row["is_default"],
+                    is_active=row["is_active"],
+                    created_at=row["created_at"],
                 )
                 for row in rows
             ]
@@ -353,38 +364,54 @@ async def add_payment_method(
     pool = await get_postgres_pool()
 
     # Extract last 4 digits and display name based on type
-    if request.type == 'bank_account':
+    if request.type == "bank_account":
         last_four = request.account_number[-4:] if request.account_number else "0000"
         display_name = request.bank_name or request.name or f"Bank Account {last_four}"
-    elif request.type in ('debit_card', 'credit_card'):
+    elif request.type in ("debit_card", "credit_card"):
         last_four = request.card_number[-4:] if request.card_number else "0000"
-        card_type = "Credit" if request.type == 'credit_card' else "Debit"
+        card_type = "Credit" if request.type == "credit_card" else "Debit"
         display_name = request.name or f"{request.card_brand or card_type} Card {last_four}"
-    elif request.type == 'paypal':
+    elif request.type == "paypal":
         # Mask email: john****@gmail.com
         if request.paypal_email:
-            email_parts = request.paypal_email.split('@')
-            masked = email_parts[0][:4] + '****@' + email_parts[1] if len(email_parts) == 2 else request.paypal_email
+            email_parts = request.paypal_email.split("@")
+            masked = (
+                email_parts[0][:4] + "****@" + email_parts[1]
+                if len(email_parts) == 2
+                else request.paypal_email
+            )
             last_four = email_parts[0][-4:] if len(email_parts[0]) >= 4 else email_parts[0]
             display_name = request.name or f"PayPal {masked}"
         else:
             last_four = "0000"
             display_name = request.name or "PayPal Account"
-    elif request.type == 'cashapp':
+    elif request.type == "cashapp":
         # Cash App $Cashtag
         if request.cashapp_tag:
-            tag = request.cashapp_tag if request.cashapp_tag.startswith('$') else f"${request.cashapp_tag}"
+            tag = (
+                request.cashapp_tag
+                if request.cashapp_tag.startswith("$")
+                else f"${request.cashapp_tag}"
+            )
             last_four = tag[-4:] if len(tag) >= 4 else tag
             display_name = request.name or f"Cash App {tag}"
         else:
             last_four = "0000"
             display_name = request.name or "Cash App"
-    elif request.type == 'mpesa':
-        last_four = request.mpesa_phone[-4:] if request.mpesa_phone and len(request.mpesa_phone) >= 4 else "0000"
+    elif request.type == "mpesa":
+        last_four = (
+            request.mpesa_phone[-4:]
+            if request.mpesa_phone and len(request.mpesa_phone) >= 4
+            else "0000"
+        )
         display_name = request.name or f"M-Pesa {request.mpesa_country or 'KE'} {last_four}"
-    elif request.type == 'crypto_wallet':
-        last_four = request.crypto_address[-4:] if request.crypto_address and len(request.crypto_address) >= 4 else "0000"
-        network_name = (request.crypto_network or 'Crypto').title()
+    elif request.type == "crypto_wallet":
+        last_four = (
+            request.crypto_address[-4:]
+            if request.crypto_address and len(request.crypto_address) >= 4
+            else "0000"
+        )
+        network_name = (request.crypto_network or "Crypto").title()
         display_name = request.name or f"{network_name} Wallet {last_four}"
     else:
         last_four = "0000"
@@ -424,7 +451,7 @@ async def add_payment_method(
             request.bank_name,
             request.account_type,
             request.routing_number,
-            request.card_brand if request.type in ('debit_card', 'credit_card') else None,
+            request.card_brand if request.type in ("debit_card", "credit_card") else None,
             request.card_exp_month,
             request.card_exp_year,
             request.paypal_email,
@@ -441,28 +468,28 @@ async def add_payment_method(
 
         # Link with external processor if needed
         try:
-            if request.type == 'bank_account':
+            if request.type == "bank_account":
                 link_result = await payment_processor.link_external_account(
                     user_id=user_id,
-                    payment_type='bank_account',
+                    payment_type="bank_account",
                     account_details={
-                        'account_owner_name': request.name,
-                        'bank_account_type': request.account_type,
-                        'bank_account_number': request.account_number,
-                        'bank_routing_number': request.routing_number,
-                        'nickname': display_name
+                        "account_owner_name": request.name,
+                        "bank_account_type": request.account_type,
+                        "bank_account_number": request.account_number,
+                        "bank_routing_number": request.routing_number,
+                        "nickname": display_name,
                     },
-                    metadata={'payment_method_id': row['id']}
+                    metadata={"payment_method_id": row["id"]},
                 )
 
-                if link_result.get('status') == 'APPROVED':
+                if link_result.get("status") == "APPROVED":
                     # Auto-verify if approved immediately
                     await conn.execute(
                         "UPDATE payment_methods SET is_verified = true WHERE id = $1::uuid",
-                        row['id']
+                        row["id"],
                     )
                     row = dict(row)
-                    row['is_verified'] = True
+                    row["is_verified"] = True
 
         except Exception as e:
             logger.error(f"Failed to link external account: {str(e)}")
@@ -470,33 +497,33 @@ async def add_payment_method(
 
         # RULES COMPLIANT: Return in format frontend expects
         # Compute status from verification state
-        status = 'verified' if row['is_verified'] else 'pending_verification'
+        status = "verified" if row["is_verified"] else "pending_verification"
 
         payment_method = PaymentMethod(
-            id=row['id'],
+            id=row["id"],
             user_id=str(user_id),
-            type=row['type'],
+            type=row["type"],
             status=status,
-            name=row['name'],
-            last_four=row['last_four'],
-            bank_name=row['bank_name'],
-            account_type=row['account_type'],
-            account_last4=row['last_four'] if row['type'] == 'bank_account' else None,
-            routing_number=row['routing_number'],
-            card_brand=row['card_brand'],
-            card_last4=row['last_four'] if row['type'] in ('debit_card', 'credit_card') else None,
-            card_exp_month=row['card_exp_month'],
-            card_exp_year=row['card_exp_year'],
-            paypal_email=row['paypal_email'],
-            cashapp_tag=row['cashapp_tag'],
-            mpesa_phone=row['mpesa_phone'],
-            mpesa_country=row['mpesa_country'],
-            crypto_address=row['crypto_address'],
-            crypto_network=row['crypto_network'],
-            is_verified=row['is_verified'],
-            is_default=row['is_default'],
-            is_active=row['is_active'],
-            created_at=row['created_at'],
+            name=row["name"],
+            last_four=row["last_four"],
+            bank_name=row["bank_name"],
+            account_type=row["account_type"],
+            account_last4=row["last_four"] if row["type"] == "bank_account" else None,
+            routing_number=row["routing_number"],
+            card_brand=row["card_brand"],
+            card_last4=row["last_four"] if row["type"] in ("debit_card", "credit_card") else None,
+            card_exp_month=row["card_exp_month"],
+            card_exp_year=row["card_exp_year"],
+            paypal_email=row["paypal_email"],
+            cashapp_tag=row["cashapp_tag"],
+            mpesa_phone=row["mpesa_phone"],
+            mpesa_country=row["mpesa_country"],
+            crypto_address=row["crypto_address"],
+            crypto_network=row["crypto_network"],
+            is_verified=row["is_verified"],
+            is_default=row["is_default"],
+            is_active=row["is_active"],
+            created_at=row["created_at"],
         )
 
         return {"payment_method": payment_method}
@@ -554,15 +581,16 @@ async def get_transfer_limits(
             daily_withdrawal_limit = Decimal("25000.00")
             instant_transfer_limit = Decimal("1000.00")
         else:
-            daily_deposit_limit = limits_row['daily_deposit_limit']
-            daily_withdrawal_limit = limits_row['daily_withdrawal_limit']
-            instant_transfer_limit = limits_row['instant_transfer_limit']
+            daily_deposit_limit = limits_row["daily_deposit_limit"]
+            daily_withdrawal_limit = limits_row["daily_withdrawal_limit"]
+            instant_transfer_limit = limits_row["instant_transfer_limit"]
 
         # Calculate used amounts today
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        used_deposit = await conn.fetchval(
-            """
+        used_deposit = (
+            await conn.fetchval(
+                """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
             WHERE user_id = $1
@@ -570,12 +598,15 @@ async def get_transfer_limits(
             AND status IN ('completed', 'processing')
             AND created_at >= $2
             """,
-            user_id,
-            today_start,
-        ) or Decimal("0")
+                user_id,
+                today_start,
+            )
+            or Decimal("0")
+        )
 
-        used_withdrawal = await conn.fetchval(
-            """
+        used_withdrawal = (
+            await conn.fetchval(
+                """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
             WHERE user_id = $1
@@ -583,12 +614,15 @@ async def get_transfer_limits(
             AND status IN ('completed', 'processing')
             AND created_at >= $2
             """,
-            user_id,
-            today_start,
-        ) or Decimal("0")
+                user_id,
+                today_start,
+            )
+            or Decimal("0")
+        )
 
-        used_instant = await conn.fetchval(
-            """
+        used_instant = (
+            await conn.fetchval(
+                """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
             WHERE user_id = $1
@@ -597,9 +631,11 @@ async def get_transfer_limits(
             AND status IN ('completed', 'processing')
             AND created_at >= $2
             """,
-            user_id,
-            today_start,
-        ) or Decimal("0")
+                user_id,
+                today_start,
+            )
+            or Decimal("0")
+        )
 
         return TransferLimit(
             daily_deposit_limit=daily_deposit_limit,
@@ -630,15 +666,11 @@ async def create_deposit(
         if not method:
             raise HTTPException(status_code=404, detail="Payment method not found")
 
-        if not method['is_verified']:
+        if not method["is_verified"]:
             raise HTTPException(status_code=400, detail="Payment method not verified")
 
         # Calculate fee using payment processor
-        fee = payment_processor.calculate_fee(
-            request.amount,
-            method['type'],
-            request.transfer_type
-        )
+        fee = payment_processor.calculate_fee(request.amount, method["type"], request.transfer_type)
 
         # Calculate expected arrival
         if request.transfer_type == "instant":
@@ -665,24 +697,26 @@ async def create_deposit(
 
         # Process payment with payment processor
         try:
-            if method['type'] in ('debit_card', 'credit_card'):
+            if method["type"] in ("debit_card", "credit_card"):
                 # Card payment via Stripe
                 payment_result = await payment_processor.create_payment_intent(
                     amount=request.amount + fee,
                     payment_method_id=request.payment_method_id,
                     metadata={
-                        'transaction_id': row['id'],
-                        'user_id': str(user_id),
-                        'type': 'deposit'
-                    }
+                        "transaction_id": row["id"],
+                        "user_id": str(user_id),
+                        "type": "deposit",
+                    },
                 )
-                logger.info(f"Payment intent created: {payment_result.get('id')} - Simulation: {payment_result.get('simulation', False)}")
+                logger.info(
+                    f"Payment intent created: {payment_result.get('id')} - Simulation: {payment_result.get('simulation', False)}"
+                )
 
                 # Update status based on payment result
-                if payment_result.get('status') == 'succeeded':
+                if payment_result.get("status") == "succeeded":
                     await conn.execute(
                         "UPDATE funding_transactions SET status = 'completed', completed_at = NOW() WHERE id = $1::uuid",
-                        row['id']
+                        row["id"],
                     )
                     # Credit user account immediately
                     await conn.execute(
@@ -699,42 +733,43 @@ async def create_deposit(
                                 source_type, amount, reference_id, user_id, description
                             ) VALUES ($1, $2, $3::uuid, $4, $5)
                             """,
-                            'funding_fee',
+                            "funding_fee",
                             fee,
-                            row['id'],
+                            row["id"],
                             user_id,
-                            f"Fee for {method['type']} deposit"
+                            f"Fee for {method['type']} deposit",
                         )
-            elif method['type'] == 'bank_account':
+            elif method["type"] == "bank_account":
                 # ACH transfer - stays in processing
                 payment_result = await payment_processor.create_bank_transfer(
                     amount=request.amount + fee,
                     bank_account_id=request.payment_method_id,
                     metadata={
-                        'transaction_id': row['id'],
-                        'user_id': str(user_id),
-                        'type': 'deposit'
-                    }
+                        "transaction_id": row["id"],
+                        "user_id": str(user_id),
+                        "type": "deposit",
+                    },
                 )
-                logger.info(f"Bank transfer initiated: {payment_result.get('id')} - Simulation: {payment_result.get('simulation', False)}")
+                logger.info(
+                    f"Bank transfer initiated: {payment_result.get('id')} - Simulation: {payment_result.get('simulation', False)}"
+                )
         except Exception as e:
             logger.error(f"Payment processing error: {str(e)}")
             # Update transaction to failed
             await conn.execute(
-                "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
-                row['id']
+                "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid", row["id"]
             )
 
         return FundingTransaction(
-            id=row['id'],
-            type=row['type'],
-            method=row['method'],
-            amount=row['amount'],
-            fee=row['fee'],
-            status=row['status'],
-            created_at=row['created_at'],
+            id=row["id"],
+            type=row["type"],
+            method=row["method"],
+            amount=row["amount"],
+            fee=row["fee"],
+            status=row["status"],
+            created_at=row["created_at"],
             completed_at=None,
-            expected_arrival=row['expected_arrival'],
+            expected_arrival=row["expected_arrival"],
             payment_method_id=request.payment_method_id,
         )
 
@@ -764,15 +799,11 @@ async def create_withdrawal(
             user_id,
         )
 
-        if not account or account['cash'] < request.amount:
+        if not account or account["cash"] < request.amount:
             raise HTTPException(status_code=400, detail="Insufficient funds")
 
         # Calculate fee for withdrawal
-        fee = payment_processor.calculate_fee(
-            request.amount,
-            method['type'],
-            'standard'
-        )
+        fee = payment_processor.calculate_fee(request.amount, method["type"], "standard")
         expected_arrival = datetime.utcnow() + timedelta(days=3)
 
         # Insert transaction
@@ -802,15 +833,17 @@ async def create_withdrawal(
         try:
             withdrawal_result = await payment_processor.process_withdrawal(
                 amount=request.amount,
-                payment_method_type=method['type'],
+                payment_method_type=method["type"],
                 payment_method_id=request.payment_method_id,
                 metadata={
-                    'transaction_id': row['id'],
-                    'user_id': str(user_id),
-                    'type': 'withdrawal'
-                }
+                    "transaction_id": row["id"],
+                    "user_id": str(user_id),
+                    "type": "withdrawal",
+                },
             )
-            logger.info(f"Withdrawal initiated: {withdrawal_result.get('id')} - Simulation: {withdrawal_result.get('simulation', False)}")
+            logger.info(
+                f"Withdrawal initiated: {withdrawal_result.get('id')} - Simulation: {withdrawal_result.get('simulation', False)}"
+            )
         except Exception as e:
             logger.error(f"Withdrawal processing error: {str(e)}")
             # Refund the amount on failure
@@ -820,21 +853,20 @@ async def create_withdrawal(
                 user_id,
             )
             await conn.execute(
-                "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid",
-                row['id']
+                "UPDATE funding_transactions SET status = 'failed' WHERE id = $1::uuid", row["id"]
             )
             raise HTTPException(status_code=500, detail="Withdrawal processing failed") from e
 
         return FundingTransaction(
-            id=row['id'],
-            type=row['type'],
-            method=row['method'],
-            amount=row['amount'],
-            fee=row['fee'],
-            status=row['status'],
-            created_at=row['created_at'],
+            id=row["id"],
+            type=row["type"],
+            method=row["method"],
+            amount=row["amount"],
+            fee=row["fee"],
+            status=row["status"],
+            created_at=row["created_at"],
             completed_at=None,
-            expected_arrival=row['expected_arrival'],
+            expected_arrival=row["expected_arrival"],
             payment_method_id=request.payment_method_id,
         )
 
@@ -858,7 +890,7 @@ async def cancel_funding_transaction(
         if not txn:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
-        if txn['status'] not in ('pending', 'processing'):
+        if txn["status"] not in ("pending", "processing"):
             raise HTTPException(status_code=400, detail="Transaction cannot be cancelled")
 
         # Update status to cancelled
@@ -923,32 +955,30 @@ async def download_receipt(
             FROM payment_methods
             WHERE id = $1::uuid
             """,
-            transaction['payment_method_id'],
+            transaction["payment_method_id"],
         )
 
         if not payment_method:
             # Create a default payment method if not found
             payment_method = {
-                'id': transaction['payment_method_id'],
-                'type': 'unknown',
-                'name': 'Payment Method',
-                'last_four': '****',
-                'bank_name': None,
-                'card_brand': None,
+                "id": transaction["payment_method_id"],
+                "type": "unknown",
+                "name": "Payment Method",
+                "last_four": "****",
+                "bank_name": None,
+                "card_brand": None,
             }
 
         # Convert to dicts for receipt generator
         transaction_data = dict(transaction)
-        user_data = dict(user) if user else {'full_name': 'Unknown', 'email': 'N/A'}
+        user_data = dict(user) if user else {"full_name": "Unknown", "email": "N/A"}
         payment_method_data = dict(payment_method)
 
         try:
             logger.info(f"Generating PDF receipt for transaction {transaction_id}")
             # Generate PDF receipt
             pdf_buffer = await ReceiptGenerator.generate_receipt(
-                transaction_data,
-                user_data,
-                payment_method_data
+                transaction_data, user_data, payment_method_data
             )
 
             logger.info(f"PDF receipt generated successfully for transaction {transaction_id}")
@@ -958,17 +988,18 @@ async def download_receipt(
                 media_type="application/pdf",
                 headers={
                     "Content-Disposition": f"attachment; filename=receipt_{transaction_id}.pdf",
-                    "Content-Type": "application/pdf"
-                }
+                    "Content-Type": "application/pdf",
+                },
             )
         except Exception as e:
-            logger.error(f"Failed to generate PDF receipt for transaction {transaction_id}: {str(e)}", exc_info=True)
+            logger.error(
+                f"Failed to generate PDF receipt for transaction {transaction_id}: {str(e)}",
+                exc_info=True,
+            )
             # Fallback to text receipt if PDF generation fails
             try:
                 text_receipt = ReceiptGenerator.generate_simple_text_receipt(
-                    transaction_data,
-                    user_data,
-                    payment_method_data
+                    transaction_data, user_data, payment_method_data
                 )
 
                 return StreamingResponse(
@@ -976,13 +1007,12 @@ async def download_receipt(
                     media_type="text/plain",
                     headers={
                         "Content-Disposition": f"attachment; filename=receipt_{transaction_id}.txt"
-                    }
+                    },
                 )
             except Exception as fallback_error:
                 logger.error(f"Text receipt fallback also failed: {str(fallback_error)}")
                 raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to generate receipt: {str(e)}"
+                    status_code=500, detail=f"Failed to generate receipt: {str(e)}"
                 ) from fallback_error
 
 
@@ -1019,9 +1049,7 @@ async def initiate_payment_verification(
 
         try:
             result = await PaymentVerificationService.initiate_verification(
-                UUID(payment_method_id),
-                method['type'],
-                metadata
+                UUID(payment_method_id), method["type"], metadata
             )
             return result
         except VerificationError as e:
@@ -1055,8 +1083,7 @@ async def complete_payment_verification(
 
         try:
             result = await PaymentVerificationService.complete_verification(
-                UUID(payment_method_id),
-                verification_data
+                UUID(payment_method_id), verification_data
             )
             return result
         except VerificationError as e:
@@ -1098,13 +1125,13 @@ async def get_verification_status(
             raise HTTPException(status_code=404, detail="Payment method not found")
 
         return {
-            "status": method['verification_status'],
-            "is_verified": method['is_verified'],
-            "verified_at": method['verified_at'].isoformat() if method['verified_at'] else None,
-            "verification_type": method['verification_type'],
-            "attempt_count": method['attempt_count'] or 0,
-            "expires_at": method['expires_at'].isoformat() if method['expires_at'] else None,
-            "error": method['verification_error'],
+            "status": method["verification_status"],
+            "is_verified": method["is_verified"],
+            "verified_at": method["verified_at"].isoformat() if method["verified_at"] else None,
+            "verification_type": method["verification_type"],
+            "attempt_count": method["attempt_count"] or 0,
+            "expires_at": method["expires_at"].isoformat() if method["expires_at"] else None,
+            "error": method["verification_error"],
         }
 
 
@@ -1139,11 +1166,13 @@ async def get_transaction_status(
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         return {
-            "status": row['status'],
-            "completed_at": row['completed_at'].isoformat() if row['completed_at'] else None,
-            "expected_arrival": row['expected_arrival'].isoformat() if row['expected_arrival'] else None,
-            "notes": row['notes'],
-            "failed_reason": row['failed_reason'] if row['status'] == 'failed' else None,
+            "status": row["status"],
+            "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+            "expected_arrival": (
+                row["expected_arrival"].isoformat() if row["expected_arrival"] else None
+            ),
+            "notes": row["notes"],
+            "failed_reason": row["failed_reason"] if row["status"] == "failed" else None,
         }
 
 
@@ -1159,7 +1188,4 @@ async def run_settlement(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     result = await transaction_settlement.run_settlement_cycle()
-    return {
-        "message": "Settlement cycle completed",
-        "result": result
-    }
+    return {"message": "Settlement cycle completed", "result": result}

@@ -40,8 +40,10 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # MODELS
 # ============================================================================
 
+
 class TokenPayload(BaseModel):
     """JWT token payload."""
+
     sub: str  # user_id
     exp: int  # expiration timestamp
     iat: int  # issued at timestamp
@@ -51,6 +53,7 @@ class TokenPayload(BaseModel):
 
 class TokenResponse(BaseModel):
     """Authentication token response."""
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -59,12 +62,14 @@ class TokenResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     """User login request."""
+
     email: EmailStr
     password: str
 
 
 class RegisterRequest(BaseModel):
     """User registration request."""
+
     email: EmailStr
     username: str
     password: str
@@ -91,6 +96,7 @@ class RegisterRequest(BaseModel):
 
 class User(BaseModel):
     """User model for responses."""
+
     id: UUID
     email: str
     username: str
@@ -105,6 +111,7 @@ class User(BaseModel):
 # PASSWORD HASHING
 # ============================================================================
 
+
 def hash_password(password: str) -> str:
     """
     Hash a password using bcrypt.
@@ -115,10 +122,10 @@ def hash_password(password: str) -> str:
     Returns:
         Hashed password string
     """
-    password_bytes = password.encode('utf-8')
+    password_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt(rounds=12)
     hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -132,8 +139,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         True if password matches, False otherwise
     """
-    password_bytes = plain_password.encode('utf-8')
-    hashed_bytes = hashed_password.encode('utf-8')
+    password_bytes = plain_password.encode("utf-8")
+    hashed_bytes = hashed_password.encode("utf-8")
     return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
@@ -141,10 +148,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # JWT TOKEN FUNCTIONS
 # ============================================================================
 
+
 def create_access_token(
-    user_id: UUID,
-    scopes: list[str] = None,
-    expires_delta: timedelta | None = None
+    user_id: UUID, scopes: list[str] = None, expires_delta: timedelta | None = None
 ) -> str:
     """
     Create JWT access token.
@@ -160,9 +166,7 @@ def create_access_token(
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.jwt_access_token_expire_minutes
-        )
+        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
     payload = {
         "sub": str(user_id),
@@ -172,11 +176,7 @@ def create_access_token(
         "scopes": scopes or [],
     }
 
-    encoded_jwt = jwt.encode(
-        payload,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm
-    )
+    encoded_jwt = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
     return encoded_jwt
 
@@ -200,11 +200,7 @@ def create_refresh_token(user_id: UUID) -> str:
         "type": "refresh",
     }
 
-    encoded_jwt = jwt.encode(
-        payload,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm
-    )
+    encoded_jwt = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
     return encoded_jwt
 
@@ -223,11 +219,7 @@ def decode_token(token: str) -> TokenPayload:
         HTTPException: If token is invalid or expired
     """
     try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         return TokenPayload(**payload)
 
     except jwt.ExpiredSignatureError as e:
@@ -249,6 +241,7 @@ def decode_token(token: str) -> TokenPayload:
 # ============================================================================
 # USER AUTHENTICATION
 # ============================================================================
+
 
 async def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
     """
@@ -274,10 +267,10 @@ async def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
     if not user:
         return None
 
-    if not verify_password(password, user['hashed_password']):
+    if not verify_password(password, user["hashed_password"]):
         return None
 
-    if not user['is_active']:
+    if not user["is_active"]:
         return None
 
     # Update last login
@@ -287,7 +280,7 @@ async def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
         WHERE id = $1
     """
     async with db_manager.pool.acquire() as conn:
-        await conn.execute(update_query, user['id'])
+        await conn.execute(update_query, user["id"])
 
     return dict(user)
 
@@ -316,10 +309,7 @@ async def get_user_by_id(user_id: UUID) -> dict[str, Any] | None:
 
 
 async def create_user(
-    email: str,
-    username: str,
-    password: str,
-    full_name: str | None = None
+    email: str, username: str, password: str, full_name: str | None = None
 ) -> dict[str, Any]:
     """
     Create new user account.
@@ -346,8 +336,7 @@ async def create_user(
 
     if existing:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email or username already registered"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email or username already registered"
         )
 
     # Hash password
@@ -361,13 +350,7 @@ async def create_user(
     """
 
     async with db_manager.pool.acquire() as conn:
-        user = await conn.fetchrow(
-            insert_query,
-            email,
-            username,
-            hashed_password,
-            full_name
-        )
+        user = await conn.fetchrow(insert_query, email, username, hashed_password, full_name)
 
     logger.info(f"New user created: {email} (ID: {user['id']})")
 
@@ -396,7 +379,7 @@ async def create_user(
     account_number = f"CIFT-{str(user['id'])[:8]}"
 
     async with db_manager.pool.acquire() as conn:
-        await conn.execute(account_query, user['id'], account_number, default_balance)
+        await conn.execute(account_query, user["id"], account_number, default_balance)
 
     logger.info(f"Created default account for user {user['id']}: {account_number}")
 
@@ -406,6 +389,7 @@ async def create_user(
 # ============================================================================
 # API KEY AUTHENTICATION
 # ============================================================================
+
 
 async def verify_api_key(api_key: str) -> dict[str, Any] | None:
     """
@@ -455,8 +439,9 @@ async def verify_api_key(api_key: str) -> dict[str, Any] | None:
 # DEPENDENCY INJECTION - AUTH GUARDS
 # ============================================================================
 
+
 async def get_current_user_from_token(
-    credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme)
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
 ) -> User | None:
     """
     Dependency to get current user from JWT token.
@@ -494,18 +479,15 @@ async def get_current_user_from_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user_data['is_active']:
+    if not user_data["is_active"]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive"
         )
 
     return User(**user_data)
 
 
-async def get_current_user_from_api_key(
-    api_key: str = Security(api_key_header)
-) -> User | None:
+async def get_current_user_from_api_key(api_key: str = Security(api_key_header)) -> User | None:
     """
     Dependency to get current user from API key.
 
@@ -535,7 +517,7 @@ async def get_current_user_from_api_key(
 
 async def get_current_user(
     token_user: User | None = Depends(get_current_user_from_token),
-    api_key_user: User | None = Depends(get_current_user_from_api_key)
+    api_key_user: User | None = Depends(get_current_user_from_api_key),
 ) -> User:
     """
     Dependency to get current user from either JWT token or API key.
@@ -554,15 +536,10 @@ async def get_current_user(
     if api_key_user:
         return api_key_user
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated"
-    )
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
 
-async def get_current_active_user(
-    current_user: User = Depends(get_current_user)
-) -> User:
+async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """
     Dependency to get current active user.
 
@@ -577,16 +554,13 @@ async def get_current_active_user(
     """
     if not current_user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive"
         )
 
     return current_user
 
 
-async def get_current_user_id(
-    current_user: User = Depends(get_current_active_user)
-) -> UUID:
+async def get_current_user_id(current_user: User = Depends(get_current_active_user)) -> UUID:
     """
     Dependency to get current active user ID.
 
@@ -602,9 +576,7 @@ async def get_current_user_id(
     return current_user.id
 
 
-async def get_current_superuser(
-    current_user: User = Depends(get_current_active_user)
-) -> User:
+async def get_current_superuser(current_user: User = Depends(get_current_active_user)) -> User:
     """
     Dependency to get current superuser.
 
@@ -619,8 +591,7 @@ async def get_current_superuser(
     """
     if not current_user.is_superuser:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User does not have sufficient privileges"
+            status_code=status.HTTP_403_FORBIDDEN, detail="User does not have sufficient privileges"
         )
 
     return current_user
@@ -630,6 +601,7 @@ async def get_current_superuser(
 # HELPER FUNCTIONS
 # ============================================================================
 
+
 def generate_api_key() -> str:
     """
     Generate a secure random API key.
@@ -638,14 +610,12 @@ def generate_api_key() -> str:
         API key string (64 characters)
     """
     import secrets
+
     return secrets.token_urlsafe(48)
 
 
 async def create_api_key_for_user(
-    user_id: UUID,
-    name: str,
-    scopes: list[str] = None,
-    expires_in_days: int | None = None
+    user_id: UUID, name: str, scopes: list[str] = None, expires_in_days: int | None = None
 ) -> tuple[str, str]:
     """
     Create API key for a user.
@@ -676,19 +646,13 @@ async def create_api_key_for_user(
     """
 
     import json
+
     scopes_json = json.dumps(scopes or [])
 
     async with db_manager.pool.acquire() as conn:
-        result = await conn.fetchrow(
-            query,
-            user_id,
-            key_hash,
-            name,
-            scopes_json,
-            expires_at
-        )
+        result = await conn.fetchrow(query, user_id, key_hash, name, scopes_json, expires_at)
 
-    key_id = result['id']
+    key_id = result["id"]
 
     logger.info(f"Created API key for user {user_id}: {name} (ID: {key_id})")
 

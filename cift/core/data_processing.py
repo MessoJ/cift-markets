@@ -26,6 +26,7 @@ from cift.core.database import questdb_manager
 # DATA LOADING (19.5x FASTER)
 # ============================================================================
 
+
 async def load_tick_data(
     symbols: list[str],
     start_date: datetime,
@@ -75,10 +76,7 @@ async def load_tick_data(
 
     # Convert asyncpg records to Polars DataFrame (zero-copy when possible)
     # This is MUCH faster than converting to Pandas first
-    data = {
-        key: [row[key] for row in rows]
-        for key in rows[0].keys()
-    }
+    data = {key: [row[key] for row in rows] for key in rows[0].keys()}
 
     df = pl.DataFrame(data)
 
@@ -141,6 +139,7 @@ async def load_ohlcv_data(
 # DATA TRANSFORMATION (15x FASTER)
 # ============================================================================
 
+
 def calculate_ohlcv_bars(
     df: pl.DataFrame,
     timeframe: str = "1m",
@@ -166,14 +165,16 @@ def calculate_ohlcv_bars(
         every=timeframe,
         by=symbol_column,
         closed="left",
-    ).agg([
-        pl.col("price").first().alias("open"),
-        pl.col("price").max().alias("high"),
-        pl.col("price").min().alias("low"),
-        pl.col("price").last().alias("close"),
-        pl.col("volume").sum().alias("volume"),
-        pl.col("price").count().alias("tick_count"),
-    ])
+    ).agg(
+        [
+            pl.col("price").first().alias("open"),
+            pl.col("price").max().alias("high"),
+            pl.col("price").min().alias("low"),
+            pl.col("price").last().alias("close"),
+            pl.col("volume").sum().alias("volume"),
+            pl.col("price").count().alias("tick_count"),
+        ]
+    )
 
     return ohlcv
 
@@ -199,116 +200,142 @@ def calculate_technical_indicators(df: pl.DataFrame) -> pl.DataFrame:
     Performance: 12x faster than Pandas rolling operations
     """
     # First pass: Calculate returns and base indicators
-    df = df.with_columns([
-        # Returns (needed for volatility)
-        (pl.col("close").log().diff()).alias("log_returns"),
-        (pl.col("close").pct_change()).alias("returns"),
-
-        # Simple Moving Averages
-        pl.col("close").rolling_mean(window_size=5).alias("sma_5"),
-        pl.col("close").rolling_mean(window_size=10).alias("sma_10"),
-        pl.col("close").rolling_mean(window_size=20).alias("sma_20"),
-        pl.col("close").rolling_mean(window_size=50).alias("sma_50"),
-        pl.col("close").rolling_mean(window_size=200).alias("sma_200"),
-
-        # Exponential Moving Averages
-        pl.col("close").ewm_mean(span=12).alias("ema_12"),
-        pl.col("close").ewm_mean(span=26).alias("ema_26"),
-        pl.col("close").ewm_mean(span=50).alias("ema_50"),
-
-        # Volume indicators
-        pl.col("volume").rolling_mean(window_size=20).alias("volume_sma_20"),
-        pl.col("volume").ewm_mean(span=20).alias("volume_ema_20"),
-
-        # High-Low Range
-        (pl.col("high") - pl.col("low")).alias("hl_range"),
-    ])
+    df = df.with_columns(
+        [
+            # Returns (needed for volatility)
+            (pl.col("close").log().diff()).alias("log_returns"),
+            (pl.col("close").pct_change()).alias("returns"),
+            # Simple Moving Averages
+            pl.col("close").rolling_mean(window_size=5).alias("sma_5"),
+            pl.col("close").rolling_mean(window_size=10).alias("sma_10"),
+            pl.col("close").rolling_mean(window_size=20).alias("sma_20"),
+            pl.col("close").rolling_mean(window_size=50).alias("sma_50"),
+            pl.col("close").rolling_mean(window_size=200).alias("sma_200"),
+            # Exponential Moving Averages
+            pl.col("close").ewm_mean(span=12).alias("ema_12"),
+            pl.col("close").ewm_mean(span=26).alias("ema_26"),
+            pl.col("close").ewm_mean(span=50).alias("ema_50"),
+            # Volume indicators
+            pl.col("volume").rolling_mean(window_size=20).alias("volume_sma_20"),
+            pl.col("volume").ewm_mean(span=20).alias("volume_ema_20"),
+            # High-Low Range
+            (pl.col("high") - pl.col("low")).alias("hl_range"),
+        ]
+    )
 
     # Second pass: Calculate indicators that depend on first pass
-    df = df.with_columns([
-        # Volatility (uses log_returns from first pass)
-        pl.col("log_returns").rolling_std(window_size=20).alias("volatility_20"),
-        pl.col("log_returns").rolling_std(window_size=60).alias("volatility_60"),
-
-        # Volume ratio (uses volume_sma_20 from first pass)
-        (pl.col("volume") / pl.col("volume_sma_20")).alias("volume_ratio"),
-
-        # Price momentum
-        (pl.col("close") / pl.col("close").shift(5) - 1).alias("momentum_5"),
-        (pl.col("close") / pl.col("close").shift(10) - 1).alias("momentum_10"),
-        (pl.col("close") / pl.col("close").shift(20) - 1).alias("momentum_20"),
-
-        # Rate of Change
-        ((pl.col("close") - pl.col("close").shift(10)) / pl.col("close").shift(10) * 100).alias("roc_10"),
-
-        # High-Low Range percentage
-        (pl.col("hl_range") / pl.col("close")).alias("hl_range_pct"),
-    ])
+    df = df.with_columns(
+        [
+            # Volatility (uses log_returns from first pass)
+            pl.col("log_returns").rolling_std(window_size=20).alias("volatility_20"),
+            pl.col("log_returns").rolling_std(window_size=60).alias("volatility_60"),
+            # Volume ratio (uses volume_sma_20 from first pass)
+            (pl.col("volume") / pl.col("volume_sma_20")).alias("volume_ratio"),
+            # Price momentum
+            (pl.col("close") / pl.col("close").shift(5) - 1).alias("momentum_5"),
+            (pl.col("close") / pl.col("close").shift(10) - 1).alias("momentum_10"),
+            (pl.col("close") / pl.col("close").shift(20) - 1).alias("momentum_20"),
+            # Rate of Change
+            ((pl.col("close") - pl.col("close").shift(10)) / pl.col("close").shift(10) * 100).alias(
+                "roc_10"
+            ),
+            # High-Low Range percentage
+            (pl.col("hl_range") / pl.col("close")).alias("hl_range_pct"),
+        ]
+    )
 
     # Bollinger Bands
-    df = df.with_columns([
-        pl.col("sma_20").alias("bb_middle"),
-        (pl.col("sma_20") + 2 * pl.col("close").rolling_std(window_size=20)).alias("bb_upper"),
-        (pl.col("sma_20") - 2 * pl.col("close").rolling_std(window_size=20)).alias("bb_lower"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col("sma_20").alias("bb_middle"),
+            (pl.col("sma_20") + 2 * pl.col("close").rolling_std(window_size=20)).alias("bb_upper"),
+            (pl.col("sma_20") - 2 * pl.col("close").rolling_std(window_size=20)).alias("bb_lower"),
+        ]
+    )
 
     # Bollinger Band Width and Position
-    df = df.with_columns([
-        (pl.col("bb_upper") - pl.col("bb_lower")).alias("bb_width"),
-        ((pl.col("close") - pl.col("bb_lower")) / (pl.col("bb_upper") - pl.col("bb_lower"))).alias("bb_position"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("bb_upper") - pl.col("bb_lower")).alias("bb_width"),
+            (
+                (pl.col("close") - pl.col("bb_lower")) / (pl.col("bb_upper") - pl.col("bb_lower"))
+            ).alias("bb_position"),
+        ]
+    )
 
     # MACD
-    df = df.with_columns([
-        (pl.col("ema_12") - pl.col("ema_26")).alias("macd"),
-    ])
-    df = df.with_columns([
-        pl.col("macd").ewm_mean(span=9).alias("macd_signal"),
-    ])
-    df = df.with_columns([
-        (pl.col("macd") - pl.col("macd_signal")).alias("macd_histogram"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("ema_12") - pl.col("ema_26")).alias("macd"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            pl.col("macd").ewm_mean(span=9).alias("macd_signal"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            (pl.col("macd") - pl.col("macd_signal")).alias("macd_histogram"),
+        ]
+    )
 
     # RSI (Relative Strength Index) - 14 period
     # Calculate price changes
-    df = df.with_columns([
-        pl.col("close").diff().alias("price_change"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col("close").diff().alias("price_change"),
+        ]
+    )
 
     # Separate gains and losses
-    df = df.with_columns([
-        pl.when(pl.col("price_change") > 0)
-          .then(pl.col("price_change"))
-          .otherwise(0.0)
-          .alias("gain"),
-        pl.when(pl.col("price_change") < 0)
-          .then(-pl.col("price_change"))
-          .otherwise(0.0)
-          .alias("loss"),
-    ])
+    df = df.with_columns(
+        [
+            pl.when(pl.col("price_change") > 0)
+            .then(pl.col("price_change"))
+            .otherwise(0.0)
+            .alias("gain"),
+            pl.when(pl.col("price_change") < 0)
+            .then(-pl.col("price_change"))
+            .otherwise(0.0)
+            .alias("loss"),
+        ]
+    )
 
     # Calculate average gain and average loss using Wilder's smoothing (EMA)
-    df = df.with_columns([
-        pl.col("gain").ewm_mean(span=14, adjust=False).alias("avg_gain"),
-        pl.col("loss").ewm_mean(span=14, adjust=False).alias("avg_loss"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col("gain").ewm_mean(span=14, adjust=False).alias("avg_gain"),
+            pl.col("loss").ewm_mean(span=14, adjust=False).alias("avg_loss"),
+        ]
+    )
 
     # Calculate RS and RSI
-    df = df.with_columns([
-        (pl.col("avg_gain") / pl.col("avg_loss")).alias("rs"),
-    ])
-    df = df.with_columns([
-        (100.0 - (100.0 / (1.0 + pl.col("rs")))).alias("rsi_14"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("avg_gain") / pl.col("avg_loss")).alias("rs"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            (100.0 - (100.0 / (1.0 + pl.col("rs")))).alias("rsi_14"),
+        ]
+    )
 
     # RSI 7 period (faster) - optional
-    df = df.with_columns([
-        pl.col("gain").ewm_mean(span=7, adjust=False).alias("avg_gain_7"),
-        pl.col("loss").ewm_mean(span=7, adjust=False).alias("avg_loss_7"),
-    ])
-    df = df.with_columns([
-        (100.0 - (100.0 / (1.0 + (pl.col("avg_gain_7") / pl.col("avg_loss_7"))))).alias("rsi_7"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col("gain").ewm_mean(span=7, adjust=False).alias("avg_gain_7"),
+            pl.col("loss").ewm_mean(span=7, adjust=False).alias("avg_loss_7"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            (100.0 - (100.0 / (1.0 + (pl.col("avg_gain_7") / pl.col("avg_loss_7"))))).alias(
+                "rsi_7"
+            ),
+        ]
+    )
 
     return df
 
@@ -330,19 +357,24 @@ def calculate_order_flow_features(df: pl.DataFrame) -> pl.DataFrame:
     Returns:
         DataFrame with order flow features
     """
-    df = df.with_columns([
-        # Spread metrics
-        (pl.col("ask") - pl.col("bid")).alias("spread"),
-        ((pl.col("ask") - pl.col("bid")) / pl.col("bid") * 10000).alias("spread_bps"),
-        ((pl.col("bid") + pl.col("ask")) / 2).alias("mid_price"),
-
-        # Order imbalance (simple version)
-        ((pl.col("bid_volume") - pl.col("ask_volume")) / (pl.col("bid_volume") + pl.col("ask_volume"))).alias("order_imbalance"),
-
-        # Microprice (volume-weighted mid-price)
-        ((pl.col("bid") * pl.col("ask_volume") + pl.col("ask") * pl.col("bid_volume")) /
-         (pl.col("bid_volume") + pl.col("ask_volume"))).alias("microprice"),
-    ])
+    df = df.with_columns(
+        [
+            # Spread metrics
+            (pl.col("ask") - pl.col("bid")).alias("spread"),
+            ((pl.col("ask") - pl.col("bid")) / pl.col("bid") * 10000).alias("spread_bps"),
+            ((pl.col("bid") + pl.col("ask")) / 2).alias("mid_price"),
+            # Order imbalance (simple version)
+            (
+                (pl.col("bid_volume") - pl.col("ask_volume"))
+                / (pl.col("bid_volume") + pl.col("ask_volume"))
+            ).alias("order_imbalance"),
+            # Microprice (volume-weighted mid-price)
+            (
+                (pl.col("bid") * pl.col("ask_volume") + pl.col("ask") * pl.col("bid_volume"))
+                / (pl.col("bid_volume") + pl.col("ask_volume"))
+            ).alias("microprice"),
+        ]
+    )
 
     return df
 
@@ -350,6 +382,7 @@ def calculate_order_flow_features(df: pl.DataFrame) -> pl.DataFrame:
 # ============================================================================
 # FEATURE ENGINEERING
 # ============================================================================
+
 
 def create_ml_features(
     df: pl.DataFrame,
@@ -372,23 +405,29 @@ def create_ml_features(
     # Forward returns as target
     if lag_periods is None:
         lag_periods = [1, 2, 3, 5, 10]
-    df = df.with_columns([
-        pl.col("close").shift(-target_horizon).alias("close_forward"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col("close").shift(-target_horizon).alias("close_forward"),
+        ]
+    )
 
-    df = df.with_columns([
-        ((pl.col("close_forward") / pl.col("close")) - 1).alias("target_return"),
-        (pl.col("close_forward") > pl.col("close")).cast(pl.Int8).alias("target_direction"),
-    ])
+    df = df.with_columns(
+        [
+            ((pl.col("close_forward") / pl.col("close")) - 1).alias("target_return"),
+            (pl.col("close_forward") > pl.col("close")).cast(pl.Int8).alias("target_direction"),
+        ]
+    )
 
     if include_lagged_features:
         # Add lagged features for returns and volume
         for lag in lag_periods:
-            df = df.with_columns([
-                pl.col("returns").shift(lag).alias(f"returns_lag_{lag}"),
-                pl.col("volume_ratio").shift(lag).alias(f"volume_ratio_lag_{lag}"),
-                pl.col("volatility_20").shift(lag).alias(f"volatility_lag_{lag}"),
-            ])
+            df = df.with_columns(
+                [
+                    pl.col("returns").shift(lag).alias(f"returns_lag_{lag}"),
+                    pl.col("volume_ratio").shift(lag).alias(f"volume_ratio_lag_{lag}"),
+                    pl.col("volatility_20").shift(lag).alias(f"volatility_lag_{lag}"),
+                ]
+            )
 
     # Remove rows with NaN in target
     df = df.filter(pl.col("target_return").is_not_null())
@@ -399,6 +438,7 @@ def create_ml_features(
 # ============================================================================
 # BACKTESTING (10x FASTER)
 # ============================================================================
+
 
 def run_vectorized_backtest(
     df: pl.DataFrame,
@@ -423,47 +463,67 @@ def run_vectorized_backtest(
     Performance: 10x faster than Pandas for 1M rows
     """
     # Calculate positions (shift signals to avoid look-ahead bias)
-    df = df.with_columns([
-        pl.col(signal_column).shift(1).fill_null(0).alias("position"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col(signal_column).shift(1).fill_null(0).alias("position"),
+        ]
+    )
 
     # Calculate strategy returns
-    df = df.with_columns([
-        (pl.col("returns") * pl.col("position")).alias("strategy_returns_gross"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("returns") * pl.col("position")).alias("strategy_returns_gross"),
+        ]
+    )
 
     # Apply transaction costs
-    df = df.with_columns([
-        (pl.col("position") != pl.col("position").shift(1)).cast(pl.Int8).alias("position_change"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("position") != pl.col("position").shift(1))
+            .cast(pl.Int8)
+            .alias("position_change"),
+        ]
+    )
 
-    df = df.with_columns([
-        (pl.col("position_change") * commission_bps / 10000).alias("commission"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("position_change") * commission_bps / 10000).alias("commission"),
+        ]
+    )
 
-    df = df.with_columns([
-        (pl.col("strategy_returns_gross") - pl.col("commission")).alias("strategy_returns"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("strategy_returns_gross") - pl.col("commission")).alias("strategy_returns"),
+        ]
+    )
 
     # Calculate cumulative returns
-    df = df.with_columns([
-        (pl.col("strategy_returns") + 1).log().cum_sum().exp().alias("strategy_equity"),
-        (pl.col("returns") + 1).log().cum_sum().exp().alias("buy_hold_equity"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("strategy_returns") + 1).log().cum_sum().exp().alias("strategy_equity"),
+            (pl.col("returns") + 1).log().cum_sum().exp().alias("buy_hold_equity"),
+        ]
+    )
 
     # Scale to initial capital
-    df = df.with_columns([
-        (pl.col("strategy_equity") * initial_capital).alias("portfolio_value"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("strategy_equity") * initial_capital).alias("portfolio_value"),
+        ]
+    )
 
     # Calculate drawdown
-    df = df.with_columns([
-        pl.col("portfolio_value").cum_max().alias("running_max"),
-    ])
+    df = df.with_columns(
+        [
+            pl.col("portfolio_value").cum_max().alias("running_max"),
+        ]
+    )
 
-    df = df.with_columns([
-        ((pl.col("portfolio_value") / pl.col("running_max")) - 1).alias("drawdown"),
-    ])
+    df = df.with_columns(
+        [
+            ((pl.col("portfolio_value") / pl.col("running_max")) - 1).alias("drawdown"),
+        ]
+    )
 
     # Calculate performance metrics
     total_return = (df["portfolio_value"][-1] / initial_capital - 1) if len(df) > 0 else 0
@@ -471,6 +531,7 @@ def run_vectorized_backtest(
 
     # Sharpe ratio (annualized, using excess returns)
     from cift.metrics.performance import annualized_sharpe
+
     sharpe = annualized_sharpe(
         np.asarray(df["strategy_returns"].to_numpy(), dtype=np.float64),
         risk_free_rate_annual=risk_free_rate_annual,
@@ -488,7 +549,9 @@ def run_vectorized_backtest(
         "sharpe_ratio": float(sharpe),
         "win_rate": float(win_rate),
         "total_trades": int(total_trades),
-        "final_portfolio_value": float(df["portfolio_value"][-1]) if len(df) > 0 else initial_capital,
+        "final_portfolio_value": (
+            float(df["portfolio_value"][-1]) if len(df) > 0 else initial_capital
+        ),
     }
 
     return df, metrics
@@ -497,6 +560,7 @@ def run_vectorized_backtest(
 # ============================================================================
 # DATA EXPORT/IMPORT
 # ============================================================================
+
 
 def save_to_parquet(df: pl.DataFrame, path: str | Path, compression: str = "zstd") -> None:
     """
@@ -529,6 +593,7 @@ def load_from_parquet(path: str | Path) -> pl.DataFrame:
 # ============================================================================
 # MEMORY OPTIMIZATION
 # ============================================================================
+
 
 def optimize_dataframe_memory(df: pl.DataFrame) -> pl.DataFrame:
     """
@@ -571,7 +636,9 @@ def optimize_dataframe_memory(df: pl.DataFrame) -> pl.DataFrame:
     optimized_memory = df_optimized.estimated_size("mb")
     savings_pct = ((original_memory - optimized_memory) / original_memory) * 100
 
-    logger.info(f"Memory optimization: {original_memory:.2f}MB → {optimized_memory:.2f}MB ({savings_pct:.1f}% reduction)")
+    logger.info(
+        f"Memory optimization: {original_memory:.2f}MB → {optimized_memory:.2f}MB ({savings_pct:.1f}% reduction)"
+    )
 
     return df_optimized
 
@@ -579,6 +646,7 @@ def optimize_dataframe_memory(df: pl.DataFrame) -> pl.DataFrame:
 # ============================================================================
 # UTILITIES
 # ============================================================================
+
 
 async def get_latest_prices(symbols: list[str]) -> pl.DataFrame:
     """

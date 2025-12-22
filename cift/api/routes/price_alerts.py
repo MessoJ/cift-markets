@@ -23,19 +23,24 @@ router = APIRouter(prefix="/price-alerts", tags=["Price Alerts"])
 # MODELS
 # ============================================================================
 
+
 class CreateAlertRequest(BaseModel):
     """Enhanced request model for creating price alert"""
+
     symbol: str = Field(..., min_length=1, max_length=10, description="Stock symbol")
     alert_type: AlertType = Field(..., description="Type of price alert")
     condition_value: float = Field(..., gt=0, description="Primary condition value")
     condition_value2: float | None = Field(None, description="Secondary value for range alerts")
-    notification_methods: list[NotificationMethod] = Field(default_factory=lambda: [NotificationMethod.IN_APP])
+    notification_methods: list[NotificationMethod] = Field(
+        default_factory=lambda: [NotificationMethod.IN_APP]
+    )
     message: str | None = Field(None, max_length=200, description="Custom alert message")
     expires_at: datetime | None = Field(None, description="Alert expiration time")
 
 
 class PriceAlertUpdate(BaseModel):
     """Request model for updating price alert"""
+
     price: float | None = Field(None, gt=0)
     message: str | None = None
     enabled: bool | None = None
@@ -44,6 +49,7 @@ class PriceAlertUpdate(BaseModel):
 
 class PriceAlertResponse(BaseModel):
     """Response model for price alert"""
+
     id: str
     user_id: str
     symbol: str
@@ -55,22 +61,24 @@ class PriceAlertResponse(BaseModel):
     triggered_at: datetime | None
     triggered_price: float | None
     notification_sent: bool
-    is_active: bool = Field(alias="enabled") # Map enabled to is_active if needed, or just use enabled
+    is_active: bool = Field(
+        alias="enabled"
+    )  # Map enabled to is_active if needed, or just use enabled
     enabled: bool
     created_at: datetime
     expires_at: datetime | None
-
 
 
 # ============================================================================
 # ENHANCED ENDPOINTS
 # ============================================================================
 
+
 @router.get("", response_model=list[PriceAlertResponse])
 async def get_alerts(
     symbol: str | None = None,
     active_only: bool = True,
-    user_id: UUID = Depends(get_current_user_id)
+    user_id: UUID = Depends(get_current_user_id),
 ):
     """
     Get all price alerts for the authenticated user.
@@ -111,34 +119,35 @@ async def get_alerts(
 
         results = []
         for row in rows:
-            current_price = await get_latest_price(row['symbol'])
+            current_price = await get_latest_price(row["symbol"])
 
-            results.append(PriceAlertResponse(
-                id=str(row['id']),
-                user_id=str(row['user_id']),
-                symbol=row['symbol'],
-                alert_type=row['alert_type'],
-                price=float(row['price']),
-                current_price=current_price,
-                message=row['message'],
-                triggered=row['triggered'],
-                triggered_at=row['triggered_at'],
-                triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-                notification_sent=row['notification_sent'],
-                enabled=row['enabled'],
-                is_active=row['enabled'], # Map for frontend compatibility
-                expires_at=row['expires_at'],
-                created_at=row['created_at']
-            ))
+            results.append(
+                PriceAlertResponse(
+                    id=str(row["id"]),
+                    user_id=str(row["user_id"]),
+                    symbol=row["symbol"],
+                    alert_type=row["alert_type"],
+                    price=float(row["price"]),
+                    current_price=current_price,
+                    message=row["message"],
+                    triggered=row["triggered"],
+                    triggered_at=row["triggered_at"],
+                    triggered_price=(
+                        float(row["triggered_price"]) if row["triggered_price"] else None
+                    ),
+                    notification_sent=row["notification_sent"],
+                    enabled=row["enabled"],
+                    is_active=row["enabled"],  # Map for frontend compatibility
+                    expires_at=row["expires_at"],
+                    created_at=row["created_at"],
+                )
+            )
 
         return results
 
 
 @router.get("/{alert_id}", response_model=PriceAlertResponse)
-async def get_alert(
-    alert_id: UUID,
-    user_id: UUID = Depends(get_current_user_id)
-):
+async def get_alert(alert_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     """
     Get a specific price alert by ID.
     """
@@ -159,32 +168,30 @@ async def get_alert(
 
         # Get current price
         from cift.core.trading_queries import get_latest_price
-        current_price = await get_latest_price(row['symbol'])
+
+        current_price = await get_latest_price(row["symbol"])
 
         return PriceAlertResponse(
-            id=str(row['id']),
-            user_id=str(row['user_id']),
-            symbol=row['symbol'],
-            alert_type=row['alert_type'],
-            price=float(row['price']),
+            id=str(row["id"]),
+            user_id=str(row["user_id"]),
+            symbol=row["symbol"],
+            alert_type=row["alert_type"],
+            price=float(row["price"]),
             current_price=current_price,
-            message=row['message'],
-            triggered=row['triggered'],
-            triggered_at=row['triggered_at'],
-            triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-            notification_sent=row['notification_sent'],
-            enabled=row['enabled'],
-            is_active=row['enabled'],
-            expires_at=row['expires_at'],
-            created_at=row['created_at']
+            message=row["message"],
+            triggered=row["triggered"],
+            triggered_at=row["triggered_at"],
+            triggered_price=float(row["triggered_price"]) if row["triggered_price"] else None,
+            notification_sent=row["notification_sent"],
+            enabled=row["enabled"],
+            is_active=row["enabled"],
+            expires_at=row["expires_at"],
+            created_at=row["created_at"],
         )
 
 
 @router.post("", response_model=PriceAlertResponse, status_code=201)
-async def create_alert(
-    alert: CreateAlertRequest,
-    user_id: UUID = Depends(get_current_user_id)
-):
+async def create_alert(alert: CreateAlertRequest, user_id: UUID = Depends(get_current_user_id)):
     """
     Create a new price alert.
     """
@@ -206,31 +213,34 @@ async def create_alert(
                 alert.alert_type,
                 alert.condition_value,
                 alert.message,
-                alert.expires_at
+                alert.expires_at,
             )
 
-            logger.info(f"Created price alert: {alert.symbol} {alert.alert_type} ${alert.condition_value} for user {user_id}")
+            logger.info(
+                f"Created price alert: {alert.symbol} {alert.alert_type} ${alert.condition_value} for user {user_id}"
+            )
 
             # Get current price
             from cift.core.trading_queries import get_latest_price
+
             current_price = await get_latest_price(alert.symbol.upper())
 
             return PriceAlertResponse(
-                id=str(row['id']),
-                user_id=str(row['user_id']),
-                symbol=row['symbol'],
-                alert_type=row['alert_type'],
-                price=float(row['price']),
+                id=str(row["id"]),
+                user_id=str(row["user_id"]),
+                symbol=row["symbol"],
+                alert_type=row["alert_type"],
+                price=float(row["price"]),
                 current_price=current_price,
-                message=row['message'],
-                triggered=row['triggered'],
-                triggered_at=row['triggered_at'],
-                triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-                notification_sent=row['notification_sent'],
-                enabled=row['enabled'],
-                is_active=row['enabled'],
-                expires_at=row['expires_at'],
-                created_at=row['created_at']
+                message=row["message"],
+                triggered=row["triggered"],
+                triggered_at=row["triggered_at"],
+                triggered_price=float(row["triggered_price"]) if row["triggered_price"] else None,
+                notification_sent=row["notification_sent"],
+                enabled=row["enabled"],
+                is_active=row["enabled"],
+                expires_at=row["expires_at"],
+                created_at=row["created_at"],
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create alert: {str(e)}") from e
@@ -238,9 +248,7 @@ async def create_alert(
 
 @router.patch("/{alert_id}", response_model=PriceAlertResponse)
 async def update_alert(
-    alert_id: UUID,
-    alert_update: PriceAlertUpdate,
-    user_id: UUID = Depends(get_current_user_id)
+    alert_id: UUID, alert_update: PriceAlertUpdate, user_id: UUID = Depends(get_current_user_id)
 ):
     """
     Update an existing price alert.
@@ -250,8 +258,7 @@ async def update_alert(
     async with pool.acquire() as conn:
         # Check if alert exists and belongs to user
         existing = await conn.fetchrow(
-            "SELECT id FROM price_alerts WHERE id = $1 AND user_id = $2",
-            alert_id, user_id
+            "SELECT id FROM price_alerts WHERE id = $1 AND user_id = $2", alert_id, user_id
         )
 
         if not existing:
@@ -299,30 +306,27 @@ async def update_alert(
             logger.info(f"Updated price alert: {alert_id} for user {user_id}")
 
             return PriceAlertResponse(
-                id=str(row['id']),
-                user_id=str(row['user_id']),
-                symbol=row['symbol'],
-                alert_type=row['alert_type'],
-                price=float(row['price']),
-                message=row['message'],
-                triggered=row['triggered'],
-                triggered_at=row['triggered_at'],
-                triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-                notification_sent=row['notification_sent'],
-                enabled=row['enabled'],
-                expires_at=row['expires_at'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=str(row["id"]),
+                user_id=str(row["user_id"]),
+                symbol=row["symbol"],
+                alert_type=row["alert_type"],
+                price=float(row["price"]),
+                message=row["message"],
+                triggered=row["triggered"],
+                triggered_at=row["triggered_at"],
+                triggered_price=float(row["triggered_price"]) if row["triggered_price"] else None,
+                notification_sent=row["notification_sent"],
+                enabled=row["enabled"],
+                expires_at=row["expires_at"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update alert: {str(e)}") from e
 
 
 @router.delete("/{alert_id}")
-async def delete_alert(
-    alert_id: UUID,
-    user_id: UUID = Depends(get_current_user_id)
-):
+async def delete_alert(alert_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     """
     Delete a price alert.
     """
@@ -330,8 +334,7 @@ async def delete_alert(
 
     async with pool.acquire() as conn:
         result = await conn.execute(
-            "DELETE FROM price_alerts WHERE id = $1 AND user_id = $2",
-            alert_id, user_id
+            "DELETE FROM price_alerts WHERE id = $1 AND user_id = $2", alert_id, user_id
         )
 
         if result == "DELETE 0":
@@ -344,9 +347,7 @@ async def delete_alert(
 
 @router.post("/{alert_id}/trigger")
 async def trigger_alert(
-    alert_id: UUID,
-    triggered_price: float,
-    user_id: UUID = Depends(get_current_user_id)
+    alert_id: UUID, triggered_price: float, user_id: UUID = Depends(get_current_user_id)
 ):
     """
     Mark an alert as triggered (called by alert checking system).
@@ -373,9 +374,7 @@ async def trigger_alert(
 
 @router.get("/check/{symbol}")
 async def check_alerts_for_symbol(
-    symbol: str,
-    current_price: float,
-    user_id: UUID = Depends(get_current_user_id)
+    symbol: str, current_price: float, user_id: UUID = Depends(get_current_user_id)
 ):
     """
     Check if any alerts should be triggered for a symbol at current price.
@@ -398,9 +397,9 @@ async def check_alerts_for_symbol(
         for alert in alerts:
             should_trigger = False
 
-            if alert['alert_type'] == 'above' and current_price > float(alert['price']):
+            if alert["alert_type"] == "above" and current_price > float(alert["price"]):
                 should_trigger = True
-            elif alert['alert_type'] == 'below' and current_price < float(alert['price']):
+            elif alert["alert_type"] == "below" and current_price < float(alert["price"]):
                 should_trigger = True
             # 'crosses_above' and 'crosses_below' would need previous price tracking
 
@@ -412,9 +411,10 @@ async def check_alerts_for_symbol(
                     SET triggered = true, triggered_at = NOW(), triggered_price = $1
                     WHERE id = $2
                     """,
-                    current_price, alert['id']
+                    current_price,
+                    alert["id"],
                 )
-                triggered_ids.append(str(alert['id']))
+                triggered_ids.append(str(alert["id"]))
                 logger.info(f"Auto-triggered alert {alert['id']} at ${current_price}")
 
         return {"triggered_count": len(triggered_ids), "triggered_ids": triggered_ids}

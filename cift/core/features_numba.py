@@ -16,6 +16,7 @@ from numba import jit
 # PRICE-BASED FEATURES
 # ============================================================================
 
+
 @jit(nopython=True, cache=True, fastmath=True)
 def calculate_vwap(prices: np.ndarray, volumes: np.ndarray) -> float:
     """
@@ -67,7 +68,7 @@ def calculate_volatility(returns: np.ndarray, window: int) -> np.ndarray:
     result = np.zeros(n)
 
     for i in range(window, n):
-        result[i] = np.std(returns[i-window:i])
+        result[i] = np.std(returns[i - window : i])
 
     return result
 
@@ -75,6 +76,7 @@ def calculate_volatility(returns: np.ndarray, window: int) -> np.ndarray:
 # ============================================================================
 # ORDER FLOW IMBALANCE (OFI)
 # ============================================================================
+
 
 @jit(nopython=True, cache=True, fastmath=True)
 def calculate_ofi(
@@ -144,6 +146,7 @@ def calculate_weighted_ofi(
 # SPREAD FEATURES
 # ============================================================================
 
+
 @jit(nopython=True, cache=True, fastmath=True)
 def calculate_spread_metrics(
     bid_prices: np.ndarray,
@@ -196,6 +199,7 @@ def calculate_effective_spread(
 # ============================================================================
 # MICROSTRUCTURE FEATURES
 # ============================================================================
+
 
 @jit(nopython=True, cache=True, fastmath=True)
 def calculate_microprice(
@@ -250,6 +254,7 @@ def calculate_price_impact(
 # TECHNICAL INDICATORS (Optimized)
 # ============================================================================
 
+
 @jit(nopython=True, cache=True, fastmath=True)
 def calculate_ema(prices: np.ndarray, alpha: float) -> np.ndarray:
     """
@@ -269,7 +274,7 @@ def calculate_ema(prices: np.ndarray, alpha: float) -> np.ndarray:
     ema[0] = prices[0]
 
     for i in range(1, n):
-        ema[i] = alpha * prices[i] + (1 - alpha) * ema[i-1]
+        ema[i] = alpha * prices[i] + (1 - alpha) * ema[i - 1]
 
     return ema
 
@@ -300,8 +305,8 @@ def calculate_rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
 
     # Calculate average gains and losses
     for i in range(period, n):
-        avg_gain = gains[i-period:i].mean()
-        avg_loss = losses[i-period:i].mean()
+        avg_gain = gains[i - period : i].mean()
+        avg_loss = losses[i - period : i].mean()
 
         if avg_loss == 0:
             rsi[i] = 100.0
@@ -337,7 +342,7 @@ def calculate_bollinger_bands(
     lower = np.zeros(n)
 
     for i in range(window, n):
-        window_prices = prices[i-window:i]
+        window_prices = prices[i - window : i]
         ma = window_prices.mean()
         std = window_prices.std()
 
@@ -351,6 +356,7 @@ def calculate_bollinger_bands(
 # ============================================================================
 # BOOK DEPTH FEATURES
 # ============================================================================
+
 
 @jit(nopython=True, cache=True, fastmath=True)
 def calculate_book_pressure(
@@ -420,6 +426,7 @@ def calculate_book_slope(
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
+
 
 @jit(nopython=True, cache=True, fastmath=True)
 def normalize_array(arr: np.ndarray) -> np.ndarray:

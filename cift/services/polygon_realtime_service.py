@@ -35,17 +35,38 @@ class PolygonRealtimeService:
 
     # Popular symbols to track
     DEFAULT_SYMBOLS = [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK.B",
-        "JPM", "V", "JNJ", "WMT", "PG", "XOM", "UNH", "HD", "MA", "COST",
-        "SPY", "QQQ", "DIA", "IWM", "VTI", "VOO"
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "NVDA",
+        "TSLA",
+        "META",
+        "BRK.B",
+        "JPM",
+        "V",
+        "JNJ",
+        "WMT",
+        "PG",
+        "XOM",
+        "UNH",
+        "HD",
+        "MA",
+        "COST",
+        "SPY",
+        "QQQ",
+        "DIA",
+        "IWM",
+        "VTI",
+        "VOO",
     ]
 
     # Index symbols
     INDEX_SYMBOLS = {
-        "SPX": "I:SPX",   # S&P 500
-        "NDX": "I:NDX",   # NASDAQ 100
-        "DJI": "I:DJI",   # Dow Jones
-        "VIX": "I:VIX",   # VIX
+        "SPX": "I:SPX",  # S&P 500
+        "NDX": "I:NDX",  # NASDAQ 100
+        "DJI": "I:DJI",  # Dow Jones
+        "VIX": "I:VIX",  # VIX
     }
 
     def __init__(self, api_key: str | None = None):
@@ -69,18 +90,11 @@ class PolygonRealtimeService:
         if self._initialized:
             return
 
-        connector = aiohttp.TCPConnector(
-            limit=50,
-            limit_per_host=20,
-            ttl_dns_cache=300
-        )
+        connector = aiohttp.TCPConnector(limit=50, limit_per_host=20, ttl_dns_cache=300)
 
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
 
-        self.session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout
-        )
+        self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
 
         self._initialized = True
         logger.info("Polygon HTTP session initialized")
@@ -92,11 +106,7 @@ class PolygonRealtimeService:
             self._initialized = False
             logger.info("Polygon session closed")
 
-    async def _request(
-        self,
-        endpoint: str,
-        params: dict | None = None
-    ) -> dict[str, Any] | None:
+    async def _request(self, endpoint: str, params: dict | None = None) -> dict[str, Any] | None:
         """Make HTTP request to Polygon API."""
         if self._mock_mode:
             return None
@@ -210,7 +220,7 @@ class PolygonRealtimeService:
         timespan: str = "minute",
         from_date: datetime = None,
         to_date: datetime = None,
-        limit: int = 5000
+        limit: int = 5000,
     ) -> list[dict]:
         """Get OHLCV bars."""
         if from_date is None:
@@ -236,10 +246,7 @@ class PolygonRealtimeService:
     # ========================================================================
 
     async def get_news(
-        self,
-        ticker: str | None = None,
-        limit: int = 50,
-        order: str = "desc"
+        self, ticker: str | None = None, limit: int = 50, order: str = "desc"
     ) -> list[dict]:
         """
         Get market news from Polygon.
@@ -254,11 +261,7 @@ class PolygonRealtimeService:
         """
         endpoint = "/v2/reference/news"
 
-        params = {
-            "limit": limit,
-            "order": order,
-            "sort": "published_utc"
-        }
+        params = {"limit": limit, "order": order, "sort": "published_utc"}
 
         if ticker:
             params["ticker"] = ticker
@@ -269,11 +272,7 @@ class PolygonRealtimeService:
             return data["results"]
         return []
 
-    async def fetch_and_store_news(
-        self,
-        symbols: list[str] | None = None,
-        limit: int = 50
-    ) -> int:
+    async def fetch_and_store_news(self, symbols: list[str] | None = None, limit: int = 50) -> int:
         """
         Fetch news from Polygon and store in database.
 
@@ -310,6 +309,7 @@ class PolygonRealtimeService:
 
                     # Generate UUID from the hash of URL (deterministic)
                     import uuid
+
                     article_id = str(uuid.uuid5(uuid.NAMESPACE_URL, article_url or polygon_id))
 
                     title = article.get("title", "")
@@ -342,7 +342,8 @@ class PolygonRealtimeService:
                     if not categories:
                         categories = ["general"]
 
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT INTO news_articles (
                             id, title, summary, content, url, source, author,
                             published_at, symbols, category, sentiment,
@@ -366,7 +367,7 @@ class PolygonRealtimeService:
                         categories[0] if categories else "general",
                         sentiment,
                         image_url,
-                        datetime.utcnow()
+                        datetime.utcnow(),
                     )
                     stored += 1
 
@@ -380,8 +381,34 @@ class PolygonRealtimeService:
         """Basic sentiment analysis from keywords."""
         text_lower = text.lower()
 
-        positive_words = ["surge", "rally", "gain", "rise", "up", "bullish", "record", "beat", "exceed", "growth", "positive", "strong"]
-        negative_words = ["fall", "drop", "decline", "down", "bearish", "miss", "below", "weak", "negative", "loss", "crash", "fear"]
+        positive_words = [
+            "surge",
+            "rally",
+            "gain",
+            "rise",
+            "up",
+            "bullish",
+            "record",
+            "beat",
+            "exceed",
+            "growth",
+            "positive",
+            "strong",
+        ]
+        negative_words = [
+            "fall",
+            "drop",
+            "decline",
+            "down",
+            "bearish",
+            "miss",
+            "below",
+            "weak",
+            "negative",
+            "loss",
+            "crash",
+            "fear",
+        ]
 
         positive_count = sum(1 for word in positive_words if word in text_lower)
         negative_count = sum(1 for word in negative_words if word in text_lower)
@@ -396,10 +423,7 @@ class PolygonRealtimeService:
     # CACHE UPDATE
     # ========================================================================
 
-    async def update_market_cache(
-        self,
-        symbols: list[str] | None = None
-    ) -> int:
+    async def update_market_cache(self, symbols: list[str] | None = None) -> int:
         """
         Update market_data_cache with live quotes from Polygon.
 
@@ -423,7 +447,8 @@ class PolygonRealtimeService:
         async with pool.acquire() as conn:
             for symbol, quote in quotes.items():
                 try:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT INTO market_data_cache (
                             symbol, price, open, high, low, close, volume,
                             prev_close, change, change_pct, updated_at
@@ -460,10 +485,7 @@ class PolygonRealtimeService:
         return updated
 
     async def update_ohlcv_bars(
-        self,
-        symbols: list[str] | None = None,
-        days: int = 5,
-        timespan: str = "minute"
+        self, symbols: list[str] | None = None, days: int = 5, timespan: str = "minute"
     ) -> int:
         """
         Fetch and store OHLCV bars to PostgreSQL.
@@ -490,7 +512,7 @@ class PolygonRealtimeService:
                     timespan=timespan,
                     from_date=from_date,
                     to_date=to_date,
-                    limit=5000
+                    limit=5000,
                 )
 
                 if not bars:
@@ -503,7 +525,8 @@ class PolygonRealtimeService:
                             # Convert timestamp from ms to datetime
                             timestamp = datetime.utcfromtimestamp(bar["t"] / 1000)
 
-                            await conn.execute("""
+                            await conn.execute(
+                                """
                                 INSERT INTO ohlcv_bars (
                                     symbol, timestamp, timeframe, open, high, low, close, volume
                                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -564,6 +587,7 @@ class PolygonRealtimeService:
 # BACKGROUND WORKER
 # ============================================================================
 
+
 class PolygonBackgroundWorker:
     """
     Background worker that continuously updates market data.
@@ -616,8 +640,7 @@ class PolygonBackgroundWorker:
                 news_counter += 1
                 if news_counter >= 5:
                     await self.service.fetch_and_store_news(
-                        symbols=["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"],
-                        limit=20
+                        symbols=["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"], limit=20
                     )
                     news_counter = 0
 
@@ -641,6 +664,7 @@ polygon_worker = PolygonBackgroundWorker()
 # ============================================================================
 # CLI COMMANDS
 # ============================================================================
+
 
 async def main():
     """CLI for testing Polygon service."""
@@ -685,7 +709,9 @@ async def main():
                 print(f"Market status: {status}")
 
             else:
-                print("Unknown command. Available: quotes, news, update-cache, update-news, fetch-bars, status")
+                print(
+                    "Unknown command. Available: quotes, news, update-cache, update-news, fetch-bars, status"
+                )
         else:
             print("Polygon.io Real-Time Service")
             print("Usage: python -m cift.services.polygon_realtime_service <command>")

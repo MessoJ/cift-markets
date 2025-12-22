@@ -44,39 +44,43 @@ from loguru import logger
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class HawkesEvent:
     """Single event in the point process."""
-    timestamp: float     # Time in seconds
-    event_type: int      # 0: buy, 1: sell, 2: cancel
-    size: float = 1.0    # Event magnitude (e.g., order size)
-    price: float = 0.0   # Price at event
+
+    timestamp: float  # Time in seconds
+    event_type: int  # 0: buy, 1: sell, 2: cancel
+    size: float = 1.0  # Event magnitude (e.g., order size)
+    price: float = 0.0  # Price at event
 
 
 @dataclass
 class HawkesPrediction:
     """Prediction output from Hawkes model."""
+
     timestamp: float
 
     # Intensities for next interval
-    buy_intensity: float      # Expected buy orders per second
-    sell_intensity: float     # Expected sell orders per second
+    buy_intensity: float  # Expected buy orders per second
+    sell_intensity: float  # Expected sell orders per second
 
     # Probabilities
-    buy_prob: float           # P(next event is buy)
-    sell_prob: float          # P(next event is sell)
+    buy_prob: float  # P(next event is buy)
+    sell_prob: float  # P(next event is sell)
 
     # Derived signals
-    flow_imbalance: float     # (buy - sell) / (buy + sell)
-    urgency: float            # Total intensity (higher = more activity)
+    flow_imbalance: float  # (buy - sell) / (buy + sell)
+    urgency: float  # Total intensity (higher = more activity)
 
     # Confidence
-    confidence: float         # Model confidence
+    confidence: float  # Model confidence
 
 
 # ============================================================================
 # HAWKES INTENSITY KERNEL
 # ============================================================================
+
 
 class ExponentialKernel(nn.Module):
     """
@@ -115,8 +119,8 @@ class ExponentialKernel(nn.Module):
 
     def forward(
         self,
-        dt: torch.Tensor,        # Time differences: [batch, num_events]
-        event_types: torch.Tensor # Event types: [batch, num_events]
+        dt: torch.Tensor,  # Time differences: [batch, num_events]
+        event_types: torch.Tensor,  # Event types: [batch, num_events]
     ) -> torch.Tensor:
         """
         Compute kernel values for time differences.
@@ -134,7 +138,7 @@ class ExponentialKernel(nn.Module):
         # Get alpha and beta for each event type
         # [num_events] -> [batch, num_events, num_types]
         alpha_vals = self.alpha[event_types]  # [batch, num_events, num_types]
-        beta_vals = self.beta[event_types]    # [batch, num_events, num_types]
+        beta_vals = self.beta[event_types]  # [batch, num_events, num_types]
 
         # Compute kernel: α * exp(-β * dt)
         dt_expanded = dt.unsqueeze(-1)  # [batch, num_events, 1]
@@ -178,11 +182,7 @@ class SumOfExponentialsKernel(nn.Module):
     def alphas(self) -> torch.Tensor:
         return torch.exp(self.log_alphas)
 
-    def forward(
-        self,
-        dt: torch.Tensor,
-        event_types: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, dt: torch.Tensor, event_types: torch.Tensor) -> torch.Tensor:
         """Compute sum of exponentials kernel."""
         batch_size, num_events = dt.shape
         num_types = self.alphas.shape[1]
@@ -221,9 +221,9 @@ class PowerLawApproxKernel(nn.Module):
     def __init__(
         self,
         num_event_types: int = 3,
-        num_components: int = 8,       # More components = better approximation
-        min_beta: float = 0.001,       # Slowest decay (longest memory ~1000s)
-        max_beta: float = 100.0,       # Fastest decay (~10ms)
+        num_components: int = 8,  # More components = better approximation
+        min_beta: float = 0.001,  # Slowest decay (longest memory ~1000s)
+        max_beta: float = 100.0,  # Fastest decay (~10ms)
         power_law_exponent: float = 1.15,  # From Hardiman et al.
         learnable_exponent: bool = True,
     ):
@@ -233,15 +233,13 @@ class PowerLawApproxKernel(nn.Module):
         self.num_event_types = num_event_types
 
         # Geometrically spaced decay rates (log-uniform from min to max)
-        log_betas = torch.linspace(
-            math.log(min_beta), math.log(max_beta), num_components
-        )
+        log_betas = torch.linspace(math.log(min_beta), math.log(max_beta), num_components)
         betas = torch.exp(log_betas)  # [num_components]
 
         # Expand for cross-excitation: [components, from_type, to_type]
-        betas = betas.view(-1, 1, 1).expand(
-            num_components, num_event_types, num_event_types
-        ).clone()
+        betas = (
+            betas.view(-1, 1, 1).expand(num_components, num_event_types, num_event_types).clone()
+        )
         self.register_buffer("betas", betas)
 
         # Power-law exponent (learnable to adapt to market conditions)
@@ -253,9 +251,7 @@ class PowerLawApproxKernel(nn.Module):
         # Alpha weights derived from power-law: α_k ∝ β_k^(1-γ)
         # where γ is the power-law exponent
         # These are learnable scaling factors on top of the power-law structure
-        self.log_alpha_scale = nn.Parameter(
-            torch.zeros(num_event_types, num_event_types)
-        )
+        self.log_alpha_scale = nn.Parameter(torch.zeros(num_event_types, num_event_types))
 
         # Criticality parameter: should be close to 1 for financial markets
         # (branching ratio / spectral radius of kernel integral)
@@ -314,8 +310,8 @@ class PowerLawApproxKernel(nn.Module):
 
     def forward(
         self,
-        dt: torch.Tensor,           # [batch, num_events]
-        event_types: torch.Tensor   # [batch, num_events]
+        dt: torch.Tensor,  # [batch, num_events]
+        event_types: torch.Tensor,  # [batch, num_events]
     ) -> torch.Tensor:
         """
         Compute power-law approximated kernel values.
@@ -330,9 +326,7 @@ class PowerLawApproxKernel(nn.Module):
         alphas = self.alphas  # [num_components, num_types, num_types]
 
         # Initialize output
-        total_kernel = torch.zeros(
-            batch_size, num_events, self.num_event_types, device=device
-        )
+        total_kernel = torch.zeros(batch_size, num_events, self.num_event_types, device=device)
 
         # Sum over exponential components
         dt_expanded = dt.unsqueeze(-1)  # [batch, num_events, 1]
@@ -383,6 +377,7 @@ class PowerLawApproxKernel(nn.Module):
 # HAWKES PROCESS MODEL
 # ============================================================================
 
+
 class HawkesOrderFlowModel(nn.Module):
     """
     Neural Hawkes Process for Order Flow Prediction.
@@ -402,12 +397,12 @@ class HawkesOrderFlowModel(nn.Module):
 
     def __init__(
         self,
-        num_event_types: int = 3,      # buy, sell, cancel
-        feature_dim: int = 20,          # Order book features
+        num_event_types: int = 3,  # buy, sell, cancel
+        feature_dim: int = 20,  # Order book features
         hidden_dim: int = 64,
-        kernel_type: str = "sum_exp",   # "exp" or "sum_exp"
+        kernel_type: str = "sum_exp",  # "exp" or "sum_exp"
         num_kernel_components: int = 3,
-        max_history: int = 500,         # Max events to consider
+        max_history: int = 500,  # Max events to consider
         prediction_horizon_ms: float = 500.0,  # Prediction window
     ):
         super().__init__()
@@ -464,15 +459,17 @@ class HawkesOrderFlowModel(nn.Module):
         self._event_types: list[int] = []
         self._event_sizes: list[float] = []
 
-        logger.info(f"HawkesOrderFlowModel initialized (types={num_event_types}, features={feature_dim})")
+        logger.info(
+            f"HawkesOrderFlowModel initialized (types={num_event_types}, features={feature_dim})"
+        )
 
     def forward(
         self,
-        features: torch.Tensor,         # [batch, feature_dim]
-        event_times: torch.Tensor,      # [batch, num_events] - relative times
-        event_types: torch.Tensor,      # [batch, num_events] - event types
+        features: torch.Tensor,  # [batch, feature_dim]
+        event_times: torch.Tensor,  # [batch, num_events] - relative times
+        event_types: torch.Tensor,  # [batch, num_events] - event types
         event_sizes: torch.Tensor | None = None,  # [batch, num_events]
-        current_time: torch.Tensor | None = None, # [batch]
+        current_time: torch.Tensor | None = None,  # [batch]
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute intensity and predict order flow.
@@ -509,7 +506,9 @@ class HawkesOrderFlowModel(nn.Module):
 
             # Apply size weighting if provided
             if event_sizes is not None:
-                size_weights = self.size_embedding(event_sizes.unsqueeze(-1))  # [batch, num_events, 1]
+                size_weights = self.size_embedding(
+                    event_sizes.unsqueeze(-1)
+                )  # [batch, num_events, 1]
                 kernel_vals = kernel_vals * size_weights
 
             # Sum excitation from all past events
@@ -552,16 +551,13 @@ class HawkesOrderFlowModel(nn.Module):
             # Get event history
             if self._event_times:
                 event_times = torch.tensor(
-                    self._event_times[-self.max_history:],
-                    dtype=torch.float32, device=device
+                    self._event_times[-self.max_history :], dtype=torch.float32, device=device
                 ).unsqueeze(0)
                 event_types = torch.tensor(
-                    self._event_types[-self.max_history:],
-                    dtype=torch.long, device=device
+                    self._event_types[-self.max_history :], dtype=torch.long, device=device
                 ).unsqueeze(0)
                 event_sizes = torch.tensor(
-                    self._event_sizes[-self.max_history:],
-                    dtype=torch.float32, device=device
+                    self._event_sizes[-self.max_history :], dtype=torch.float32, device=device
                 ).unsqueeze(0)
             else:
                 event_times = torch.zeros(1, 0, device=device)
@@ -614,9 +610,9 @@ class HawkesOrderFlowModel(nn.Module):
 
         # Trim history
         if len(self._event_times) > self.max_history * 2:
-            self._event_times = self._event_times[-self.max_history:]
-            self._event_types = self._event_types[-self.max_history:]
-            self._event_sizes = self._event_sizes[-self.max_history:]
+            self._event_times = self._event_times[-self.max_history :]
+            self._event_types = self._event_types[-self.max_history :]
+            self._event_sizes = self._event_sizes[-self.max_history :]
 
     def clear_history(self):
         """Clear event history."""
@@ -658,7 +654,11 @@ class HawkesOrderFlowModel(nn.Module):
 
             # Past events
             past_times = event_times[:, :i] if i > 0 else torch.zeros(batch_size, 0, device=device)
-            past_types = event_types[:, :i] if i > 0 else torch.zeros(batch_size, 0, dtype=torch.long, device=device)
+            past_types = (
+                event_types[:, :i]
+                if i > 0
+                else torch.zeros(batch_size, 0, dtype=torch.long, device=device)
+            )
             past_sizes = event_sizes[:, :i] if event_sizes is not None and i > 0 else None
 
             current_t = event_times[:, i]
@@ -704,6 +704,7 @@ class HawkesOrderFlowModel(nn.Module):
 # TRAINING UTILITIES
 # ============================================================================
 
+
 class HawkesTrainer:
     """Training loop for Hawkes model."""
 
@@ -717,7 +718,7 @@ class HawkesTrainer:
         self.device = device
         self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='max', factor=0.5, patience=5
+            self.optimizer, mode="max", factor=0.5, patience=5
         )
 
     def train_step(
@@ -734,7 +735,11 @@ class HawkesTrainer:
         features_t = torch.tensor(features, dtype=torch.float32, device=self.device)
         event_times_t = torch.tensor(event_times, dtype=torch.float32, device=self.device)
         event_types_t = torch.tensor(event_types, dtype=torch.long, device=self.device)
-        event_sizes_t = torch.tensor(event_sizes, dtype=torch.float32, device=self.device) if event_sizes is not None else None
+        event_sizes_t = (
+            torch.tensor(event_sizes, dtype=torch.float32, device=self.device)
+            if event_sizes is not None
+            else None
+        )
 
         # Compute negative log-likelihood
         log_likelihood = self.model.compute_log_likelihood(
@@ -788,15 +793,13 @@ class HawkesTrainer:
         types_t = torch.tensor(recent_types, dtype=torch.long, device=self.device).unsqueeze(0)
         sizes_t = torch.tensor(recent_sizes, dtype=torch.float32, device=self.device).unsqueeze(0)
 
-        log_likelihood = self.model.compute_log_likelihood(
-            features_t, times_t, types_t, sizes_t
-        )
+        log_likelihood = self.model.compute_log_likelihood(features_t, times_t, types_t, sizes_t)
 
         loss = -log_likelihood.mean()
 
         # Small update
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = learning_rate
+            param_group["lr"] = learning_rate
 
         self.optimizer.zero_grad()
         loss.backward()

@@ -21,6 +21,7 @@ router = APIRouter(prefix="/support", tags=["support"])
 # DEPENDENCY INJECTION
 # ============================================================================
 
+
 async def get_current_user_id(current_user: User = Depends(get_current_active_user)) -> UUID:
     """Get current authenticated user ID."""
     return current_user.id
@@ -30,8 +31,10 @@ async def get_current_user_id(current_user: User = Depends(get_current_active_us
 # MODELS
 # ============================================================================
 
+
 class FAQItem(BaseModel):
     """FAQ item model"""
+
     id: str
     category: str
     question: str
@@ -43,6 +46,7 @@ class FAQItem(BaseModel):
 
 class SupportTicket(BaseModel):
     """Support ticket model"""
+
     id: str
     subject: str
     category: str
@@ -56,6 +60,7 @@ class SupportTicket(BaseModel):
 
 class TicketMessage(BaseModel):
     """Ticket message model"""
+
     id: str
     ticket_id: str
     user_id: str | None = None
@@ -68,6 +73,7 @@ class TicketMessage(BaseModel):
 
 class CreateTicketRequest(BaseModel):
     """Create support ticket request"""
+
     subject: str = Field(..., min_length=5, max_length=200)
     category: str = Field(..., pattern="^(account|trading|funding|technical|billing|other)$")
     priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
@@ -76,12 +82,14 @@ class CreateTicketRequest(BaseModel):
 
 class AddMessageRequest(BaseModel):
     """Add message to ticket"""
+
     message: str = Field(..., min_length=1)
 
 
 # ============================================================================
 # ENDPOINTS - FAQ
 # ============================================================================
+
 
 @router.get("/faq")
 async def get_faqs(
@@ -117,13 +125,13 @@ async def get_faqs(
 
         return [
             FAQItem(
-                id=row['id'],
-                category=row['category'],
-                question=row['question'],
-                answer=row['answer'],
-                order=row['display_order'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at'],
+                id=row["id"],
+                category=row["category"],
+                question=row["question"],
+                answer=row["answer"],
+                order=row["display_order"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
             for row in rows
         ]
@@ -164,13 +172,13 @@ async def search_faqs(
 
         return [
             FAQItem(
-                id=row['id'],
-                category=row['category'],
-                question=row['question'],
-                answer=row['answer'],
-                order=row['display_order'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at'],
+                id=row["id"],
+                category=row["category"],
+                question=row["question"],
+                answer=row["answer"],
+                order=row["display_order"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
             for row in rows
         ]
@@ -194,8 +202,8 @@ async def get_faq_categories():
 
         return [
             {
-                "category": row['category'],
-                "count": row['count'],
+                "category": row["category"],
+                "count": row["count"],
             }
             for row in rows
         ]
@@ -204,6 +212,7 @@ async def get_faq_categories():
 # ============================================================================
 # ENDPOINTS - SUPPORT TICKETS
 # ============================================================================
+
 
 @router.get("/tickets")
 async def get_support_tickets(
@@ -243,15 +252,15 @@ async def get_support_tickets(
         return {
             "tickets": [
                 SupportTicket(
-                    id=row['id'],
-                    subject=row['subject'],
-                    category=row['category'],
-                    priority=row['priority'],
-                    status=row['status'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at'],
-                    resolved_at=row['resolved_at'],
-                    last_message_at=row['last_message_at'],
+                    id=row["id"],
+                    subject=row["subject"],
+                    category=row["category"],
+                    priority=row["priority"],
+                    status=row["status"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                    resolved_at=row["resolved_at"],
+                    last_message_at=row["last_message_at"],
                 )
                 for row in rows
             ]
@@ -311,25 +320,25 @@ async def get_ticket_detail(
 
         return {
             "ticket": SupportTicket(
-                id=ticket['id'],
-                subject=ticket['subject'],
-                category=ticket['category'],
-                priority=ticket['priority'],
-                status=ticket['status'],
-                created_at=ticket['created_at'],
-                updated_at=ticket['updated_at'],
-                resolved_at=ticket['resolved_at'],
-                last_message_at=ticket['last_message_at'],
+                id=ticket["id"],
+                subject=ticket["subject"],
+                category=ticket["category"],
+                priority=ticket["priority"],
+                status=ticket["status"],
+                created_at=ticket["created_at"],
+                updated_at=ticket["updated_at"],
+                resolved_at=ticket["resolved_at"],
+                last_message_at=ticket["last_message_at"],
             ),
             "messages": [
                 TicketMessage(
-                    id=msg['id'],
-                    ticket_id=msg['ticket_id'],
-                    user_id=msg['user_id'],
-                    staff_id=msg['staff_id'],
-                    message=msg['message'],
-                    is_internal=msg['is_internal'],
-                    created_at=msg['created_at'],
+                    id=msg["id"],
+                    ticket_id=msg["ticket_id"],
+                    user_id=msg["user_id"],
+                    staff_id=msg["staff_id"],
+                    message=msg["message"],
+                    is_internal=msg["is_internal"],
+                    created_at=msg["created_at"],
                 )
                 for msg in messages
             ],
@@ -367,7 +376,7 @@ async def create_ticket(
                     ticket_id, user_id, message, is_internal
                 ) VALUES ($1::uuid, $2, $3, false)
                 """,
-                ticket['id'],
+                ticket["id"],
                 user_id,
                 request.message,
             )
@@ -380,7 +389,7 @@ async def create_ticket(
                 WHERE id = $2::uuid
                 """,
                 datetime.utcnow(),
-                ticket['id'],
+                ticket["id"],
             )
 
             logger.info(f"Support ticket created: ticket_id={ticket['id']}, user_id={user_id}")
@@ -389,13 +398,13 @@ async def create_ticket(
             # TODO: Integrate with helpdesk system (Zendesk, Intercom, etc.)
 
             return SupportTicket(
-                id=ticket['id'],
-                subject=ticket['subject'],
-                category=ticket['category'],
-                priority=ticket['priority'],
-                status=ticket['status'],
-                created_at=ticket['created_at'],
-                updated_at=ticket['updated_at'],
+                id=ticket["id"],
+                subject=ticket["subject"],
+                category=ticket["category"],
+                priority=ticket["priority"],
+                status=ticket["status"],
+                created_at=ticket["created_at"],
+                updated_at=ticket["updated_at"],
                 resolved_at=None,
                 last_message_at=datetime.utcnow(),
             )
@@ -440,14 +449,14 @@ async def get_ticket_messages(
 
         messages = [
             TicketMessage(
-                id=row['id'],
-                ticket_id=row['ticket_id'],
-                user_id=row['user_id'],
-                staff_id=row['staff_id'],
-                message=row['message'],
-                is_internal=row['is_internal'],
-                is_staff=row['staff_id'] is not None,
-                created_at=row['created_at'],
+                id=row["id"],
+                ticket_id=row["ticket_id"],
+                user_id=row["user_id"],
+                staff_id=row["staff_id"],
+                message=row["message"],
+                is_internal=row["is_internal"],
+                is_staff=row["staff_id"] is not None,
+                created_at=row["created_at"],
             )
             for row in rows
         ]
@@ -502,14 +511,14 @@ async def add_ticket_message(
         # TODO: Send email notification to support team
 
         return TicketMessage(
-            id=message['id'],
-            ticket_id=message['ticket_id'],
-            user_id=message['user_id'],
+            id=message["id"],
+            ticket_id=message["ticket_id"],
+            user_id=message["user_id"],
             staff_id=None,
-            message=message['message'],
+            message=message["message"],
             is_internal=False,
             is_staff=False,
-            created_at=message['created_at'],
+            created_at=message["created_at"],
         )
 
 
@@ -541,21 +550,22 @@ async def close_ticket(
             raise HTTPException(status_code=404, detail="Ticket not found or already closed")
 
         return SupportTicket(
-            id=ticket['id'],
-            subject=ticket['subject'],
-            category=ticket['category'],
-            priority=ticket['priority'],
-            status=ticket['status'],
-            created_at=ticket['created_at'],
-            updated_at=ticket['updated_at'],
-            resolved_at=ticket['resolved_at'],
-            last_message_at=ticket['last_message_at'],
+            id=ticket["id"],
+            subject=ticket["subject"],
+            category=ticket["category"],
+            priority=ticket["priority"],
+            status=ticket["status"],
+            created_at=ticket["created_at"],
+            updated_at=ticket["updated_at"],
+            resolved_at=ticket["resolved_at"],
+            last_message_at=ticket["last_message_at"],
         )
 
 
 # ============================================================================
 # ENDPOINTS - CONTACT INFO
 # ============================================================================
+
 
 @router.get("/contact")
 async def get_contact_info():

@@ -19,16 +19,18 @@ class SMSService:
     """
 
     def __init__(self):
-        self.provider = getattr(settings, 'SMS_PROVIDER', 'twilio')  # 'twilio', 'aws_sns', 'africas_talking'
-        self.from_number = getattr(settings, 'SMS_FROM_NUMBER', '+1234567890')
+        self.provider = getattr(
+            settings, "SMS_PROVIDER", "twilio"
+        )  # 'twilio', 'aws_sns', 'africas_talking'
+        self.from_number = getattr(settings, "SMS_FROM_NUMBER", "+1234567890")
 
         # Twilio config
-        self.twilio_sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
-        self.twilio_token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
+        self.twilio_sid = getattr(settings, "TWILIO_ACCOUNT_SID", None)
+        self.twilio_token = getattr(settings, "TWILIO_AUTH_TOKEN", None)
 
         # Africa's Talking config
-        self.at_username = getattr(settings, 'AFRICAS_TALKING_USERNAME', None)
-        self.at_api_key = getattr(settings, 'AFRICAS_TALKING_API_KEY', None)
+        self.at_username = getattr(settings, "AFRICAS_TALKING_USERNAME", None)
+        self.at_api_key = getattr(settings, "AFRICAS_TALKING_API_KEY", None)
 
     async def send_sms(self, phone: str, message: str) -> bool:
         """
@@ -41,16 +43,16 @@ class SMSService:
         Returns:
             True if sent successfully
         """
-        if not phone.startswith('+'):
+        if not phone.startswith("+"):
             logger.warning(f"Phone number must be in E.164 format: {phone}")
             return False
 
         try:
-            if self.provider == 'twilio':
+            if self.provider == "twilio":
                 return await self._send_via_twilio(phone, message)
-            elif self.provider == 'africas_talking':
+            elif self.provider == "africas_talking":
                 return await self._send_via_africas_talking(phone, message)
-            elif self.provider == 'aws_sns':
+            elif self.provider == "aws_sns":
                 return await self._send_via_aws_sns(phone, message)
             else:
                 logger.warning("SMS provider not configured, skipping SMS send")
@@ -72,11 +74,7 @@ class SMSService:
             from twilio.rest import Client
 
             client = Client(self.twilio_sid, self.twilio_token)
-            message = client.messages.create(
-                body=message,
-                from_=self.from_number,
-                to=phone
-            )
+            message = client.messages.create(body=message, from_=self.from_number, to=phone)
 
             logger.info(f"SMS sent via Twilio to {phone}: {message.sid}")
             return True
@@ -112,17 +110,14 @@ class SMSService:
         try:
             import boto3
 
-            client = boto3.client('sns', region_name='us-east-1')
+            client = boto3.client("sns", region_name="us-east-1")
 
             response = client.publish(
                 PhoneNumber=phone,
                 Message=message,
                 MessageAttributes={
-                    'AWS.SNS.SMS.SMSType': {
-                        'DataType': 'String',
-                        'StringValue': 'Transactional'
-                    }
-                }
+                    "AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"}
+                },
             )
 
             logger.info(f"SMS sent via AWS SNS to {phone}: {response['MessageId']}")
@@ -133,9 +128,7 @@ class SMSService:
             return False
 
     async def send_verification_code(
-        self,
-        phone: str,
-        purpose: str = 'phone_verification'
+        self, phone: str, purpose: str = "phone_verification"
     ) -> str | None:
         """
         Send verification code to phone
@@ -148,7 +141,7 @@ class SMSService:
             Verification code if sent successfully, None otherwise
         """
         # Generate 6-digit code
-        code = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+        code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
 
         # Store code in database
         pool = await get_postgres_pool()
@@ -177,12 +170,7 @@ class SMSService:
 
         return code if success else None
 
-    async def verify_code(
-        self,
-        phone: str,
-        code: str,
-        purpose: str = 'phone_verification'
-    ) -> bool:
+    async def verify_code(self, phone: str, code: str, purpose: str = "phone_verification") -> bool:
         """
         Verify code entered by user
 
@@ -224,57 +212,42 @@ class SMSService:
                 SET verified_at = NOW()
                 WHERE id = $1
                 """,
-                result['id'],
+                result["id"],
             )
 
             return True
 
     async def send_transaction_completed(
-        self,
-        phone: str,
-        amount: float,
-        receipt: str | None = None
+        self, phone: str, amount: float, receipt: str | None = None
     ):
         """Send transaction completed notification via SMS"""
-        message = f"CIFT Markets: Your transaction of ${amount:,.2f} has been completed successfully."
+        message = (
+            f"CIFT Markets: Your transaction of ${amount:,.2f} has been completed successfully."
+        )
 
         if receipt:
             message += f" Receipt: {receipt}"
 
         await self.send_sms(phone, message)
 
-    async def send_transaction_alert(
-        self,
-        phone: str,
-        transaction_type: str,
-        amount: float
-    ):
+    async def send_transaction_alert(self, phone: str, transaction_type: str, amount: float):
         """Send transaction alert via SMS"""
-        action = "deposit" if transaction_type == 'deposit' else "withdrawal"
+        action = "deposit" if transaction_type == "deposit" else "withdrawal"
         message = f"CIFT Markets: New {action} of ${amount:,.2f} initiated on your account. If this wasn't you, contact support immediately."
 
         await self.send_sms(phone, message)
 
     async def send_2fa_code(self, phone: str) -> str | None:
         """Send 2FA code for login"""
-        return await self.send_verification_code(phone, '2fa')
+        return await self.send_verification_code(phone, "2fa")
 
-    async def send_mpesa_verification(
-        self,
-        phone: str,
-        amount: str = "1.00"
-    ):
+    async def send_mpesa_verification(self, phone: str, amount: str = "1.00"):
         """Send M-Pesa verification notification"""
         message = f"CIFT Markets: Check your M-Pesa phone for a verification request of KES {amount}. Enter your PIN to verify."
 
         await self.send_sms(phone, message)
 
-    async def send_account_security_alert(
-        self,
-        phone: str,
-        alert_type: str,
-        details: str
-    ):
+    async def send_account_security_alert(self, phone: str, alert_type: str, details: str):
         """Send security alert via SMS"""
         message = f"CIFT Markets SECURITY ALERT: {alert_type}. {details}. If this wasn't you, secure your account immediately."
 

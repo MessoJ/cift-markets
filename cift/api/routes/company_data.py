@@ -31,8 +31,10 @@ router = APIRouter(prefix="/company", tags=["Company Data"])
 # MODELS
 # ============================================================================
 
+
 class CompanyProfile(BaseModel):
     """Company profile with fundamentals."""
+
     symbol: str
     name: str
     exchange: str | None = None
@@ -60,6 +62,7 @@ class CompanyProfile(BaseModel):
 
 class EarningsEvent(BaseModel):
     """Earnings calendar entry."""
+
     symbol: str
     earnings_date: str
     quarter: int | None = None
@@ -75,6 +78,7 @@ class EarningsEvent(BaseModel):
 
 class ChartPattern(BaseModel):
     """Detected chart pattern."""
+
     symbol: str
     timeframe: str
     pattern_name: str
@@ -89,6 +93,7 @@ class ChartPattern(BaseModel):
 
 class SupportResistanceLevel(BaseModel):
     """Support or resistance level."""
+
     symbol: str
     level_type: str  # support, resistance, pivot
     price: float
@@ -98,6 +103,7 @@ class SupportResistanceLevel(BaseModel):
 
 class CompanyNews(BaseModel):
     """Company news article."""
+
     symbol: str
     headline: str
     summary: str | None = None
@@ -110,6 +116,7 @@ class CompanyNews(BaseModel):
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
+
 
 @router.get("/{symbol}/profile", response_model=CompanyProfile)
 async def get_company_profile(symbol: str):
@@ -140,7 +147,7 @@ async def get_company_profile(symbol: str):
                 FROM company_profiles
                 WHERE symbol = $1
                 """,
-                symbol
+                symbol,
             )
 
         if not row:
@@ -152,26 +159,32 @@ async def get_company_profile(symbol: str):
             )
 
         return CompanyProfile(
-            symbol=row['symbol'],
-            name=row['name'],
-            exchange=row['exchange'],
-            industry=row['industry'],
-            sector=row['sector'],
-            market_cap=float(row['market_cap']) if row['market_cap'] else None,
-            shares_outstanding=float(row['shares_outstanding']) if row['shares_outstanding'] else None,
-            ipo_date=row['ipo_date'],
-            logo_url=row['logo_url'],
-            website=row['website'],
-            description=row['description'],
-            currency=row['currency'] or 'USD',
-            country=row['country'] or 'US',
-            pe_ratio=float(row['pe_ratio']) if row['pe_ratio'] else None,
-            forward_pe=float(row['forward_pe']) if row['forward_pe'] else None,
-            dividend_yield=float(row['dividend_yield']) if row['dividend_yield'] else None,
-            beta=float(row['beta']) if row['beta'] else None,
-            fifty_two_week_high=float(row['fifty_two_week_high']) if row['fifty_two_week_high'] else None,
-            fifty_two_week_low=float(row['fifty_two_week_low']) if row['fifty_two_week_low'] else None,
-            avg_volume=int(row['avg_volume']) if row['avg_volume'] else None,
+            symbol=row["symbol"],
+            name=row["name"],
+            exchange=row["exchange"],
+            industry=row["industry"],
+            sector=row["sector"],
+            market_cap=float(row["market_cap"]) if row["market_cap"] else None,
+            shares_outstanding=(
+                float(row["shares_outstanding"]) if row["shares_outstanding"] else None
+            ),
+            ipo_date=row["ipo_date"],
+            logo_url=row["logo_url"],
+            website=row["website"],
+            description=row["description"],
+            currency=row["currency"] or "USD",
+            country=row["country"] or "US",
+            pe_ratio=float(row["pe_ratio"]) if row["pe_ratio"] else None,
+            forward_pe=float(row["forward_pe"]) if row["forward_pe"] else None,
+            dividend_yield=float(row["dividend_yield"]) if row["dividend_yield"] else None,
+            beta=float(row["beta"]) if row["beta"] else None,
+            fifty_two_week_high=(
+                float(row["fifty_two_week_high"]) if row["fifty_two_week_high"] else None
+            ),
+            fifty_two_week_low=(
+                float(row["fifty_two_week_low"]) if row["fifty_two_week_low"] else None
+            ),
+            avg_volume=int(row["avg_volume"]) if row["avg_volume"] else None,
         )
 
     except Exception as e:
@@ -211,7 +224,8 @@ async def get_earnings(
                     ORDER BY earnings_date DESC
                     LIMIT $2
                     """,
-                    symbol, limit
+                    symbol,
+                    limit,
                 )
             else:
                 rows = await conn.fetch(
@@ -225,7 +239,8 @@ async def get_earnings(
                     ORDER BY earnings_date ASC
                     LIMIT $2
                     """,
-                    symbol, limit
+                    symbol,
+                    limit,
                 )
 
         events = []
@@ -233,14 +248,15 @@ async def get_earnings(
             # Calculate earnings surprise if both estimate and actual exist
             eps_surprise = None
             eps_surprise_pct = None
-            if row['eps_estimate'] and row['eps_actual']:
-                eps_surprise = float(row['eps_actual']) - float(row['eps_estimate'])
-                if float(row['eps_estimate']) != 0:
-                    eps_surprise_pct = (eps_surprise / abs(float(row['eps_estimate']))) * 100
+            if row["eps_estimate"] and row["eps_actual"]:
+                eps_surprise = float(row["eps_actual"]) - float(row["eps_estimate"])
+                if float(row["eps_estimate"]) != 0:
+                    eps_surprise_pct = (eps_surprise / abs(float(row["eps_estimate"]))) * 100
 
             # Extract quarter and year from date
             from datetime import datetime
-            date_str = row['earnings_date']
+
+            date_str = row["earnings_date"]
             try:
                 date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                 quarter = (date_obj.month - 1) // 3 + 1
@@ -249,19 +265,23 @@ async def get_earnings(
                 quarter = None
                 year = None
 
-            events.append(EarningsEvent(
-                symbol=row['symbol'],
-                earnings_date=row['earnings_date'],
-                quarter=quarter,
-                year=year,
-                eps_estimate=float(row['eps_estimate']) if row['eps_estimate'] else None,
-                eps_actual=float(row['eps_actual']) if row['eps_actual'] else None,
-                eps_surprise=eps_surprise,
-                eps_surprise_pct=eps_surprise_pct,
-                revenue_estimate=float(row['revenue_estimate']) if row['revenue_estimate'] else None,
-                revenue_actual=float(row['revenue_actual']) if row['revenue_actual'] else None,
-                report_time=row['earnings_time'],  # bmo, amc, dmh
-            ))
+            events.append(
+                EarningsEvent(
+                    symbol=row["symbol"],
+                    earnings_date=row["earnings_date"],
+                    quarter=quarter,
+                    year=year,
+                    eps_estimate=float(row["eps_estimate"]) if row["eps_estimate"] else None,
+                    eps_actual=float(row["eps_actual"]) if row["eps_actual"] else None,
+                    eps_surprise=eps_surprise,
+                    eps_surprise_pct=eps_surprise_pct,
+                    revenue_estimate=(
+                        float(row["revenue_estimate"]) if row["revenue_estimate"] else None
+                    ),
+                    revenue_actual=float(row["revenue_actual"]) if row["revenue_actual"] else None,
+                    report_time=row["earnings_time"],  # bmo, amc, dmh
+                )
+            )
 
         return events
 
@@ -303,21 +323,23 @@ async def get_chart_patterns(
                 ORDER BY detected_at DESC
                 LIMIT $3
                 """,
-                symbol, timeframe, limit
+                symbol,
+                timeframe,
+                limit,
             )
 
         return [
             ChartPattern(
-                symbol=row['symbol'],
-                timeframe=row['timeframe'],
-                pattern_name=row['pattern_name'],
-                pattern_type=row['pattern_type'],
-                status=row['status'],
-                start_date=row['start_date'],
-                end_date=row['end_date'],
-                target_price=float(row['target_price']) if row['target_price'] else None,
-                stop_loss=float(row['stop_loss']) if row['stop_loss'] else None,
-                confidence=float(row['confidence']) if row['confidence'] else None,
+                symbol=row["symbol"],
+                timeframe=row["timeframe"],
+                pattern_name=row["pattern_name"],
+                pattern_type=row["pattern_type"],
+                status=row["status"],
+                start_date=row["start_date"],
+                end_date=row["end_date"],
+                target_price=float(row["target_price"]) if row["target_price"] else None,
+                stop_loss=float(row["stop_loss"]) if row["stop_loss"] else None,
+                confidence=float(row["confidence"]) if row["confidence"] else None,
             )
             for row in rows
         ]
@@ -362,11 +384,11 @@ async def get_support_resistance(
 
         return [
             SupportResistanceLevel(
-                symbol=row['symbol'],
-                level_type=row['level_type'],
-                price=float(row['price']),
-                strength=row['strength'],
-                is_active=row['is_active'],
+                symbol=row["symbol"],
+                level_type=row["level_type"],
+                price=float(row["price"]),
+                strength=row["strength"],
+                is_active=row["is_active"],
             )
             for row in rows
         ]
@@ -405,18 +427,20 @@ async def get_company_news(
                 ORDER BY published_at DESC
                 LIMIT $3
                 """,
-                symbol, from_date, limit
+                symbol,
+                from_date,
+                limit,
             )
 
         return [
             CompanyNews(
-                symbol=row['symbol'],
-                headline=row['headline'],
-                summary=row['summary'],
-                source=row['source'],
-                url=row['url'],
-                sentiment=row['sentiment'],
-                published_at=row['published_at'],
+                symbol=row["symbol"],
+                headline=row["headline"],
+                summary=row["summary"],
+                source=row["source"],
+                url=row["url"],
+                sentiment=row["sentiment"],
+                published_at=row["published_at"],
             )
             for row in rows
         ]
@@ -455,7 +479,7 @@ async def get_symbol_summary(symbol: str):
                 FROM market_data_cache
                 WHERE symbol = $1
                 """,
-                symbol
+                symbol,
             )
 
             # Get company profile
@@ -465,7 +489,7 @@ async def get_symbol_summary(symbol: str):
                 FROM company_profiles
                 WHERE symbol = $1
                 """,
-                symbol
+                symbol,
             )
 
             # Get next earnings
@@ -477,12 +501,12 @@ async def get_symbol_summary(symbol: str):
                 ORDER BY earnings_date ASC
                 LIMIT 1
                 """,
-                symbol
+                symbol,
             )
 
             # Calculate 52-week high/low from OHLCV data (if not in market_data_cache)
-            high_52w = float(quote_row['high_52w']) if quote_row and quote_row['high_52w'] else None
-            low_52w = float(quote_row['low_52w']) if quote_row and quote_row['low_52w'] else None
+            high_52w = float(quote_row["high_52w"]) if quote_row and quote_row["high_52w"] else None
+            low_52w = float(quote_row["low_52w"]) if quote_row and quote_row["low_52w"] else None
 
             if high_52w is None or low_52w is None:
                 # Calculate from historical data
@@ -494,39 +518,65 @@ async def get_symbol_summary(symbol: str):
                       AND timeframe = '1m'
                       AND timestamp >= NOW() - INTERVAL '7 days'
                     """,
-                    symbol
+                    symbol,
                 )
                 if range_row:
-                    high_52w = float(range_row['high_52w']) if range_row['high_52w'] else None
-                    low_52w = float(range_row['low_52w']) if range_row['low_52w'] else None
+                    high_52w = float(range_row["high_52w"]) if range_row["high_52w"] else None
+                    low_52w = float(range_row["low_52w"]) if range_row["low_52w"] else None
 
         return {
             "symbol": symbol,
-            "name": profile_row['name'] if profile_row else symbol,
-            "sector": profile_row['sector'] if profile_row else None,
-            "industry": profile_row['industry'] if profile_row else None,
-            "market_cap": float(profile_row['market_cap']) if profile_row and profile_row['market_cap'] else None,
-            "logo_url": profile_row['logo_url'] if profile_row else None,
-            "pe_ratio": float(profile_row['pe_ratio']) if profile_row and profile_row['pe_ratio'] else None,
+            "name": profile_row["name"] if profile_row else symbol,
+            "sector": profile_row["sector"] if profile_row else None,
+            "industry": profile_row["industry"] if profile_row else None,
+            "market_cap": (
+                float(profile_row["market_cap"])
+                if profile_row and profile_row["market_cap"]
+                else None
+            ),
+            "logo_url": profile_row["logo_url"] if profile_row else None,
+            "pe_ratio": (
+                float(profile_row["pe_ratio"]) if profile_row and profile_row["pe_ratio"] else None
+            ),
             # Quote data
-            "price": float(quote_row['price']) if quote_row and quote_row['price'] else None,
-            "change": float(quote_row['change']) if quote_row and quote_row['change'] else None,
-            "change_pct": float(quote_row['change_pct']) if quote_row and quote_row['change_pct'] else None,
-            "open": float(quote_row['open']) if quote_row and quote_row['open'] else None,
-            "high": float(quote_row['high']) if quote_row and quote_row['high'] else None,
-            "low": float(quote_row['low']) if quote_row and quote_row['low'] else None,
-            "volume": int(quote_row['volume']) if quote_row and quote_row['volume'] else None,
-            "prev_close": float(quote_row['prev_close']) if quote_row and quote_row['prev_close'] else None,
+            "price": float(quote_row["price"]) if quote_row and quote_row["price"] else None,
+            "change": float(quote_row["change"]) if quote_row and quote_row["change"] else None,
+            "change_pct": (
+                float(quote_row["change_pct"]) if quote_row and quote_row["change_pct"] else None
+            ),
+            "open": float(quote_row["open"]) if quote_row and quote_row["open"] else None,
+            "high": float(quote_row["high"]) if quote_row and quote_row["high"] else None,
+            "low": float(quote_row["low"]) if quote_row and quote_row["low"] else None,
+            "volume": int(quote_row["volume"]) if quote_row and quote_row["volume"] else None,
+            "prev_close": (
+                float(quote_row["prev_close"]) if quote_row and quote_row["prev_close"] else None
+            ),
             "high_52w": high_52w,
             "low_52w": low_52w,
-            "pre_market": float(quote_row['pre_market_price']) if quote_row and quote_row['pre_market_price'] else None,
-            "post_market": float(quote_row['post_market_price']) if quote_row and quote_row['post_market_price'] else None,
+            "pre_market": (
+                float(quote_row["pre_market_price"])
+                if quote_row and quote_row["pre_market_price"]
+                else None
+            ),
+            "post_market": (
+                float(quote_row["post_market_price"])
+                if quote_row and quote_row["post_market_price"]
+                else None
+            ),
             # Earnings
-            "next_earnings": {
-                "date": str(earnings_row['earnings_date']) if earnings_row else None,
-                "eps_estimate": float(earnings_row['eps_estimate']) if earnings_row and earnings_row['eps_estimate'] else None,
-                "time": earnings_row['earnings_time'] if earnings_row else None,
-            } if earnings_row else None,
+            "next_earnings": (
+                {
+                    "date": str(earnings_row["earnings_date"]) if earnings_row else None,
+                    "eps_estimate": (
+                        float(earnings_row["eps_estimate"])
+                        if earnings_row and earnings_row["eps_estimate"]
+                        else None
+                    ),
+                    "time": earnings_row["earnings_time"] if earnings_row else None,
+                }
+                if earnings_row
+                else None
+            ),
         }
 
     except Exception as e:

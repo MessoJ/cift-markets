@@ -2,6 +2,7 @@
 Base Payment Processor - RULES COMPLIANT
 Abstract base class for all payment processors
 """
+
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any
@@ -10,6 +11,7 @@ from uuid import UUID
 
 class PaymentProcessorError(Exception):
     """Base exception for payment processor errors"""
+
     pass
 
 
@@ -40,7 +42,7 @@ class PaymentProcessor(ABC):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process a deposit transaction
@@ -57,10 +59,7 @@ class PaymentProcessor(ABC):
         pass
 
     async def link_account(
-        self,
-        user_id: UUID,
-        account_details: dict[str, Any],
-        metadata: dict[str, Any] | None = None
+        self, user_id: UUID, account_details: dict[str, Any], metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Link an external account (optional implementation)
@@ -81,7 +80,7 @@ class PaymentProcessor(ABC):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process a withdrawal transaction
@@ -107,9 +106,7 @@ class PaymentProcessor(ABC):
 
     @abstractmethod
     async def verify_payment_method(
-        self,
-        payment_method_id: UUID,
-        verification_data: dict[str, Any]
+        self, payment_method_id: UUID, verification_data: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Verify a payment method (e.g., micro-deposits, SMS code, etc.)
@@ -130,10 +127,7 @@ class PaymentProcessor(ABC):
         pass
 
     @abstractmethod
-    async def get_transaction_status(
-        self,
-        external_transaction_id: str
-    ) -> dict[str, Any]:
+    async def get_transaction_status(self, external_transaction_id: str) -> dict[str, Any]:
         """
         Query transaction status from external processor
 
@@ -154,10 +148,7 @@ class PaymentProcessor(ABC):
 
     @abstractmethod
     async def calculate_fee(
-        self,
-        amount: Decimal,
-        transaction_type: str,
-        payment_method_type: str
+        self, amount: Decimal, transaction_type: str, payment_method_type: str
     ) -> Decimal:
         """
         Calculate processing fee for a transaction
@@ -173,10 +164,7 @@ class PaymentProcessor(ABC):
         pass
 
     async def refund_transaction(
-        self,
-        external_transaction_id: str,
-        amount: Decimal | None = None,
-        reason: str | None = None
+        self, external_transaction_id: str, amount: Decimal | None = None, reason: str | None = None
     ) -> dict[str, Any]:
         """
         Refund a transaction (optional, not all processors support this)

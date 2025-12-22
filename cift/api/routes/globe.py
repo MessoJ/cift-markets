@@ -45,8 +45,7 @@ async def get_global_heatmap(
     try:
         geo_service = get_geo_news_service()
         heatmap_data = await geo_service.get_global_news_heatmap(
-            hours_back=hours_back,
-            impact_threshold=impact_threshold
+            hours_back=hours_back, impact_threshold=impact_threshold
         )
 
         return heatmap_data
@@ -75,8 +74,7 @@ async def get_country_detail(
     try:
         geo_service = get_geo_news_service()
         country_data = await geo_service.get_country_detail(
-            country_code=country_code.upper(),
-            days_back=days_back
+            country_code=country_code.upper(), days_back=days_back
         )
 
         return country_data
@@ -164,32 +162,32 @@ async def get_globe_exchanges_legacy(
 
         for row in rows:
             # Get flag emoji for country
-            flag = get_flag_emoji(row['country_code'])
+            flag = get_flag_emoji(row["country_code"])
 
             # Limit latest articles to top 5
-            latest = row['latest_articles'][:5] if row['latest_articles'] else []
+            latest = row["latest_articles"][:5] if row["latest_articles"] else []
 
             exchange_data = {
-                "id": str(row['id']),
-                "code": row['code'],
-                "name": row['name'],
-                "country": row['country'],
-                "country_code": row['country_code'],
+                "id": str(row["id"]),
+                "code": row["code"],
+                "name": row["name"],
+                "country": row["country"],
+                "country_code": row["country_code"],
                 "flag": flag,
-                "lat": float(row['lat']),
-                "lng": float(row['lng']),
-                "timezone": row['timezone'],
-                "market_cap_usd": row['market_cap_usd'],
-                "website": row['website'],
-                "icon_url": row['icon_url'],
-                "news_count": row['news_count'],
-                "sentiment_score": float(row['avg_sentiment']),
-                "categories": row['categories'] or [],
+                "lat": float(row["lat"]),
+                "lng": float(row["lng"]),
+                "timezone": row["timezone"],
+                "market_cap_usd": row["market_cap_usd"],
+                "website": row["website"],
+                "icon_url": row["icon_url"],
+                "news_count": row["news_count"],
+                "sentiment_score": float(row["avg_sentiment"]),
+                "categories": row["categories"] or [],
                 "latest_articles": latest,
             }
 
             exchanges.append(exchange_data)
-            total_news += row['news_count']
+            total_news += row["news_count"]
 
         return {
             "exchanges": exchanges,
@@ -280,32 +278,32 @@ async def get_news_arcs(
         for row in rows:
             # Determine arc color based on connection type
             color_map = {
-                "trade": ["#00ff88", "#0088ff"],      # Green to Blue
-                "impact": ["#ff8800", "#ff0088"],     # Orange to Pink
-                "correlation": ["#8800ff", "#00ffff"], # Purple to Cyan
+                "trade": ["#00ff88", "#0088ff"],  # Green to Blue
+                "impact": ["#ff8800", "#ff0088"],  # Orange to Pink
+                "correlation": ["#8800ff", "#00ffff"],  # Purple to Cyan
             }
 
-            color = color_map.get(row['connection_type'], ["#0088ff", "#00ff88"])
+            color = color_map.get(row["connection_type"], ["#0088ff", "#00ff88"])
 
             arc_data = {
-                "id": str(row['id']),
+                "id": str(row["id"]),
                 "source": {
-                    "code": row['source_code'],
-                    "name": row['source_name'],
-                    "lat": float(row['source_lat']),
-                    "lng": float(row['source_lng']),
+                    "code": row["source_code"],
+                    "name": row["source_name"],
+                    "lat": float(row["source_lat"]),
+                    "lng": float(row["source_lng"]),
                 },
                 "target": {
-                    "code": row['target_code'],
-                    "name": row['target_name'],
-                    "lat": float(row['target_lat']),
-                    "lng": float(row['target_lng']),
+                    "code": row["target_code"],
+                    "name": row["target_name"],
+                    "lat": float(row["target_lat"]),
+                    "lng": float(row["target_lng"]),
                 },
-                "article_count": row['article_count'],
-                "connection_type": row['connection_type'],
-                "strength": float(row['strength']),
+                "article_count": row["article_count"],
+                "connection_type": row["connection_type"],
+                "strength": float(row["strength"]),
                 "color": color,
-                "articles": row['articles'][:3] if row['articles'] else [],
+                "articles": row["articles"][:3] if row["articles"] else [],
             }
 
             arcs.append(arc_data)
@@ -372,16 +370,16 @@ async def get_political_boundaries(
 
         countries = []
         for row in rows:
-            flag = get_flag_emoji(row['country_code'])
+            flag = get_flag_emoji(row["country_code"])
 
             country_data = {
-                "country_code": row['country_code'],
-                "name": row['country_name'],
+                "country_code": row["country_code"],
+                "name": row["country_name"],
                 "flag": flag,
-                "article_count": row['article_count'],
-                "sentiment_score": float(row['avg_sentiment']),
-                "top_categories": row['categories'] or [],
-                "exchanges": row['exchanges'] or [],
+                "article_count": row["article_count"],
+                "sentiment_score": float(row["avg_sentiment"]),
+                "top_categories": row["categories"] or [],
+                "exchanges": row["exchanges"] or [],
             }
 
             countries.append(country_data)
@@ -435,11 +433,13 @@ async def search_globe_data(
     # Text search
     if q:
         param_count += 1
-        where_clauses.append(f"""(
+        where_clauses.append(
+            f"""(
             e.name ILIKE ${param_count} OR
             e.code ILIKE ${param_count} OR
             e.country ILIKE ${param_count}
-        )""")
+        )"""
+        )
         params.append(f"%{q}%")
 
     # Exchange filter
@@ -498,23 +498,23 @@ async def search_globe_data(
         total_articles = 0
 
         for row in rows:
-            flag = get_flag_emoji(row['country_code'])
+            flag = get_flag_emoji(row["country_code"])
 
             result = {
-                "id": str(row['id']),
-                "code": row['code'],
-                "name": row['name'],
-                "country": row['country'],
-                "country_code": row['country_code'],
+                "id": str(row["id"]),
+                "code": row["code"],
+                "name": row["name"],
+                "country": row["country"],
+                "country_code": row["country_code"],
                 "flag": flag,
-                "lat": float(row['lat']),
-                "lng": float(row['lng']),
-                "article_count": row['article_count'],
-                "sentiment_score": float(row['avg_sentiment']),
+                "lat": float(row["lat"]),
+                "lng": float(row["lng"]),
+                "article_count": row["article_count"],
+                "sentiment_score": float(row["avg_sentiment"]),
             }
 
             results.append(result)
-            total_articles += row['article_count']
+            total_articles += row["article_count"]
 
         return {
             "results": results,
@@ -603,13 +603,15 @@ async def get_tracked_ships(
 
     try:
         # Check if table exists first
-        table_check = await db.fetchval("""
+        table_check = await db.fetchval(
+            """
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_schema = 'public'
                 AND table_name = 'ships_current_status'
             )
-        """)
+        """
+        )
 
         if not table_check:
             logger.warning("ships_current_status table does not exist, returning empty ships list")
@@ -622,7 +624,7 @@ async def get_tracked_ships(
                     "status": status,
                 },
                 "last_updated": datetime.utcnow().isoformat(),
-                "note": "Ships tracking not yet configured"
+                "note": "Ships tracking not yet configured",
             }
 
         rows = await db.fetch(query, *params)
@@ -630,27 +632,29 @@ async def get_tracked_ships(
         ships = []
         for row in rows:
             ship_data = {
-                "id": str(row['id']),
-                "mmsi": row['mmsi'],
-                "imo": row['imo'],
-                "ship_name": row['ship_name'],
-                "ship_type": row['ship_type'],
-                "flag_country": row['flag_country'],
-                "flag_country_code": row['flag_country_code'],
-                "deadweight_tonnage": row['deadweight_tonnage'],
-                "current_lat": float(row['current_lat']),
-                "current_lng": float(row['current_lng']),
-                "current_speed": float(row['current_speed']) if row['current_speed'] else 0.0,
-                "current_course": float(row['current_course']) if row['current_course'] else 0.0,
-                "current_status": row['current_status'],
-                "destination": row['destination'],
-                "eta": row['eta'].isoformat() if row['eta'] else None,
-                "cargo_type": row['cargo_type'],
-                "cargo_value_usd": row['cargo_value_usd'],
-                "importance_score": row['importance_score'],
-                "news_count": row['news_count'],
-                "avg_sentiment": float(row['avg_sentiment']) if row['avg_sentiment'] is not None else 0.0,
-                "last_updated": row['last_updated'].isoformat() if row['last_updated'] else None,
+                "id": str(row["id"]),
+                "mmsi": row["mmsi"],
+                "imo": row["imo"],
+                "ship_name": row["ship_name"],
+                "ship_type": row["ship_type"],
+                "flag_country": row["flag_country"],
+                "flag_country_code": row["flag_country_code"],
+                "deadweight_tonnage": row["deadweight_tonnage"],
+                "current_lat": float(row["current_lat"]),
+                "current_lng": float(row["current_lng"]),
+                "current_speed": float(row["current_speed"]) if row["current_speed"] else 0.0,
+                "current_course": float(row["current_course"]) if row["current_course"] else 0.0,
+                "current_status": row["current_status"],
+                "destination": row["destination"],
+                "eta": row["eta"].isoformat() if row["eta"] else None,
+                "cargo_type": row["cargo_type"],
+                "cargo_value_usd": row["cargo_value_usd"],
+                "importance_score": row["importance_score"],
+                "news_count": row["news_count"],
+                "avg_sentiment": (
+                    float(row["avg_sentiment"]) if row["avg_sentiment"] is not None else 0.0
+                ),
+                "last_updated": row["last_updated"].isoformat() if row["last_updated"] else None,
             }
 
             ships.append(ship_data)
@@ -706,11 +710,11 @@ async def get_country_details(
         # Get news analysis for the country (simplified - no exchange join for now)
         # Return placeholder values since we don't have the exact schema
         news_stats = {
-            'news_count': 0,
-            'avg_sentiment': None,
-            'positive_count': 0,
-            'neutral_count': 0,
-            'negative_count': 0
+            "news_count": 0,
+            "avg_sentiment": None,
+            "positive_count": 0,
+            "neutral_count": 0,
+            "negative_count": 0,
         }
         top_news = None
         recent_news = []
@@ -756,45 +760,58 @@ async def get_country_details(
         # Format response
         response = {
             "code": country_code,
-            "name": country_info['country'],
+            "name": country_info["country"],
             "flag": get_flag_emoji(country_code),
-
             # Economic indicators (placeholder - would come from economic_indicators table)
             "gdp": None,
             "gdp_growth": None,
             "inflation": None,
             "unemployment": None,
-
             # News analysis
-            "sentiment": float(news_stats['avg_sentiment']) if news_stats['avg_sentiment'] else None,
-            "news_count": news_stats['news_count'] or 0,
+            "sentiment": (
+                float(news_stats["avg_sentiment"]) if news_stats["avg_sentiment"] else None
+            ),
+            "news_count": news_stats["news_count"] or 0,
             "news_breakdown": {
-                "positive": news_stats['positive_count'] or 0,
-                "neutral": news_stats['neutral_count'] or 0,
-                "negative": news_stats['negative_count'] or 0,
+                "positive": news_stats["positive_count"] or 0,
+                "neutral": news_stats["neutral_count"] or 0,
+                "negative": news_stats["negative_count"] or 0,
             },
-
             # Market presence
             "exchanges_count": exchanges_count or 0,
             "assets_count": assets_count or 0,
-
             # Top news
-            "top_news": {
-                "title": top_news['title'],
-                "source": top_news['source'],
-                "published_at": top_news['published_at'].isoformat(),
-                "sentiment": float(top_news['sentiment_score']) if top_news['sentiment_score'] is not None else 0.0,
-            } if top_news else None,
-
-            # Recent news
-            "recent_news": [
+            "top_news": (
                 {
-                    "title": row['title'],
-                    "source": row['source'],
-                    "sentiment": float(row['sentiment_score']) if row['sentiment_score'] is not None else 0.0,
+                    "title": top_news["title"],
+                    "source": top_news["source"],
+                    "published_at": top_news["published_at"].isoformat(),
+                    "sentiment": (
+                        float(top_news["sentiment_score"])
+                        if top_news["sentiment_score"] is not None
+                        else 0.0
+                    ),
                 }
-                for row in recent_news
-            ] if recent_news else [],
+                if top_news
+                else None
+            ),
+            # Recent news
+            "recent_news": (
+                [
+                    {
+                        "title": row["title"],
+                        "source": row["source"],
+                        "sentiment": (
+                            float(row["sentiment_score"])
+                            if row["sentiment_score"] is not None
+                            else 0.0
+                        ),
+                    }
+                    for row in recent_news
+                ]
+                if recent_news
+                else []
+            ),
         }
 
         return response

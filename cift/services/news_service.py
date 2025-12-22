@@ -42,37 +42,46 @@ class NewsService:
         self.session = None
 
         # Check for API keys
-        self.polygon_api_key = getattr(self.settings, 'polygon_api_key', '')
-        self.alphavantage_api_key = getattr(self.settings, 'alphavantage_api_key', '')
+        self.polygon_api_key = getattr(self.settings, "polygon_api_key", "")
+        self.alphavantage_api_key = getattr(self.settings, "alphavantage_api_key", "")
 
         # News provider configurations
         self.providers = {
             "polygon": {
                 "enabled": bool(self.polygon_api_key),  # Enable if API key exists
                 "url": "https://api.polygon.io/v2/reference/news",
-                "api_key": self.polygon_api_key
+                "api_key": self.polygon_api_key,
             },
             "alpha_vantage": {
                 "enabled": bool(self.alphavantage_api_key),  # Enable if API key exists
                 "url": "https://www.alphavantage.co/query",
-                "params": {"function": "NEWS_SENTIMENT", "apikey": self.alphavantage_api_key}
+                "params": {"function": "NEWS_SENTIMENT", "apikey": self.alphavantage_api_key},
             },
             "finnhub": {
                 "enabled": False,  # Requires API key
                 "url": "https://finnhub.io/api/v1/news",
-                "headers": {"X-Finnhub-Token": ""}
+                "headers": {"X-Finnhub-Token": ""},
             },
             "mock": {
-                "enabled": not bool(self.polygon_api_key) and not bool(self.alphavantage_api_key),  # Only use mock if no real keys
-                "url": None
-            }
+                "enabled": not bool(self.polygon_api_key)
+                and not bool(self.alphavantage_api_key),  # Only use mock if no real keys
+                "url": None,
+            },
         }
 
         # News categories
         self.categories = [
-            "earnings", "mergers", "ipo", "analyst_ratings",
-            "regulatory", "market_outlook", "economic_data",
-            "technology", "healthcare", "finance", "energy"
+            "earnings",
+            "mergers",
+            "ipo",
+            "analyst_ratings",
+            "regulatory",
+            "market_outlook",
+            "economic_data",
+            "technology",
+            "healthcare",
+            "finance",
+            "energy",
         ]
 
     async def __aenter__(self):
@@ -84,10 +93,7 @@ class NewsService:
             await self.session.close()
 
     async def fetch_latest_news(
-        self,
-        symbols: list[str] | None = None,
-        categories: list[str] | None = None,
-        limit: int = 50
+        self, symbols: list[str] | None = None, categories: list[str] | None = None, limit: int = 50
     ) -> list[NewsArticle]:
         """Fetch latest financial news from multiple sources."""
 
@@ -112,9 +118,7 @@ class NewsService:
         # Deduplicate and sort by importance/recency
         unique_articles = self._deduplicate_articles(all_articles)
         sorted_articles = sorted(
-            unique_articles,
-            key=lambda x: (x.importance, x.published_at),
-            reverse=True
+            unique_articles, key=lambda x: (x.importance, x.published_at), reverse=True
         )
 
         # Store in database
@@ -123,11 +127,7 @@ class NewsService:
         return sorted_articles[:limit]
 
     async def _fetch_from_provider(
-        self,
-        provider: str,
-        symbols: list[str] | None,
-        categories: list[str] | None,
-        limit: int
+        self, provider: str, symbols: list[str] | None, categories: list[str] | None, limit: int
     ) -> list[NewsArticle]:
         """Fetch news from a specific provider."""
 
@@ -142,11 +142,7 @@ class NewsService:
         else:
             return []
 
-    async def _fetch_polygon_news(
-        self,
-        symbols: list[str] | None,
-        limit: int
-    ) -> list[NewsArticle]:
+    async def _fetch_polygon_news(self, symbols: list[str] | None, limit: int) -> list[NewsArticle]:
         """Fetch news from Polygon.io API."""
 
         articles = []
@@ -158,7 +154,7 @@ class NewsService:
                 "apiKey": self.polygon_api_key,
                 "limit": min(limit, 100),  # Polygon max is 100
                 "order": "desc",
-                "sort": "published_utc"
+                "sort": "published_utc",
             }
 
             # Add ticker filter if specified
@@ -178,7 +174,9 @@ class NewsService:
                         # Parse published time
                         published_str = item.get("published_utc", "")
                         if published_str:
-                            published_at = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
+                            published_at = datetime.fromisoformat(
+                                published_str.replace("Z", "+00:00")
+                            )
                         else:
                             published_at = datetime.utcnow()
 
@@ -198,9 +196,14 @@ class NewsService:
                         # Basic sentiment from title if no insights
                         if sentiment == "neutral":
                             title_lower = item.get("title", "").lower()
-                            if any(w in title_lower for w in ["surge", "rally", "gain", "beat", "growth"]):
+                            if any(
+                                w in title_lower
+                                for w in ["surge", "rally", "gain", "beat", "growth"]
+                            ):
                                 sentiment = "positive"
-                            elif any(w in title_lower for w in ["fall", "drop", "miss", "loss", "crash"]):
+                            elif any(
+                                w in title_lower for w in ["fall", "drop", "miss", "loss", "crash"]
+                            ):
                                 sentiment = "negative"
 
                         article = NewsArticle(
@@ -216,7 +219,7 @@ class NewsService:
                             categories=["market_news"],
                             sentiment=sentiment,
                             importance=3 if len(tickers) > 0 else 2,
-                            image_url=item.get("image_url", "")
+                            image_url=item.get("image_url", ""),
                         )
 
                         articles.append(article)
@@ -232,10 +235,7 @@ class NewsService:
         return articles
 
     async def _fetch_mock_news(
-        self,
-        symbols: list[str] | None,
-        categories: list[str] | None,
-        limit: int
+        self, symbols: list[str] | None, categories: list[str] | None, limit: int
     ) -> list[NewsArticle]:
         """Generate realistic mock news for testing."""
 
@@ -246,36 +246,36 @@ class NewsService:
                 "summary": "{symbol} exceeded analyst expectations with strong revenue growth.",
                 "categories": ["earnings"],
                 "sentiment": "positive",
-                "importance": 4
+                "importance": 4,
             },
             {
                 "title": "Analyst Upgrades {symbol} to Buy on Strong Outlook",
                 "summary": "Major investment firm raises price target following positive developments.",
                 "categories": ["analyst_ratings"],
                 "sentiment": "positive",
-                "importance": 3
+                "importance": 3,
             },
             {
                 "title": "{symbol} Faces Regulatory Scrutiny Over Recent Practices",
                 "summary": "Government agencies investigating potential compliance issues.",
                 "categories": ["regulatory"],
                 "sentiment": "negative",
-                "importance": 3
+                "importance": 3,
             },
             {
                 "title": "Breaking: {symbol} Announces Major Acquisition Deal",
                 "summary": "Company expands market presence through strategic acquisition.",
                 "categories": ["mergers"],
                 "sentiment": "positive",
-                "importance": 5
+                "importance": 5,
             },
             {
                 "title": "Market Outlook: Technology Sector Shows Resilience",
                 "summary": "Analysts remain optimistic about tech stocks despite volatility.",
                 "categories": ["market_outlook", "technology"],
                 "sentiment": "positive",
-                "importance": 2
-            }
+                "importance": 2,
+            },
         ]
 
         # Generate articles
@@ -296,11 +296,11 @@ class NewsService:
                 summary=template["summary"].format(symbol=symbol),
                 url=f"https://example-news.com/article-{i}",
                 source="Mock Financial News",
-                published_at=datetime.utcnow() - timedelta(hours=i, minutes=i*15),
+                published_at=datetime.utcnow() - timedelta(hours=i, minutes=i * 15),
                 symbols=[symbol] if "{symbol}" in template["title"] else [],
                 categories=template["categories"],
                 sentiment=template["sentiment"],
-                importance=template["importance"]
+                importance=template["importance"],
             )
 
             articles.append(article)
@@ -308,9 +308,7 @@ class NewsService:
         return articles
 
     async def _fetch_alpha_vantage_news(
-        self,
-        symbols: list[str] | None,
-        limit: int
+        self, symbols: list[str] | None, limit: int
     ) -> list[NewsArticle]:
         """Fetch from Alpha Vantage News API."""
         config = self.providers["alpha_vantage"]
@@ -334,7 +332,9 @@ class NewsService:
                 data = await response.json()
 
                 if "feed" not in data:
-                    logger.warning(f"Alpha Vantage response missing 'feed': {data.get('Note', 'Unknown')}")
+                    logger.warning(
+                        f"Alpha Vantage response missing 'feed': {data.get('Note', 'Unknown')}"
+                    )
                     return []
 
                 articles = []
@@ -369,7 +369,7 @@ class NewsService:
                         published_at=published_at,
                         symbols=item_symbols,
                         sentiment=sentiment,
-                        image_url=item.get("banner_image")
+                        image_url=item.get("banner_image"),
                     )
                     articles.append(article)
 
@@ -379,11 +379,7 @@ class NewsService:
             logger.error(f"Error fetching Alpha Vantage news: {e}")
             return []
 
-    async def _fetch_finnhub_news(
-        self,
-        symbols: list[str] | None,
-        limit: int
-    ) -> list[NewsArticle]:
+    async def _fetch_finnhub_news(self, symbols: list[str] | None, limit: int) -> list[NewsArticle]:
         """Fetch from Finnhub News API."""
         # TODO: Implement Finnhub integration
         logger.info("Finnhub news integration not implemented")
@@ -416,7 +412,8 @@ class NewsService:
         async with pool.acquire() as conn:
             for article in articles:
                 try:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT INTO news_articles (
                             id, title, summary, content, url, source, author,
                             published_at, symbols, categories, sentiment,
@@ -444,7 +441,7 @@ class NewsService:
                         article.sentiment,
                         article.importance,
                         article.image_url,
-                        datetime.utcnow()
+                        datetime.utcnow(),
                     )
 
                 except Exception as e:
@@ -452,77 +449,81 @@ class NewsService:
 
         logger.success(f"Stored {len(articles)} news articles")
 
-    async def get_news_by_symbol(
-        self,
-        symbol: str,
-        limit: int = 20
-    ) -> list[NewsArticle]:
+    async def get_news_by_symbol(self, symbol: str, limit: int = 20) -> list[NewsArticle]:
         """Get news articles related to a specific symbol."""
 
         pool = await get_postgres_pool()
 
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT * FROM news_articles
                 WHERE symbols::text LIKE $1
                 ORDER BY published_at DESC, importance DESC
                 LIMIT $2
-            """, f'%"{symbol}"%', limit)
+            """,
+                f'%"{symbol}"%',
+                limit,
+            )
 
         articles = []
         for row in rows:
-            articles.append(NewsArticle(
-                id=row['id'],
-                title=row['title'],
-                summary=row['summary'],
-                content=row['content'],
-                url=row['url'],
-                source=row['source'],
-                author=row['author'],
-                published_at=row['published_at'],
-                symbols=json.loads(row['symbols'] or '[]'),
-                categories=json.loads(row['categories'] or '[]'),
-                sentiment=row['sentiment'],
-                importance=row['importance'],
-                image_url=row['image_url']
-            ))
+            articles.append(
+                NewsArticle(
+                    id=row["id"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    content=row["content"],
+                    url=row["url"],
+                    source=row["source"],
+                    author=row["author"],
+                    published_at=row["published_at"],
+                    symbols=json.loads(row["symbols"] or "[]"),
+                    categories=json.loads(row["categories"] or "[]"),
+                    sentiment=row["sentiment"],
+                    importance=row["importance"],
+                    image_url=row["image_url"],
+                )
+            )
 
         return articles
 
-    async def get_news_by_category(
-        self,
-        category: str,
-        limit: int = 20
-    ) -> list[NewsArticle]:
+    async def get_news_by_category(self, category: str, limit: int = 20) -> list[NewsArticle]:
         """Get news articles by category."""
 
         pool = await get_postgres_pool()
 
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT * FROM news_articles
                 WHERE categories::text LIKE $1
                 ORDER BY published_at DESC, importance DESC
                 LIMIT $2
-            """, f'%"{category}"%', limit)
+            """,
+                f'%"{category}"%',
+                limit,
+            )
 
         articles = []
         for row in rows:
-            articles.append(NewsArticle(
-                id=row['id'],
-                title=row['title'],
-                summary=row['summary'],
-                content=row['content'],
-                url=row['url'],
-                source=row['source'],
-                author=row['author'],
-                published_at=row['published_at'],
-                symbols=json.loads(row['symbols'] or '[]'),
-                categories=json.loads(row['categories'] or '[]'),
-                sentiment=row['sentiment'],
-                importance=row['importance'],
-                image_url=row['image_url']
-            ))
+            articles.append(
+                NewsArticle(
+                    id=row["id"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    content=row["content"],
+                    url=row["url"],
+                    source=row["source"],
+                    author=row["author"],
+                    published_at=row["published_at"],
+                    symbols=json.loads(row["symbols"] or "[]"),
+                    categories=json.loads(row["categories"] or "[]"),
+                    sentiment=row["sentiment"],
+                    importance=row["importance"],
+                    image_url=row["image_url"],
+                )
+            )
 
         return articles
 
@@ -534,31 +535,35 @@ class NewsService:
 
         async with pool.acquire() as conn:
             # Get top gainers
-            gainers = await conn.fetch("""
+            gainers = await conn.fetch(
+                """
                 SELECT symbol FROM market_data_cache
                 WHERE change_percent > 5
                 ORDER BY change_percent DESC
                 LIMIT 10
-            """)
+            """
+            )
 
             # Get top losers
-            losers = await conn.fetch("""
+            losers = await conn.fetch(
+                """
                 SELECT symbol FROM market_data_cache
                 WHERE change_percent < -5
                 ORDER BY change_percent ASC
                 LIMIT 10
-            """)
+            """
+            )
 
         result = {"gainers": [], "losers": []}
 
         # Get news for gainers
         for row in gainers:
-            news = await self.get_news_by_symbol(row['symbol'], 3)
+            news = await self.get_news_by_symbol(row["symbol"], 3)
             result["gainers"].extend(news)
 
         # Get news for losers
         for row in losers:
-            news = await self.get_news_by_symbol(row['symbol'], 3)
+            news = await self.get_news_by_symbol(row["symbol"], 3)
             result["losers"].extend(news)
 
         return result
@@ -569,16 +574,20 @@ class NewsService:
         pool = await get_postgres_pool()
 
         async with pool.acquire() as conn:
-            result = await conn.execute("""
+            result = await conn.execute(
+                """
                 DELETE FROM news_articles
                 WHERE published_at < NOW() - INTERVAL '%s days'
-            """, days_to_keep)
+            """,
+                days_to_keep,
+            )
 
             logger.info(f"Cleaned up old news articles: {result}")
 
 
 # Global news service instance
 _news_service = None
+
 
 def get_news_service() -> NewsService:
     """Get the global news service instance."""
@@ -616,10 +625,7 @@ if __name__ == "__main__":
     async def test_news():
         async with NewsService() as service:
             # Test mock news generation
-            articles = await service.fetch_latest_news(
-                symbols=["AAPL", "MSFT"],
-                limit=10
-            )
+            articles = await service.fetch_latest_news(symbols=["AAPL", "MSFT"], limit=10)
 
             print(f"Fetched {len(articles)} articles:")
             for article in articles[:3]:
