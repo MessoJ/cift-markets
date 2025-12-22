@@ -117,8 +117,11 @@ jobs:
             # Login to registry (using sudo to ensure socket access)
             echo $GITHUB_TOKEN | sudo docker login ghcr.io -u $USERNAME --password-stdin
             
-            # Create .env file from secrets if needed (optional, but good practice)
-            # echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" > .env
+            # Create .env file from secrets
+            echo "GITHUB_CLIENT_ID=${{ secrets.GITHUB_CLIENT_ID }}" > .env
+            echo "GITHUB_CLIENT_SECRET=${{ secrets.GITHUB_CLIENT_SECRET }}" >> .env
+            echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" >> .env
+            echo "API_BASE_URL=${{ secrets.API_BASE_URL }}" >> .env
             
             # Pull latest images
             # Free up disk space: prune unused images, containers, builders and dangling volumes

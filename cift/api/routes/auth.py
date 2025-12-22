@@ -5,11 +5,14 @@ Endpoints for user registration, login, token refresh, and API key management.
 """
 
 import os
+import secrets
+import string
 from datetime import datetime
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from loguru import logger
 from pydantic import BaseModel
 
@@ -26,6 +29,7 @@ from cift.core.auth import (
     decode_token,
     get_current_active_user,
 )
+from cift.core.database import db_manager
 from cift.core.config import settings
 from cift.core.limiter import limiter
 
@@ -101,6 +105,58 @@ async def register(request: RegisterRequest):
 
 
 # ============================================================================
+# OAUTH HELPERS
+# ============================================================================
+
+def generate_random_password(length=32):
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(secrets.choice(alphabet) for i in range(length))
+
+async def get_or_create_oauth_user(email: str, username: str, full_name: str = None):
+    """Find existing user by email or create a new one."""
+    # Check if user exists by email
+    query = "SELECT * FROM users WHERE email = $1"
+    async with db_manager.pool.acquire() as conn:
+        user = await conn.fetchrow(query, email)
+    
+    if user:
+        return dict(user)
+    
+    # Create new user
+    # Handle username collisions
+    base_username = username
+    while True:
+        check_query = "SELECT id FROM users WHERE username = $1"
+        async with db_manager.pool.acquire() as conn:
+            existing = await conn.fetchrow(check_query, username)
+        if not existing:
+            break
+        username = f"{base_username}_{secrets.token_hex(2)}"
+    
+    password = generate_random_password()
+    
+    # Create user using core logic
+    try:
+        return await create_user(email, username, password, full_name)
+    except HTTPException:
+        # Fallback if race condition occurred
+        async with db_manager.pool.acquire() as conn:
+            user = await conn.fetchrow(query, email)
+        return dict(user)
+
+async def complete_oauth_login(user_data: dict):
+    """Generate tokens and redirect to frontend."""
+    user_id = user_data["id"]
+    access_token = create_access_token(user_id=user_id, scopes=["user"])
+    refresh_token = create_refresh_token(user_id=user_id)
+    
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    redirect_url = f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+    
+    return RedirectResponse(url=redirect_url)
+
+
+# ============================================================================
 # OAUTH ENDPOINTS
 # ============================================================================
 
@@ -112,7 +168,7 @@ async def github_login(request: Request):
     if not client_id:
         raise HTTPException(status_code=500, detail="GitHub Client ID not configured")
 
-    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/auth/github/callback"
+    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/github/callback"
     return {
         "url": f"https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope=user:email"
     }
@@ -159,14 +215,17 @@ async def github_callback(request: Request, code: str):
         emails = email_resp.json()
         primary_email = next((e["email"] for e in emails if e["primary"]), None)
 
-        # TODO: Create or login user with this email
-        # For now, we'll just return the user info to prove it works
-        return {
-            "email": primary_email,
-            "username": user_data["login"],
-            "provider": "github",
-            "provider_id": str(user_data["id"])
-        }
+        if not primary_email:
+            raise HTTPException(status_code=400, detail="No primary email found on GitHub account")
+
+        # Create or login user
+        user = await get_or_create_oauth_user(
+            email=primary_email,
+            username=user_data["login"],
+            full_name=user_data.get("name")
+        )
+        
+        return await complete_oauth_login(user)
 
 @router.get("/microsoft/login")
 @limiter.limit("10/minute")
@@ -176,7 +235,7 @@ async def microsoft_login(request: Request):
     if not client_id:
         raise HTTPException(status_code=500, detail="Microsoft Client ID not configured")
 
-    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/auth/microsoft/callback"
+    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/microsoft/callback"
     tenant = "common"
     return {
         "url": f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&response_mode=query&scope=User.Read"
@@ -192,7 +251,7 @@ async def microsoft_callback(request: Request, code: str):
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Microsoft credentials not configured")
 
-    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/auth/microsoft/callback"
+    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/microsoft/callback"
 
     async with httpx.AsyncClient() as client:
         # Exchange code for token
@@ -220,12 +279,82 @@ async def microsoft_callback(request: Request, code: str):
         )
         user_data = user_resp.json()
 
-        return {
-            "email": user_data.get("mail") or user_data.get("userPrincipalName"),
-            "username": user_data.get("displayName"),
-            "provider": "microsoft",
-            "provider_id": user_data["id"]
-        }
+        email = user_data.get("mail") or user_data.get("userPrincipalName")
+        if not email:
+            raise HTTPException(status_code=400, detail="No email found on Microsoft account")
+
+        # Create or login user
+        user = await get_or_create_oauth_user(
+            email=email,
+            username=user_data.get("displayName", email.split("@")[0]),
+            full_name=user_data.get("displayName")
+        )
+        
+        return await complete_oauth_login(user)
+
+@router.get("/google/login")
+@limiter.limit("10/minute")
+async def google_login(request: Request):
+    """Initiate Google OAuth login."""
+    client_id = getattr(settings, "google_client_id", os.getenv("GOOGLE_CLIENT_ID"))
+    if not client_id:
+        raise HTTPException(status_code=500, detail="Google Client ID not configured")
+
+    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/google/callback"
+    return {
+        "url": f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope=email%20profile"
+    }
+
+@router.get("/google/callback")
+@limiter.limit("10/minute")
+async def google_callback(request: Request, code: str):
+    """Handle Google OAuth callback."""
+    client_id = getattr(settings, "google_client_id", os.getenv("GOOGLE_CLIENT_ID"))
+    client_secret = getattr(settings, "google_client_secret", os.getenv("GOOGLE_CLIENT_SECRET"))
+
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="Google credentials not configured")
+
+    redirect_uri = f"{getattr(settings, 'api_base_url', 'http://localhost:8000')}/api/v1/auth/google/callback"
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for token
+        token_resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            }
+        )
+        token_data = token_resp.json()
+        if "error" in token_data:
+            raise HTTPException(status_code=400, detail=token_data.get("error_description", "Login failed"))
+
+        access_token = token_data["access_token"]
+
+        # Get user info
+        user_resp = await client.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_data = user_resp.json()
+
+        email = user_data.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="No email found on Google account")
+
+        # Create or login user
+        user = await get_or_create_oauth_user(
+            email=email,
+            username=email.split("@")[0],
+            full_name=user_data.get("name")
+        )
+        
+        return await complete_oauth_login(user)
+
 
 
 @router.post("/login", response_model=TokenResponse)

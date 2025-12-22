@@ -98,6 +98,22 @@ class Settings(BaseSettings):
     polygon_api_key: str = ""
     polygon_base_url: str = "https://api.polygon.io"
 
+    # OAuth
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    
+    # URLs
+    frontend_url: str = "http://localhost:3000"
+    api_base_url: str = "http://localhost:8000"
+
+    # Trading
+    max_order_value: float = 100000.0
+    max_daily_loss: float = 5000.0
+
     alphavantage_api_key: str = ""
     alphavantage_base_url: str = "https://www.alphavantage.co"
 
