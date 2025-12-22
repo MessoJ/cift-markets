@@ -80,9 +80,9 @@ class PayPalProcessor(PaymentProcessor):
                 result = response.json()
                 return result['access_token']
         except httpx.HTTPError as e:
-            raise PaymentProcessorError(f"Failed to get PayPal access token: {str(e)}")
-        except KeyError:
-            raise PaymentProcessorError("Invalid PayPal authentication response")
+            raise PaymentProcessorError(f"Failed to get PayPal access token: {str(e)}") from e
+        except KeyError as e:
+            raise PaymentProcessorError("Invalid PayPal authentication response") from e
 
     async def _make_request(
         self,
@@ -138,10 +138,10 @@ class PayPalProcessor(PaymentProcessor):
                     error_msg = error_data['message']
                 elif 'error_description' in error_data:
                     error_msg = error_data['error_description']
-            except:
+            except Exception:
                 pass
 
-            raise PaymentProcessorError(error_msg)
+            raise PaymentProcessorError(error_msg) from e
 
     async def _fetch_payment_method(self, payment_method_id: UUID) -> dict[str, Any]:
         """Fetch payment method details from database"""
@@ -235,7 +235,7 @@ class PayPalProcessor(PaymentProcessor):
             }
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"PayPal order creation failed: {str(e)}")
+            raise PaymentProcessorError(f"PayPal order creation failed: {str(e)}") from e
 
     async def capture_order(self, order_id: str) -> dict[str, Any]:
         """
@@ -267,7 +267,7 @@ class PayPalProcessor(PaymentProcessor):
                 }
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"PayPal capture failed: {str(e)}")
+            raise PaymentProcessorError(f"PayPal capture failed: {str(e)}") from e
 
     async def process_withdrawal(
         self,
@@ -329,7 +329,7 @@ class PayPalProcessor(PaymentProcessor):
             }
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"PayPal payout failed: {str(e)}")
+            raise PaymentProcessorError(f"PayPal payout failed: {str(e)}") from e
 
     async def verify_payment_method(
         self,
@@ -396,7 +396,7 @@ class PayPalProcessor(PaymentProcessor):
                     'failure_reason': None,
                     'additional_data': order
                 }
-            except:
+            except Exception:
                 # Try as Payout Batch
                 payout = await self._make_request(
                     "GET",
@@ -422,7 +422,7 @@ class PayPalProcessor(PaymentProcessor):
                 }
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"Failed to query PayPal transaction: {str(e)}")
+            raise PaymentProcessorError(f"Failed to query PayPal transaction: {str(e)}") from e
 
     async def calculate_fee(
         self,
@@ -493,7 +493,7 @@ class PayPalProcessor(PaymentProcessor):
             }
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"PayPal refund failed: {str(e)}")
+            raise PaymentProcessorError(f"PayPal refund failed: {str(e)}") from e
 
     def _handle_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
         """

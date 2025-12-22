@@ -124,7 +124,7 @@ class PaymentVerificationService:
                     payment_method_id,
                 )
 
-                raise VerificationError(f"Failed to initiate verification: {str(e)}")
+                raise VerificationError(f"Failed to initiate verification: {str(e)}") from e
 
     @staticmethod
     def _get_verification_type(payment_method_type: str) -> str:

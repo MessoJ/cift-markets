@@ -83,10 +83,10 @@ class StripeProcessor(PaymentProcessor):
                 error_data = e.response.json()
                 if 'error' in error_data:
                     error_msg = error_data['error'].get('message', error_msg)
-            except:
+            except Exception:
                 pass
 
-            raise PaymentProcessorError(error_msg)
+            raise PaymentProcessorError(error_msg) from e
 
     async def _fetch_payment_method(self, payment_method_id: UUID) -> dict[str, Any]:
         """Fetch payment method details from database"""
@@ -421,7 +421,7 @@ class StripeProcessor(PaymentProcessor):
             return result
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"Failed to query Stripe transaction: {str(e)}")
+            raise PaymentProcessorError(f"Failed to query Stripe transaction: {str(e)}") from e
 
     async def calculate_fee(
         self,
@@ -484,7 +484,7 @@ class StripeProcessor(PaymentProcessor):
             }
 
         except PaymentProcessorError as e:
-            raise PaymentProcessorError(f"Stripe refund failed: {str(e)}")
+            raise PaymentProcessorError(f"Stripe refund failed: {str(e)}") from e
 
     def _handle_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
         """

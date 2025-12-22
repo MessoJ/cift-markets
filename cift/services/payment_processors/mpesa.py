@@ -210,7 +210,7 @@ class MpesaProcessor(PaymentProcessor):
                     )
 
         except httpx.HTTPError as e:
-            raise PaymentProcessorError(f"M-Pesa API request failed: {str(e)}")
+            raise PaymentProcessorError(f"M-Pesa API request failed: {str(e)}") from e
 
     async def process_withdrawal(
         self,
@@ -283,7 +283,7 @@ class MpesaProcessor(PaymentProcessor):
                     )
 
         except httpx.HTTPError as e:
-            raise PaymentProcessorError(f"M-Pesa API request failed: {str(e)}")
+            raise PaymentProcessorError(f"M-Pesa API request failed: {str(e)}") from e
 
     async def verify_payment_method(
         self,
@@ -390,7 +390,7 @@ class MpesaProcessor(PaymentProcessor):
                     }
 
         except httpx.HTTPError as e:
-            raise PaymentProcessorError(f"Failed to query M-Pesa transaction: {str(e)}")
+            raise PaymentProcessorError(f"Failed to query M-Pesa transaction: {str(e)}") from e
 
     async def calculate_fee(
         self,
