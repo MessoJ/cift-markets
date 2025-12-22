@@ -97,7 +97,7 @@ class DatabaseManager:
             raise DatabaseConnectionError(
                 "Failed to connect to PostgreSQL",
                 details={"error": str(e)},
-            )
+            ) from e
 
     async def health_check(self) -> bool:
         """Check if database is healthy."""
@@ -175,7 +175,7 @@ class QuestDBManager:
             raise DatabaseConnectionError(
                 "Failed to connect to QuestDB",
                 details={"error": str(e)},
-            )
+            ) from e
 
     async def health_check(self) -> bool:
         """Check if QuestDB is healthy."""
@@ -264,7 +264,7 @@ class RedisManager:
             raise DatabaseConnectionError(
                 "Failed to connect to Redis",
                 details={"error": str(e)},
-            )
+            ) from e
 
     async def health_check(self) -> bool:
         """Check if Redis is healthy."""

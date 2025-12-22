@@ -116,7 +116,7 @@ class AlpacaProcessor(PaymentProcessor):
 
         except Exception as e:
             logger.error(f"Alpaca create account error: {str(e)}")
-            raise PaymentProcessorError(f"Failed to create Alpaca account: {str(e)}")
+            raise PaymentProcessorError(f"Failed to create Alpaca account: {str(e)}") from e
 
     async def link_account(
         self,
@@ -185,7 +185,7 @@ class AlpacaProcessor(PaymentProcessor):
 
         except Exception as e:
             logger.error(f"Alpaca link account error: {str(e)}")
-            raise PaymentProcessorError(f"Failed to link Alpaca account: {str(e)}")
+            raise PaymentProcessorError(f"Failed to link Alpaca account: {str(e)}") from e
 
     async def process_deposit(
         self,
@@ -244,7 +244,7 @@ class AlpacaProcessor(PaymentProcessor):
 
         except Exception as e:
             logger.error(f"Alpaca deposit error: {str(e)}")
-            raise PaymentProcessorError(f"Failed to process Alpaca deposit: {str(e)}")
+            raise PaymentProcessorError(f"Failed to process Alpaca deposit: {str(e)}") from e
 
     def _is_valid_uuid(self, val):
         try:

@@ -84,9 +84,9 @@ class MpesaProcessor(PaymentProcessor):
                 data = response.json()
                 return data['access_token']
         except httpx.HTTPError as e:
-            raise PaymentProcessorError(f"Failed to get M-Pesa access token: {str(e)}")
-        except KeyError:
-            raise PaymentProcessorError("Invalid M-Pesa authentication response")
+            raise PaymentProcessorError(f"Failed to get M-Pesa access token: {str(e)}") from e
+        except KeyError as e:
+            raise PaymentProcessorError("Invalid M-Pesa authentication response") from e
 
     def _generate_password(self, timestamp: str) -> str:
         """
