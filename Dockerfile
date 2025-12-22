@@ -2,28 +2,9 @@
 # Multi-stage build with Rust core compilation (Phase 5-7)
 
 # ============================================================================
-# Stage 1: Rust Builder (100x faster order matching)
+# Stage 1: Python Builder
 # ============================================================================
-FROM rust:1.75-slim as rust-builder
-
-WORKDIR /build
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy Rust core source
-COPY rust_core/ ./rust_core/
-
-# Build Rust modules
-WORKDIR /build/rust_core
-RUN cargo build --release
-
-# ============================================================================
-# Stage 2: Python Builder
-# ============================================================================
-FROM python:3.11-slim as python-builder
+FROM python:3.11-slim AS python-builder
 
 # Install build dependencies (including Rust for maturin)
 RUN apt-get update && apt-get install -y \
@@ -65,15 +46,17 @@ COPY README.md /build/
 COPY cift/__init__.py /build/cift/
 
 # Install Python dependencies
+# Explicitly install CPU-only torch to save space (saves ~1GB)
 # Explicitly install xgboost to ensure it's present
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir xgboost && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir .
 
 # ============================================================================
-# Stage 3: Runtime (Phase 5-7 with Rust core)
+# Stage 2: Runtime (Phase 5-7 with Rust core)
 # ============================================================================
-FROM python:3.11-slim
+FROM python:3.11-slim AS runtime
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
