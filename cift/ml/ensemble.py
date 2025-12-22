@@ -45,20 +45,22 @@ from cift.ml.xgboost_fusion import XGBoostFusion, XGBoostPrediction
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class EnsemblePrediction:
     """Final ensemble prediction output."""
+
     timestamp: float
 
     # Primary signal
-    direction: str                   # "long", "short", "neutral"
-    direction_probability: float     # 0-1 probability of direction
-    magnitude: float                 # Expected return in bps
+    direction: str  # "long", "short", "neutral"
+    direction_probability: float  # 0-1 probability of direction
+    magnitude: float  # Expected return in bps
 
     # Confidence metrics
-    confidence: float                # Overall confidence 0-1
-    model_agreement: int             # Number of models agreeing
-    min_agreement: int               # Required for trade
+    confidence: float  # Overall confidence 0-1
+    model_agreement: int  # Number of models agreeing
+    min_agreement: int  # Required for trade
 
     # Regime context
     current_regime: MarketRegime
@@ -76,7 +78,7 @@ class EnsemblePrediction:
 
     # Trade recommendation
     should_trade: bool
-    position_size: float             # 0-1 fraction of max
+    position_size: float  # 0-1 fraction of max
 
     # Risk metrics
     stop_loss_bps: float
@@ -90,6 +92,7 @@ class EnsemblePrediction:
 @dataclass
 class ModelPredictions:
     """Container for all individual model predictions."""
+
     hawkes: HawkesPrediction | None = None
     transformer: TransformerPrediction | None = None
     hmm: RegimePrediction | None = None
@@ -100,6 +103,7 @@ class ModelPredictions:
 # ============================================================================
 # REGIME-AWARE WEIGHTING
 # ============================================================================
+
 
 class RegimeWeightMatrix:
     """
@@ -163,14 +167,15 @@ class RegimeWeightMatrix:
         """Update model performance tracking."""
         target = 1.0 if correct else 0.0
         self.model_performance[model_idx] = (
-            self.performance_decay * self.model_performance[model_idx] +
-            (1 - self.performance_decay) * target
+            self.performance_decay * self.model_performance[model_idx]
+            + (1 - self.performance_decay) * target
         )
 
 
 # ============================================================================
 # ENSEMBLE MODEL
 # ============================================================================
+
 
 class EnsembleMetaModel:
     """
@@ -244,9 +249,9 @@ class EnsembleMetaModel:
         start_time = time.time()
 
         predictions = ModelPredictions()
-        model_directions = []      # Direction signals (-1, 0, 1)
-        model_confidences = []     # Confidence values
-        model_available = []       # Which models have valid predictions
+        model_directions = []  # Direction signals (-1, 0, 1)
+        model_confidences = []  # Confidence values
+        model_available = []  # Which models have valid predictions
 
         # ============ HMM (first for regime context) ============
         current_regime = MarketRegime.LOW_VOLATILITY
@@ -281,7 +286,9 @@ class EnsembleMetaModel:
                 predictions.hawkes = self.hawkes.predict(hawkes_features, float(timestamp))
 
                 # Convert to direction
-                direction_signal = predictions.hawkes.buy_intensity - predictions.hawkes.sell_intensity
+                direction_signal = (
+                    predictions.hawkes.buy_intensity - predictions.hawkes.sell_intensity
+                )
                 direction = 1 if direction_signal > 0 else -1 if direction_signal < 0 else 0
 
                 model_directions.append(direction * abs(direction_signal))
@@ -341,8 +348,7 @@ class EnsembleMetaModel:
         if gnn_node_features is not None and gnn_edge_index is not None:
             try:
                 predictions.gnn = self.gnn.predict(
-                    gnn_node_features, gnn_edge_index,
-                    gnn_symbol_map or {}, None, timestamp
+                    gnn_node_features, gnn_edge_index, gnn_symbol_map or {}, None, timestamp
                 )
 
                 # Get direction for target symbol
@@ -395,9 +401,7 @@ class EnsembleMetaModel:
         # Compute agreement
         direction_signs = np.sign(directions)
         dominant_sign = np.sign(weighted_direction) if abs(weighted_direction) > 0.01 else 0
-        agreement_count = np.sum(
-            (direction_signs == dominant_sign) & (confidences > 0.3)
-        )
+        agreement_count = np.sum((direction_signs == dominant_sign) & (confidences > 0.3))
 
         # ============ Determine final direction ============
         if abs(weighted_direction) < 0.1:
@@ -422,9 +426,9 @@ class EnsembleMetaModel:
 
         # ============ Should trade decision ============
         should_trade = (
-            agreement_count >= self.min_agreement and
-            final_confidence >= self.confidence_threshold and
-            final_direction != "neutral"
+            agreement_count >= self.min_agreement
+            and final_confidence >= self.confidence_threshold
+            and final_direction != "neutral"
         )
 
         # ============ Position sizing ============
@@ -599,15 +603,16 @@ class EnsembleMetaModel:
             # Binary cross-entropy
             eps = 1e-10
             loss = -np.mean(
-                labels * np.log(calibrated + eps) +
-                (1 - labels) * np.log(1 - calibrated + eps)
+                labels * np.log(calibrated + eps) + (1 - labels) * np.log(1 - calibrated + eps)
             )
             return loss
 
-        result = minimize(neg_log_likelihood, [1.0, 0.0], method='Nelder-Mead')
+        result = minimize(neg_log_likelihood, [1.0, 0.0], method="Nelder-Mead")
         self._calibration_a, self._calibration_b = result.x
 
-        logger.info(f"Ensemble calibrated: a={self._calibration_a:.4f}, b={self._calibration_b:.4f}")
+        logger.info(
+            f"Ensemble calibrated: a={self._calibration_a:.4f}, b={self._calibration_b:.4f}"
+        )
 
     def update_performance(self, prediction: EnsemblePrediction, actual_direction: int):
         """
@@ -630,13 +635,14 @@ class EnsembleMetaModel:
 
         for i, contrib in enumerate(contributions):
             if abs(contrib) > 0.01:  # Model contributed
-                model_correct = (np.sign(contrib) == actual_direction)
+                model_correct = np.sign(contrib) == actual_direction
                 self.weight_matrix.update_performance(i, model_correct)
 
 
 # ============================================================================
 # ENSEMBLE BUILDER
 # ============================================================================
+
 
 def build_ensemble(
     config: dict[str, Any] | None = None,

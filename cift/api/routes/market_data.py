@@ -33,8 +33,10 @@ router = APIRouter(prefix="/market-data", tags=["Market Data"])
 # MODELS
 # ============================================================================
 
+
 class TickData(BaseModel):
     """Tick data response model."""
+
     timestamp: datetime
     symbol: str
     price: float
@@ -45,6 +47,7 @@ class TickData(BaseModel):
 
 class OHLCVBar(BaseModel):
     """OHLCV bar response model."""
+
     timestamp: datetime
     symbol: str
     open: float
@@ -56,6 +59,7 @@ class OHLCVBar(BaseModel):
 
 class PriceQuote(BaseModel):
     """Real-time price quote."""
+
     symbol: str
     price: float
     bid: float | None = None
@@ -72,6 +76,7 @@ class PriceQuote(BaseModel):
 
 class MarketDepth(BaseModel):
     """Market depth/order book data."""
+
     symbol: str
     bids: list[tuple[float, int]]  # [(price, volume), ...]
     asks: list[tuple[float, int]]
@@ -81,6 +86,7 @@ class MarketDepth(BaseModel):
 # ============================================================================
 # REST ENDPOINTS
 # ============================================================================
+
 
 @router.get("/quote/{symbol}", response_model=PriceQuote)
 async def get_quote(symbol: str):
@@ -101,7 +107,7 @@ async def get_quote(symbol: str):
             FROM market_data_cache
             WHERE symbol = $1
             """,
-            symbol_upper
+            symbol_upper,
         )
 
         # Fallback to market_data if not in cache
@@ -114,30 +120,30 @@ async def get_quote(symbol: str):
                 ORDER BY timestamp DESC
                 LIMIT 1
                 """,
-                symbol_upper
+                symbol_upper,
             )
 
     if not row:
         raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol_upper}")
 
     # Calculate spread in basis points
-    bid = float(row['bid']) if row['bid'] else float(row['price']) * 0.9999
-    ask = float(row['ask']) if row['ask'] else float(row['price']) * 1.0001
+    bid = float(row["bid"]) if row["bid"] else float(row["price"]) * 0.9999
+    ask = float(row["ask"]) if row["ask"] else float(row["price"]) * 1.0001
     spread_bps = ((ask - bid) / bid) * 10000 if bid > 0 else 0.0
 
     return PriceQuote(
-        symbol=row['symbol'],
-        price=float(row['price']),
+        symbol=row["symbol"],
+        price=float(row["price"]),
         bid=bid,
         ask=ask,
         spread_bps=round(spread_bps, 2),
-        change=float(row['change']) if row.get('change') else None,
-        change_pct=float(row['change_pct']) if row.get('change_pct') else None,
-        high=float(row['high']) if row.get('high') else None,
-        low=float(row['low']) if row.get('low') else None,
-        open=float(row['open']) if row.get('open') else None,
-        volume=int(row['volume']) if row.get('volume') else None,
-        timestamp=row['timestamp'],
+        change=float(row["change"]) if row.get("change") else None,
+        change_pct=float(row["change_pct"]) if row.get("change_pct") else None,
+        high=float(row["high"]) if row.get("high") else None,
+        low=float(row["low"]) if row.get("low") else None,
+        open=float(row["open"]) if row.get("open") else None,
+        volume=int(row["volume"]) if row.get("volume") else None,
+        timestamp=row["timestamp"],
     )
 
 
@@ -156,7 +162,7 @@ async def get_quotes(
         return []
 
     # Parse comma-separated symbols and convert to uppercase
-    symbols_list = [s.strip().upper() for s in symbols.split(',') if s.strip()]
+    symbols_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     if not symbols_list:
         return []
 
@@ -172,29 +178,31 @@ async def get_quotes(
             FROM market_data_cache
             WHERE symbol = ANY($1::text[])
             """,
-            symbols_upper
+            symbols_upper,
         )
 
         for row in cache_rows:
-            found_symbols.add(row['symbol'])
-            bid = float(row['bid']) if row['bid'] else float(row['price']) * 0.9999
-            ask = float(row['ask']) if row['ask'] else float(row['price']) * 1.0001
+            found_symbols.add(row["symbol"])
+            bid = float(row["bid"]) if row["bid"] else float(row["price"]) * 0.9999
+            ask = float(row["ask"]) if row["ask"] else float(row["price"]) * 1.0001
             spread_bps = ((ask - bid) / bid) * 10000 if bid > 0 else 0.0
 
-            all_quotes.append(PriceQuote(
-                symbol=row['symbol'],
-                price=float(row['price']),
-                bid=bid,
-                ask=ask,
-                spread_bps=round(spread_bps, 2),
-                change=float(row['change']) if row['change'] else None,
-                change_pct=float(row['change_pct']) if row['change_pct'] else None,
-                high=float(row['high']) if row['high'] else None,
-                low=float(row['low']) if row['low'] else None,
-                open=float(row['open']) if row['open'] else None,
-                volume=int(row['volume']) if row['volume'] else None,
-                timestamp=row['timestamp'],
-            ))
+            all_quotes.append(
+                PriceQuote(
+                    symbol=row["symbol"],
+                    price=float(row["price"]),
+                    bid=bid,
+                    ask=ask,
+                    spread_bps=round(spread_bps, 2),
+                    change=float(row["change"]) if row["change"] else None,
+                    change_pct=float(row["change_pct"]) if row["change_pct"] else None,
+                    high=float(row["high"]) if row["high"] else None,
+                    low=float(row["low"]) if row["low"] else None,
+                    open=float(row["open"]) if row["open"] else None,
+                    volume=int(row["volume"]) if row["volume"] else None,
+                    timestamp=row["timestamp"],
+                )
+            )
 
         # Find missing symbols and try market_data
         missing_symbols = [s for s in symbols_upper if s not in found_symbols]
@@ -206,24 +214,26 @@ async def get_quotes(
                 WHERE symbol = ANY($1::text[])
                 ORDER BY symbol, timestamp DESC
                 """,
-                missing_symbols
+                missing_symbols,
             )
 
             for row in market_rows:
-                found_symbols.add(row['symbol'])
-                bid = float(row['bid']) if row['bid'] else None
-                ask = float(row['ask']) if row['ask'] else None
+                found_symbols.add(row["symbol"])
+                bid = float(row["bid"]) if row["bid"] else None
+                ask = float(row["ask"]) if row["ask"] else None
                 spread_bps = ((ask - bid) / bid * 10000) if (bid and ask and bid > 0) else 0.0
 
-                all_quotes.append(PriceQuote(
-                    symbol=row['symbol'],
-                    price=float(row['price']),
-                    bid=bid,
-                    ask=ask,
-                    spread_bps=round(spread_bps, 2),
-                    volume=int(row['volume']) if row['volume'] else None,
-                    timestamp=row['timestamp'],
-                ))
+                all_quotes.append(
+                    PriceQuote(
+                        symbol=row["symbol"],
+                        price=float(row["price"]),
+                        bid=bid,
+                        ask=ask,
+                        spread_bps=round(spread_bps, 2),
+                        volume=int(row["volume"]) if row["volume"] else None,
+                        timestamp=row["timestamp"],
+                    )
+                )
 
         # Final fallback: check ohlcv_bars for any remaining symbols
         remaining_symbols = [s for s in symbols_upper if s not in found_symbols]
@@ -241,22 +251,24 @@ async def get_quotes(
                 WHERE symbol = ANY($1::text[])
                 ORDER BY symbol, timestamp DESC
                 """,
-                remaining_symbols
+                remaining_symbols,
             )
 
             for row in ohlcv_rows:
-                bid = float(row['bid']) if row['bid'] else None
-                ask = float(row['ask']) if row['ask'] else None
+                bid = float(row["bid"]) if row["bid"] else None
+                ask = float(row["ask"]) if row["ask"] else None
                 spread_bps = ((ask - bid) / bid * 10000) if (bid and ask and bid > 0) else 0.0
 
-                all_quotes.append(PriceQuote(
-                    symbol=row['symbol'],
-                    price=float(row['price']),
-                    bid=bid,
-                    ask=ask,
-                    spread_bps=round(spread_bps, 2),
-                    timestamp=row['timestamp'],
-                ))
+                all_quotes.append(
+                    PriceQuote(
+                        symbol=row["symbol"],
+                        price=float(row["price"]),
+                        bid=bid,
+                        ask=ask,
+                        spread_bps=round(spread_bps, 2),
+                        timestamp=row["timestamp"],
+                    )
+                )
 
     return all_quotes
 
@@ -264,6 +276,7 @@ async def get_quotes(
 # ============================================================================
 # ORDER BOOK (Level 2 Data)
 # ============================================================================
+
 
 @router.get("/orderbook/{symbol}")
 async def get_order_book(
@@ -288,7 +301,7 @@ async def get_order_book(
             FROM market_data_cache
             WHERE symbol = $1
             """,
-            symbol
+            symbol,
         )
 
         if not row:
@@ -301,19 +314,20 @@ async def get_order_book(
                 ORDER BY timestamp DESC
                 LIMIT 1
                 """,
-                symbol
+                symbol,
             )
 
     if not row:
         raise HTTPException(status_code=404, detail=f"No data for {symbol}")
 
-    price = float(row['price'])
-    bid = float(row['bid']) if row['bid'] else price * 0.9995
-    ask = float(row['ask']) if row['ask'] else price * 1.0005
-    base_volume = int(row['volume']) if row['volume'] else 10000
+    price = float(row["price"])
+    bid = float(row["bid"]) if row["bid"] else price * 0.9995
+    ask = float(row["ask"]) if row["ask"] else price * 1.0005
+    base_volume = int(row["volume"]) if row["volume"] else 10000
 
     # Generate realistic order book levels
     import random
+
     random.seed(int(price * 100))  # Deterministic for same price
 
     bids = []
@@ -324,20 +338,12 @@ async def get_order_book(
         # Bid levels (decreasing prices)
         bid_price = round(bid - (spread * 0.2 * i), 2)
         bid_size = int(base_volume * (0.05 + random.random() * 0.1) / (i + 1))
-        bids.append({
-            "price": bid_price,
-            "size": bid_size,
-            "orders": random.randint(1, 5 + i)
-        })
+        bids.append({"price": bid_price, "size": bid_size, "orders": random.randint(1, 5 + i)})
 
         # Ask levels (increasing prices)
         ask_price = round(ask + (spread * 0.2 * i), 2)
         ask_size = int(base_volume * (0.05 + random.random() * 0.1) / (i + 1))
-        asks.append({
-            "price": ask_price,
-            "size": ask_size,
-            "orders": random.randint(1, 5 + i)
-        })
+        asks.append({"price": ask_price, "size": ask_size, "orders": random.randint(1, 5 + i)})
 
     return {
         "symbol": symbol,
@@ -354,6 +360,7 @@ async def get_order_book(
 # ============================================================================
 # TIME & SALES (Recent Trades)
 # ============================================================================
+
 
 @router.get("/timesales/{symbol}")
 async def get_time_and_sales(
@@ -380,7 +387,7 @@ async def get_time_and_sales(
             ORDER BY timestamp DESC
             LIMIT 10
             """,
-            symbol
+            symbol,
         )
 
         # Get current quote
@@ -390,13 +397,13 @@ async def get_time_and_sales(
             FROM market_data_cache
             WHERE symbol = $1
             """,
-            symbol
+            symbol,
         )
 
     if not bars and not quote:
         raise HTTPException(status_code=404, detail=f"No data for {symbol}")
 
-    current_price = float(quote['price']) if quote else float(bars[0]['close']) if bars else 100.0
+    current_price = float(quote["price"]) if quote else float(bars[0]["close"]) if bars else 100.0
 
     # Generate realistic time & sales
     import random
@@ -420,13 +427,15 @@ async def get_time_and_sales(
         # Side based on price movement
         side = "buy" if price_var > 0 else "sell"
 
-        trades.append({
-            "time": trade_time.isoformat(),
-            "price": trade_price,
-            "size": size,
-            "side": side,
-            "exchange": random.choice(["NYSE", "NASDAQ", "ARCA", "BATS"])
-        })
+        trades.append(
+            {
+                "time": trade_time.isoformat(),
+                "price": trade_price,
+                "size": size,
+                "side": side,
+                "exchange": random.choice(["NYSE", "NASDAQ", "ARCA", "BATS"]),
+            }
+        )
 
     return {
         "symbol": symbol,
@@ -458,13 +467,13 @@ async def get_bars(
 
     return [
         OHLCVBar(
-            timestamp=bar['timestamp'],
-            symbol=bar['symbol'],
-            open=bar['open'],
-            high=bar['high'],
-            low=bar['low'],
-            close=bar['close'],
-            volume=int(bar['volume']),
+            timestamp=bar["timestamp"],
+            symbol=bar["symbol"],
+            open=bar["open"],
+            high=bar["high"],
+            low=bar["low"],
+            close=bar["close"],
+            volume=int(bar["volume"]),
         )
         for bar in bars
     ]
@@ -504,12 +513,13 @@ async def get_historical_data(
         return StreamingResponse(
             iter([csv_buffer]),
             media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={symbol}_historical.csv"}
+            headers={"Content-Disposition": f"attachment; filename={symbol}_historical.csv"},
         )
 
     elif format == "parquet":
         # Stream Parquet response (fastest, most efficient)
         import io
+
         buffer = io.BytesIO()
         df.write_parquet(buffer)
         buffer.seek(0)
@@ -517,7 +527,7 @@ async def get_historical_data(
         return StreamingResponse(
             iter([buffer.getvalue()]),
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename={symbol}_historical.parquet"}
+            headers={"Content-Disposition": f"attachment; filename={symbol}_historical.parquet"},
         )
 
     else:
@@ -540,19 +550,18 @@ async def get_available_symbols():
                 ORDER BY symbol
                 """
             )
-        return [row['symbol'] for row in rows] if rows else [
-            "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA",
-            "META", "NVDA", "AMD", "NFLX", "DIS"
-        ]
+        return (
+            [row["symbol"] for row in rows]
+            if rows
+            else ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA", "AMD", "NFLX", "DIS"]
+        )
     except Exception:
-        return [
-            "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA",
-            "META", "NVDA", "AMD", "NFLX", "DIS"
-        ]
+        return ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA", "AMD", "NFLX", "DIS"]
 
 
 class TickerItem(BaseModel):
     """Market ticker item for dashboard."""
+
     symbol: str
     price: float
     change: float
@@ -573,7 +582,7 @@ async def get_market_ticker(
     # Default major symbols if not specified
     default_symbols = ["SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "META"]
 
-    symbol_list = symbols.split(',') if symbols else default_symbols
+    symbol_list = symbols.split(",") if symbols else default_symbols
     symbol_list = [s.strip().upper() for s in symbol_list]
 
     try:
@@ -584,29 +593,23 @@ async def get_market_ticker(
                 FROM market_data_cache
                 WHERE symbol = ANY($1::text[])
                 """,
-                symbol_list
+                symbol_list,
             )
 
         if not rows:
             # Return fallback with zeros if no data
             return [
-                TickerItem(
-                    symbol=s,
-                    price=0.0,
-                    change=0.0,
-                    changePercent=0.0,
-                    volume=0
-                )
+                TickerItem(symbol=s, price=0.0, change=0.0, changePercent=0.0, volume=0)
                 for s in symbol_list
             ]
 
         return [
             TickerItem(
-                symbol=row['symbol'],
-                price=float(row['price']) if row['price'] else 0.0,
-                change=float(row['change']) if row['change'] else 0.0,
-                changePercent=float(row['change_pct']) if row['change_pct'] else 0.0,
-                volume=int(row['volume']) if row['volume'] else 0
+                symbol=row["symbol"],
+                price=float(row["price"]) if row["price"] else 0.0,
+                change=float(row["change"]) if row["change"] else 0.0,
+                changePercent=float(row["change_pct"]) if row["change_pct"] else 0.0,
+                volume=int(row["volume"]) if row["volume"] else 0,
             )
             for row in rows
         ]
@@ -620,6 +623,7 @@ async def get_market_ticker(
 
 class MarketMover(BaseModel):
     """Market mover item."""
+
     symbol: str
     price: float
     change: float
@@ -645,7 +649,7 @@ async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
                 ORDER BY change_pct DESC
                 LIMIT $1
                 """,
-                limit
+                limit,
             )
 
             # Get losers (top negative change)
@@ -657,21 +661,21 @@ async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
                 ORDER BY change_pct ASC
                 LIMIT $1
                 """,
-                limit
+                limit,
             )
 
         def row_to_mover(row):
             return MarketMover(
-                symbol=row['symbol'],
-                price=float(row['price']) if row['price'] else 0.0,
-                change=float(row['change']) if row['change'] else 0.0,
-                changePercent=float(row['change_pct']) if row['change_pct'] else 0.0,
-                volume=int(row['volume']) if row['volume'] else 0
+                symbol=row["symbol"],
+                price=float(row["price"]) if row["price"] else 0.0,
+                change=float(row["change"]) if row["change"] else 0.0,
+                changePercent=float(row["change_pct"]) if row["change_pct"] else 0.0,
+                volume=int(row["volume"]) if row["volume"] else 0,
             )
 
         return {
             "gainers": [row_to_mover(r) for r in gainers_rows],
-            "losers": [row_to_mover(r) for r in losers_rows]
+            "losers": [row_to_mover(r) for r in losers_rows],
         }
     except Exception as e:
         logger.error(f"Error fetching market movers: {e}")
@@ -681,7 +685,7 @@ async def get_market_movers(limit: int = Query(5, ge=1, le=20)):
 @router.get("/equity-curve")
 async def get_equity_curve_data(
     days: int = Query(30, ge=1, le=2000, description="Number of days of history"),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Get equity curve data for dashboard from portfolio_snapshots.
@@ -704,12 +708,12 @@ async def get_equity_curve_data(
                 ORDER BY timestamp ASC
                 """,
                 current_user.id,
-                start_date
+                start_date,
             )
 
         if rows:
             return [
-                {"timestamp": row['timestamp'].isoformat(), "value": float(row['total_value'])}
+                {"timestamp": row["timestamp"].isoformat(), "value": float(row["total_value"])}
                 for row in rows
             ]
 
@@ -727,7 +731,7 @@ async def get_technical_indicators(
     limit: int = Query(100, ge=1, le=1000),
     indicators: list[str] = Query(
         default=["sma_20", "sma_50", "ema_12", "bb_upper", "bb_lower", "macd"],
-        description="List of indicators to calculate"
+        description="List of indicators to calculate",
     ),
 ):
     """
@@ -776,15 +780,13 @@ async def get_technical_indicators(
             return None
         return v
 
-    return [
-        {k: sanitize_value(v) for k, v in row.items()}
-        for row in result
-    ]
+    return [{k: sanitize_value(v) for k, v in row.items()} for row in result]
 
 
 # ============================================================================
 # WEBSOCKET FOR REAL-TIME DATA
 # ============================================================================
+
 
 class ConnectionManager:
     """Manage WebSocket connections for real-time market data."""
@@ -821,7 +823,9 @@ class ConnectionManager:
 
         if websocket not in self.symbol_subscriptions[symbol]:
             self.symbol_subscriptions[symbol].append(websocket)
-            logger.debug(f"Subscribed to {symbol}. Total subscribers: {len(self.symbol_subscriptions[symbol])}")
+            logger.debug(
+                f"Subscribed to {symbol}. Total subscribers: {len(self.symbol_subscriptions[symbol])}"
+            )
 
     def unsubscribe(self, websocket: WebSocket, symbol: str):
         """Unsubscribe WebSocket from symbol updates."""
@@ -889,11 +893,13 @@ async def websocket_market_data(websocket: WebSocket):
                 for symbol in symbols:
                     manager.subscribe(websocket, symbol)
 
-                await websocket.send_json({
-                    "type": "subscribed",
-                    "symbols": symbols,
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "subscribed",
+                        "symbols": symbols,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
             elif action == "unsubscribe":
                 # Unsubscribe from symbols
@@ -901,18 +907,22 @@ async def websocket_market_data(websocket: WebSocket):
                 for symbol in symbols:
                     manager.unsubscribe(websocket, symbol)
 
-                await websocket.send_json({
-                    "type": "unsubscribed",
-                    "symbols": symbols,
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "unsubscribed",
+                        "symbols": symbols,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
             elif action == "ping":
                 # Respond to ping (heartbeat)
-                await websocket.send_json({
-                    "type": "pong",
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+                await websocket.send_json(
+                    {
+                        "type": "pong",
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -927,7 +937,10 @@ async def websocket_market_data(websocket: WebSocket):
 # HELPER FUNCTIONS FOR PUBLISHING DATA
 # ============================================================================
 
-async def publish_price_update(symbol: str, price: float, bid: float | None = None, ask: float | None = None):
+
+async def publish_price_update(
+    symbol: str, price: float, bid: float | None = None, ask: float | None = None
+):
     """
     Publish price update to all subscribed WebSocket clients.
 

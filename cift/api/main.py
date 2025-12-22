@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
     # Initialize execution engine (skip if databases failed)
     try:
         from cift.core.execution_engine import execution_engine
+
         await asyncio.wait_for(execution_engine.start(), timeout=3.0)
         logger.info("✅ Execution engine started")
     except Exception as e:
@@ -85,9 +86,11 @@ async def lifespan(app: FastAPI):
                             )
                             # Also update the database cache
                             from cift.core.database import get_postgres_pool
+
                             pool = await get_postgres_pool()
                             async with pool.acquire() as conn:
-                                await conn.execute("""
+                                await conn.execute(
+                                    """
                                     INSERT INTO market_data_cache (symbol, price, bid, ask, volume, change, change_pct, high, low, open)
                                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                                     ON CONFLICT (symbol) DO UPDATE SET
@@ -99,9 +102,18 @@ async def lifespan(app: FastAPI):
                                         low = EXCLUDED.low,
                                         open = EXCLUDED.open,
                                         updated_at = CURRENT_TIMESTAMP
-                                """, symbol, quote["price"], quote["price"]*0.9999, quote["price"]*1.0001,
-                                    quote.get("volume", 0), quote.get("change", 0), quote.get("change_percent", 0),
-                                    quote.get("high", quote["price"]), quote.get("low", quote["price"]), quote.get("open", quote["price"]))
+                                """,
+                                    symbol,
+                                    quote["price"],
+                                    quote["price"] * 0.9999,
+                                    quote["price"] * 1.0001,
+                                    quote.get("volume", 0),
+                                    quote.get("change", 0),
+                                    quote.get("change_percent", 0),
+                                    quote.get("high", quote["price"]),
+                                    quote.get("low", quote["price"]),
+                                    quote.get("open", quote["price"]),
+                                )
                         await asyncio.sleep(60)  # Update every minute (rate limit friendly)
                     except asyncio.CancelledError:
                         break
@@ -132,6 +144,7 @@ async def lifespan(app: FastAPI):
     # Start background tasks (KYC processing, portfolio snapshots, etc.)
     try:
         from cift.core.scheduler import setup_background_tasks
+
         await setup_background_tasks()
     except Exception as e:
         logger.warning(f"⚠️ Background tasks setup failed: {e}")
@@ -153,6 +166,7 @@ async def lifespan(app: FastAPI):
                 pass
             if not use_real_data:
                 from cift.core.market_simulator import simulator
+
                 simulator.stop()
             logger.info("Market data source stopped")
         except Exception as e:
@@ -161,9 +175,12 @@ async def lifespan(app: FastAPI):
     # Shutdown background tasks
     try:
         from cift.core.scheduler import stop_scheduler
+
         stop_scheduler()
     except Exception as e:
         logger.warning(f"⚠️ Failed to stop background tasks: {e}")
+
+
 app = FastAPI(
     title="CIFT Markets API",
     description="Computational Intelligence for Financial Trading - Production API",
@@ -185,7 +202,11 @@ app.add_middleware(SlowAPIMiddleware)
 # CORS middleware - MUST be first to handle preflight requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],  # Frontend URLs
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+    ],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -214,6 +235,7 @@ if settings.app_env == "production":
 # ============================================================================
 # ROUTES
 # ============================================================================
+
 
 @app.get("/")
 async def root():
@@ -245,17 +267,14 @@ async def readiness_check():
 
     # Determine if system is ready (all critical services must be healthy)
     critical_services = ["postgres", "questdb", "redis"]
-    is_ready = all(
-        connection_status.get(service) == "healthy"
-        for service in critical_services
-    )
+    is_ready = all(connection_status.get(service) == "healthy" for service in critical_services)
 
     # TODO: Add Kafka health check when implemented
     # TODO: Add ML model status check when implemented
 
     return {
         "ready": is_ready,
-        "timestamp": logger._core.clock.now().isoformat() if hasattr(logger, '_core') else None,
+        "timestamp": logger._core.clock.now().isoformat() if hasattr(logger, "_core") else None,
         "checks": {
             "postgres": connection_status.get("postgres", "unknown"),
             "questdb": connection_status.get("questdb", "unknown"),
@@ -312,6 +331,7 @@ from cift.api.routes import (  # noqa: E402
 
 try:
     from cift.api.routes import settings as settings_routes
+
     SETTINGS_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Settings routes not available: {e}")
@@ -336,6 +356,7 @@ app.include_router(price_alerts.router, prefix="/api/v1")
 # Company data routes (fundamentals, earnings, patterns)
 try:
     from cift.api.routes import company_data
+
     app.include_router(company_data.router, prefix="/api/v1")
     logger.info("Company data routes loaded")
 except ImportError as e:
@@ -364,6 +385,7 @@ app.include_router(admin.router, prefix="/api/v1")
 # Real-time streaming routes (SSE)
 try:
     from cift.api.routes import stream
+
     app.include_router(stream.router, prefix="/api/v1")
     logger.info("Real-time streaming routes loaded")
 except ImportError as e:
@@ -375,6 +397,7 @@ if SETTINGS_AVAILABLE:
 # ML Inference routes (Phase 8 - ML Implementation)
 try:
     from cift.api.routes import inference
+
     app.include_router(inference.router)  # Already has /api/v1 prefix
     logger.info("ML Inference routes loaded")
 except ImportError as e:

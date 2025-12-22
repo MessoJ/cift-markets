@@ -3,6 +3,7 @@ Payment Method Verification Service - RULES COMPLIANT
 Handles verification for different payment method types with real backend integration.
 No hardcoded responses - all verification states are tracked in database.
 """
+
 import secrets
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -17,6 +18,7 @@ from cift.services.sms_service import sms_service
 
 class VerificationError(Exception):
     """Raised when verification fails"""
+
     pass
 
 
@@ -48,9 +50,7 @@ class PaymentVerificationService:
 
     @staticmethod
     async def initiate_verification(
-        payment_method_id: UUID,
-        payment_method_type: str,
-        metadata: dict[str, Any]
+        payment_method_id: UUID, payment_method_type: str, metadata: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Initiate verification for a payment method
@@ -67,7 +67,9 @@ class PaymentVerificationService:
 
         async with pool.acquire() as conn:
             # Determine verification type based on payment method
-            verification_type = PaymentVerificationService._get_verification_type(payment_method_type)
+            verification_type = PaymentVerificationService._get_verification_type(
+                payment_method_type
+            )
 
             try:
                 if verification_type == PaymentVerificationService.VERIFICATION_TYPE_INSTANT:
@@ -76,7 +78,9 @@ class PaymentVerificationService:
                         conn, payment_method_id, metadata
                     )
 
-                elif verification_type == PaymentVerificationService.VERIFICATION_TYPE_MICRO_DEPOSIT:
+                elif (
+                    verification_type == PaymentVerificationService.VERIFICATION_TYPE_MICRO_DEPOSIT
+                ):
                     # Bank accounts: Send micro-deposits
                     result = await PaymentVerificationService._initiate_microdeposit(
                         conn, payment_method_id, metadata
@@ -130,18 +134,22 @@ class PaymentVerificationService:
     def _get_verification_type(payment_method_type: str) -> str:
         """Determine verification type based on payment method"""
         type_map = {
-            'debit_card': PaymentVerificationService.VERIFICATION_TYPE_INSTANT,
-            'credit_card': PaymentVerificationService.VERIFICATION_TYPE_INSTANT,
-            'bank_account': PaymentVerificationService.VERIFICATION_TYPE_MICRO_DEPOSIT,
-            'mpesa': PaymentVerificationService.VERIFICATION_TYPE_STK_PUSH,
-            'paypal': PaymentVerificationService.VERIFICATION_TYPE_OAUTH,
-            'cashapp': PaymentVerificationService.VERIFICATION_TYPE_OAUTH,
-            'crypto_wallet': PaymentVerificationService.VERIFICATION_TYPE_ADDRESS,
+            "debit_card": PaymentVerificationService.VERIFICATION_TYPE_INSTANT,
+            "credit_card": PaymentVerificationService.VERIFICATION_TYPE_INSTANT,
+            "bank_account": PaymentVerificationService.VERIFICATION_TYPE_MICRO_DEPOSIT,
+            "mpesa": PaymentVerificationService.VERIFICATION_TYPE_STK_PUSH,
+            "paypal": PaymentVerificationService.VERIFICATION_TYPE_OAUTH,
+            "cashapp": PaymentVerificationService.VERIFICATION_TYPE_OAUTH,
+            "crypto_wallet": PaymentVerificationService.VERIFICATION_TYPE_ADDRESS,
         }
-        return type_map.get(payment_method_type, PaymentVerificationService.VERIFICATION_TYPE_INSTANT)
+        return type_map.get(
+            payment_method_type, PaymentVerificationService.VERIFICATION_TYPE_INSTANT
+        )
 
     @staticmethod
-    async def _verify_card_instant(conn, payment_method_id: UUID, metadata: dict[str, Any]) -> dict[str, Any]:
+    async def _verify_card_instant(
+        conn, payment_method_id: UUID, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Instant verification for cards via Stripe
         Cards are verified immediately during addition
@@ -171,7 +179,9 @@ class PaymentVerificationService:
         }
 
     @staticmethod
-    async def _initiate_microdeposit(conn, payment_method_id: UUID, metadata: dict[str, Any]) -> dict[str, Any]:
+    async def _initiate_microdeposit(
+        conn, payment_method_id: UUID, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Initiate micro-deposit verification for bank accounts
         Sends 2 small deposits (typically $0.01-$0.99)
@@ -238,9 +248,9 @@ class PaymentVerificationService:
             # Send email notification
             await email_service.send_payment_method_verification(
                 email=user_email,
-                payment_method_type='bank_account',
-                verification_type='micro_deposit',
-                verification_details={}
+                payment_method_type="bank_account",
+                verification_type="micro_deposit",
+                verification_details={},
             )
 
         return {
@@ -253,15 +263,17 @@ class PaymentVerificationService:
         }
 
     @staticmethod
-    async def _initiate_stk_push(conn, payment_method_id: UUID, metadata: dict[str, Any]) -> dict[str, Any]:
+    async def _initiate_stk_push(
+        conn, payment_method_id: UUID, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Initiate STK Push for M-Pesa verification
         Sends $0.01 test transaction to phone
         """
         logger.info(f"Initiating STK Push for M-Pesa {payment_method_id}")
 
-        phone = metadata.get('mpesa_phone')
-        country = metadata.get('mpesa_country', 'KE')
+        phone = metadata.get("mpesa_phone")
+        country = metadata.get("mpesa_country", "KE")
 
         # Generate verification code
         verification_code = secrets.token_hex(16)
@@ -319,17 +331,17 @@ class PaymentVerificationService:
 
         if user_data:
             # Send email notification
-            if user_data['email']:
+            if user_data["email"]:
                 await email_service.send_payment_method_verification(
-                    email=user_data['email'],
-                    payment_method_type='M-Pesa',
-                    verification_type='stk_push',
-                    verification_details={'phone': phone}
+                    email=user_data["email"],
+                    payment_method_type="M-Pesa",
+                    verification_type="stk_push",
+                    verification_details={"phone": phone},
                 )
 
             # Send SMS notification
-            if user_data['phone']:
-                await sms_service.send_mpesa_verification(phone=user_data['phone'])
+            if user_data["phone"]:
+                await sms_service.send_mpesa_verification(phone=user_data["phone"])
 
         return {
             "status": "pending",
@@ -341,7 +353,9 @@ class PaymentVerificationService:
         }
 
     @staticmethod
-    async def _initiate_oauth(conn, payment_method_id: UUID, payment_type: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    async def _initiate_oauth(
+        conn, payment_method_id: UUID, payment_type: str, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Initiate OAuth verification for PayPal/CashApp
         """
@@ -388,7 +402,7 @@ class PaymentVerificationService:
         )
 
         # Generate OAuth URL (would be real OAuth URL in production)
-        if payment_type == 'paypal':
+        if payment_type == "paypal":
             oauth_url = f"https://www.paypal.com/connect?state={state_token}"
         else:  # cashapp
             oauth_url = f"https://cash.app/oauth/authorize?state={state_token}"
@@ -409,8 +423,8 @@ class PaymentVerificationService:
             await email_service.send_payment_method_verification(
                 email=user_email,
                 payment_method_type=payment_type,
-                verification_type='oauth',
-                verification_details={'oauth_url': oauth_url}
+                verification_type="oauth",
+                verification_details={"oauth_url": oauth_url},
             )
 
         return {
@@ -424,15 +438,17 @@ class PaymentVerificationService:
         }
 
     @staticmethod
-    async def _verify_crypto_address(conn, payment_method_id: UUID, metadata: dict[str, Any]) -> dict[str, Any]:
+    async def _verify_crypto_address(
+        conn, payment_method_id: UUID, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Verify cryptocurrency wallet address
         Validates format and optionally sends test transaction
         """
         logger.info(f"Verifying crypto address for {payment_method_id}")
 
-        address = metadata.get('crypto_address')
-        network = metadata.get('crypto_network', 'bitcoin')
+        address = metadata.get("crypto_address")
+        network = metadata.get("crypto_network", "bitcoin")
 
         # Basic address validation (would use web3/bitcoin libraries in production)
         is_valid = PaymentVerificationService._validate_crypto_address(address, network)
@@ -468,19 +484,18 @@ class PaymentVerificationService:
         if not address:
             return False
 
-        if network == 'bitcoin':
+        if network == "bitcoin":
             # Bitcoin addresses start with 1, 3, or bc1
-            return address.startswith(('1', '3', 'bc1')) and len(address) >= 26
-        elif network == 'ethereum':
+            return address.startswith(("1", "3", "bc1")) and len(address) >= 26
+        elif network == "ethereum":
             # Ethereum addresses start with 0x and are 42 chars
-            return address.startswith('0x') and len(address) == 42
+            return address.startswith("0x") and len(address) == 42
 
         return True  # Allow other networks for now
 
     @staticmethod
     async def complete_verification(
-        payment_method_id: UUID,
-        verification_data: dict[str, Any]
+        payment_method_id: UUID, verification_data: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Complete verification based on user input
@@ -513,7 +528,7 @@ class PaymentVerificationService:
                 raise VerificationError("No verification found for this payment method")
 
             # Check expiration
-            if verification['expires_at'] < datetime.utcnow():
+            if verification["expires_at"] < datetime.utcnow():
                 await conn.execute(
                     "UPDATE payment_methods SET verification_status = $1 WHERE id = $2",
                     PaymentVerificationService.STATUS_FAILED,
@@ -522,16 +537,18 @@ class PaymentVerificationService:
                 raise VerificationError("Verification expired. Please restart verification.")
 
             # Check attempt count (max 3 attempts)
-            if verification['attempt_count'] >= 3:
+            if verification["attempt_count"] >= 3:
                 await conn.execute(
                     "UPDATE payment_methods SET verification_status = $1 WHERE id = $2",
                     PaymentVerificationService.STATUS_FAILED,
                     payment_method_id,
                 )
-                raise VerificationError("Maximum verification attempts exceeded. Please contact support.")
+                raise VerificationError(
+                    "Maximum verification attempts exceeded. Please contact support."
+                )
 
-            verification_type = verification['verification_type']
-            stored_data = verification['verification_data']
+            verification_type = verification["verification_type"]
+            stored_data = verification["verification_data"]
 
             # Verify based on type
             if verification_type == PaymentVerificationService.VERIFICATION_TYPE_MICRO_DEPOSIT:
@@ -582,7 +599,7 @@ class PaymentVerificationService:
                     payment_method_id,
                 )
 
-                remaining_attempts = 3 - (verification['attempt_count'] + 1)
+                remaining_attempts = 3 - (verification["attempt_count"] + 1)
 
                 return {
                     "status": "failed",
@@ -592,31 +609,25 @@ class PaymentVerificationService:
 
     @staticmethod
     async def _verify_microdeposit_amounts(
-        conn,
-        payment_method_id: UUID,
-        stored_data: dict[str, Any],
-        user_data: dict[str, Any]
+        conn, payment_method_id: UUID, stored_data: dict[str, Any], user_data: dict[str, Any]
     ) -> bool:
         """Verify micro-deposit amounts match"""
-        expected_amount1 = Decimal(stored_data['amount1'])
-        expected_amount2 = Decimal(stored_data['amount2'])
+        expected_amount1 = Decimal(stored_data["amount1"])
+        expected_amount2 = Decimal(stored_data["amount2"])
 
         try:
-            user_amount1 = Decimal(str(user_data.get('amount1', 0)))
-            user_amount2 = Decimal(str(user_data.get('amount2', 0)))
+            user_amount1 = Decimal(str(user_data.get("amount1", 0)))
+            user_amount2 = Decimal(str(user_data.get("amount2", 0)))
         except (InvalidOperation, TypeError, ValueError):
             return False
 
-        return (user_amount1 == expected_amount1 and user_amount2 == expected_amount2)
+        return user_amount1 == expected_amount1 and user_amount2 == expected_amount2
 
     @staticmethod
     async def _verify_stk_push_confirmation(
-        conn,
-        payment_method_id: UUID,
-        stored_data: dict[str, Any],
-        user_data: dict[str, Any]
+        conn, payment_method_id: UUID, stored_data: dict[str, Any], user_data: dict[str, Any]
     ) -> bool:
         """Verify STK Push was completed"""
         # In production, this would check M-Pesa callback
         # For now, assume success if user confirms
-        return user_data.get('confirmed', False)
+        return user_data.get("confirmed", False)

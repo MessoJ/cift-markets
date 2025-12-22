@@ -1,4 +1,3 @@
-
 import numpy as np
 import polars as pl
 
@@ -10,7 +9,7 @@ def get_triple_barrier_labels(
     pt: float = 1.0,
     sl: float = 1.0,
     horizon: int = 10,
-    min_ret: float = 0.0
+    min_ret: float = 0.0,
 ) -> pl.DataFrame:
     """
     Triple Barrier Method Labeling.
@@ -50,7 +49,7 @@ def get_triple_barrier_labels(
         lower = p0 * (1 - sl * vol)
 
         # Path
-        path = prices[i+1 : i+1+horizon]
+        path = prices[i + 1 : i + 1 + horizon]
 
         # Find first touch
         # 1. Touch Upper
@@ -86,13 +85,10 @@ def get_triple_barrier_labels(
         out_rets[i] = ret
 
     # Pad the end
-    labels[n-horizon:] = 0
-    out_rets[n-horizon:] = 0.0
+    labels[n - horizon :] = 0
+    out_rets[n - horizon :] = 0.0
 
-    return df.with_columns([
-        pl.Series("label", labels),
-        pl.Series("barrier_return", out_rets)
-    ])
+    return df.with_columns([pl.Series("label", labels), pl.Series("barrier_return", out_rets)])
 
 
 def get_meta_labels(

@@ -36,19 +36,22 @@ from cift.core.config import settings
 # DATA MODELS
 # ============================================================================
 
+
 class MessageType(str, Enum):
     """Polygon WebSocket message types."""
-    TRADE = "T"           # Trade tick
-    QUOTE = "Q"           # NBBO quote
+
+    TRADE = "T"  # Trade tick
+    QUOTE = "Q"  # NBBO quote
     AGGREGATE_MIN = "AM"  # Minute aggregate
-    AGGREGATE_SEC = "A"   # Second aggregate
-    STATUS = "status"     # Connection status
-    ERROR = "error"       # Error message
+    AGGREGATE_SEC = "A"  # Second aggregate
+    STATUS = "status"  # Connection status
+    ERROR = "error"  # Error message
 
 
 @dataclass
 class L2Quote:
     """Level 2 quote data (NBBO)."""
+
     symbol: str
     bid_price: float
     bid_size: int
@@ -93,6 +96,7 @@ class L2Quote:
 @dataclass
 class Trade:
     """Trade tick data."""
+
     symbol: str
     price: float
     size: int
@@ -123,6 +127,7 @@ class Trade:
 @dataclass
 class AggregateBar:
     """Aggregate bar (OHLCV)."""
+
     symbol: str
     open: float
     high: float
@@ -157,6 +162,7 @@ class AggregateBar:
 # ============================================================================
 # L2 CONNECTOR
 # ============================================================================
+
 
 class PolygonL2Connector:
     """
@@ -677,6 +683,7 @@ class PolygonL2Connector:
 # ============================================================================
 # CONVENIENCE FUNCTIONS
 # ============================================================================
+
 
 async def create_polygon_connector(
     symbols: list[str],

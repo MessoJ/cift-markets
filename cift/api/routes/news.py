@@ -22,8 +22,10 @@ router = APIRouter(prefix="/news", tags=["news"])
 # MODELS
 # ============================================================================
 
+
 class NewsArticle(BaseModel):
     """News article model"""
+
     id: str
     title: str
     summary: str
@@ -38,6 +40,7 @@ class NewsArticle(BaseModel):
 
 class MarketMover(BaseModel):
     """Market mover model"""
+
     symbol: str
     name: str
     price: Decimal
@@ -49,6 +52,7 @@ class MarketMover(BaseModel):
 
 class EconomicEvent(BaseModel):
     """Economic calendar event model"""
+
     id: str
     title: str
     country: str
@@ -63,6 +67,7 @@ class EconomicEvent(BaseModel):
 # ============================================================================
 # ENDPOINTS - NEWS
 # ============================================================================
+
 
 @router.get("/articles")
 async def get_news(
@@ -95,7 +100,7 @@ async def get_news(
     params = [datetime.utcnow() - timedelta(days=7)]  # Last 7 days
     param_count = 2
 
-    if category and category != 'all':
+    if category and category != "all":
         query += f" AND category = ${param_count}"
         params.append(category)
         param_count += 1
@@ -114,28 +119,32 @@ async def get_news(
         articles = []
         for row in rows:
             # Filter out known CORS-blocked domains
-            image_url = row['image_url']
-            if image_url and any(domain in image_url for domain in ['cryptoslate.com', 'medium.com']):
+            image_url = row["image_url"]
+            if image_url and any(
+                domain in image_url for domain in ["cryptoslate.com", "medium.com"]
+            ):
                 image_url = None
 
-            articles.append({
-                "id": row['id'],
-                "title": row['title'],
-                "summary": row['summary'],
-                "source": row['source'],
-                "url": row['url'],
-                "published_at": row['published_at'],
-                "category": row['category'] or "general",
-                "sentiment": row['sentiment'],
-                "symbols": row['symbols'] or [],
-                "image_url": image_url,
-            })
+            articles.append(
+                {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "summary": row["summary"],
+                    "source": row["source"],
+                    "url": row["url"],
+                    "published_at": row["published_at"],
+                    "category": row["category"] or "general",
+                    "sentiment": row["sentiment"],
+                    "symbols": row["symbols"] or [],
+                    "image_url": image_url,
+                }
+            )
 
         # Get total count
         count_query = "SELECT COUNT(*) FROM news_articles WHERE published_at >= $1"
         count_params = [datetime.utcnow() - timedelta(days=7)]
 
-        if category and category != 'all':
+        if category and category != "all":
             count_query += f" AND category = ${len(count_params) + 1}"
             count_params.append(category)
 
@@ -187,24 +196,25 @@ async def get_article(
             raise HTTPException(status_code=404, detail="Article not found")
 
         return {
-            "id": row['id'],
-            "title": row['title'],
-            "summary": row['summary'],
-            "content": row['content'],
-            "source": row['source'],
-            "url": row['url'],
-            "published_at": row['published_at'],
-            "category": row['category'],
-            "sentiment": row['sentiment'],
-            "symbols": row['symbols'] or [],
-            "image_url": row['image_url'],
-            "author": row['author'],
+            "id": row["id"],
+            "title": row["title"],
+            "summary": row["summary"],
+            "content": row["content"],
+            "source": row["source"],
+            "url": row["url"],
+            "published_at": row["published_at"],
+            "category": row["category"],
+            "sentiment": row["sentiment"],
+            "symbols": row["symbols"] or [],
+            "image_url": row["image_url"],
+            "author": row["author"],
         }
 
 
 # ============================================================================
 # ENDPOINTS - MARKET MOVERS
 # ============================================================================
+
 
 @router.get("/movers/{mover_type}")
 async def get_market_movers(
@@ -213,7 +223,7 @@ async def get_market_movers(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Get market movers (gainers, losers, most active) from database"""
-    if mover_type not in ['gainers', 'losers', 'active']:
+    if mover_type not in ["gainers", "losers", "active"]:
         raise HTTPException(status_code=400, detail="Invalid mover type")
 
     pool = await get_questdb_pool()
@@ -221,18 +231,18 @@ async def get_market_movers(
     # First, get the most recent data timestamp from QuestDB
     async with pool.acquire() as conn:
         latest_row = await conn.fetchrow("SELECT max(timestamp) as latest FROM ticks")
-        if not latest_row or not latest_row['latest']:
+        if not latest_row or not latest_row["latest"]:
             logger.warning("No tick data available in QuestDB")
             return []
 
-        latest_timestamp = latest_row['latest']
+        latest_timestamp = latest_row["latest"]
         # Use the day of the latest available data
         data_start = latest_timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Calculate movers from available tick data (QuestDB compatible)
-    if mover_type == 'gainers':
+    if mover_type == "gainers":
         order_clause = "ORDER BY change_percent DESC"
-    elif mover_type == 'losers':
+    elif mover_type == "losers":
         order_clause = "ORDER BY change_percent ASC"
     else:  # active
         order_clause = "ORDER BY total_volume DESC"
@@ -263,11 +273,11 @@ async def get_market_movers(
         pg_pool = await get_postgres_pool()
 
         for row in rows:
-            symbol = row['symbol']
-            current_price = float(row['current_price'])
-            open_price = float(row['open_price'])
+            symbol = row["symbol"]
+            current_price = float(row["current_price"])
+            open_price = float(row["open_price"])
             change = current_price - open_price
-            change_percent = float(row['change_percent'])
+            change_percent = float(row["change_percent"])
 
             # Get company name from postgres
             async with pg_pool.acquire() as pg_conn:
@@ -275,8 +285,10 @@ async def get_market_movers(
                     "SELECT name, market_cap FROM symbols WHERE symbol = $1",
                     symbol,
                 )
-                name = name_row['name'] if name_row else symbol
-                market_cap = float(name_row['market_cap']) if (name_row and name_row['market_cap']) else None
+                name = name_row["name"] if name_row else symbol
+                market_cap = (
+                    float(name_row["market_cap"]) if (name_row and name_row["market_cap"]) else None
+                )
 
             movers.append(
                 MarketMover(
@@ -285,14 +297,16 @@ async def get_market_movers(
                     price=current_price,
                     change=change,
                     change_percent=change_percent,
-                    volume=int(row['total_volume']),
+                    volume=int(row["total_volume"]),
                     market_cap=market_cap,
                 )
             )
 
         # If no data, log warning and return empty
         if not movers:
-            logger.warning(f"No tick data found for {mover_type}. Run 'python scripts/populate_today.py' to generate data.")
+            logger.warning(
+                f"No tick data found for {mover_type}. Run 'python scripts/populate_today.py' to generate data."
+            )
 
         return movers
 
@@ -304,15 +318,15 @@ async def get_market_summary(
     """Get market summary (indices) from database"""
     pool = await get_questdb_pool()
 
-    indices = ['SPY', 'QQQ', 'DIA', 'IWM']  # S&P 500, NASDAQ, Dow, Russell 2000
+    indices = ["SPY", "QQQ", "DIA", "IWM"]  # S&P 500, NASDAQ, Dow, Russell 2000
 
     # First, get the most recent data timestamp
     async with pool.acquire() as conn:
         latest_row = await conn.fetchrow("SELECT max(timestamp) as latest FROM ticks")
-        if not latest_row or not latest_row['latest']:
+        if not latest_row or not latest_row["latest"]:
             return []
 
-        data_start = latest_row['latest'].replace(hour=0, minute=0, second=0, microsecond=0)
+        data_start = latest_row["latest"].replace(hour=0, minute=0, second=0, microsecond=0)
 
     summary = []
 
@@ -336,10 +350,10 @@ async def get_market_summary(
             )
 
             if row:
-                open_price = float(row['open_price'])
-                current_price = float(row['price'])
+                open_price = float(row["open_price"])
+                current_price = float(row["price"])
                 change = current_price - open_price
-                change_percent = float(row['change_percent']) if row['change_percent'] else 0
+                change_percent = float(row["change_percent"]) if row["change_percent"] else 0
 
                 # Get index name
                 pg_pool = await get_postgres_pool()
@@ -348,16 +362,18 @@ async def get_market_summary(
                         "SELECT name FROM symbols WHERE symbol = $1",
                         index_symbol,
                     )
-                    name = name_row['name'] if name_row else index_symbol
+                    name = name_row["name"] if name_row else index_symbol
 
-                summary.append({
-                    "symbol": row['symbol'],
-                    "name": name,
-                    "price": current_price,
-                    "change": change,
-                    "change_percent": change_percent,
-                    "volume": int(row['volume']) if row['volume'] else 0,
-                })
+                summary.append(
+                    {
+                        "symbol": row["symbol"],
+                        "name": name,
+                        "price": current_price,
+                        "change": change,
+                        "change_percent": change_percent,
+                        "volume": int(row["volume"]) if row["volume"] else 0,
+                    }
+                )
 
     return summary
 
@@ -365,6 +381,7 @@ async def get_market_summary(
 # ============================================================================
 # ENDPOINTS - ECONOMIC CALENDAR
 # ============================================================================
+
 
 @router.get("/economic-calendar")
 async def get_economic_calendar(
@@ -406,15 +423,15 @@ async def get_economic_calendar(
 
         return [
             EconomicEvent(
-                id=row['id'],
-                title=row['title'],
-                country=row['country'],
-                date=row['event_date'],
-                impact=row['impact'],
-                forecast=row['forecast'],
-                previous=row['previous'],
-                actual=row['actual'],
-                currency=row['currency'],
+                id=row["id"],
+                title=row["title"],
+                country=row["country"],
+                date=row["event_date"],
+                impact=row["impact"],
+                forecast=row["forecast"],
+                previous=row["previous"],
+                actual=row["actual"],
+                currency=row["currency"],
             )
             for row in rows
         ]
@@ -453,14 +470,16 @@ async def get_earnings_calendar(
 
         return [
             {
-                "symbol": row['symbol'],
-                "company_name": row['company_name'],
-                "earnings_date": row['earnings_date'].isoformat(),
-                "earnings_time": row['earnings_time'],
-                "eps_estimate": float(row['eps_estimate']) if row['eps_estimate'] else None,
-                "eps_actual": float(row['eps_actual']) if row['eps_actual'] else None,
-                "revenue_estimate": float(row['revenue_estimate']) if row['revenue_estimate'] else None,
-                "revenue_actual": float(row['revenue_actual']) if row['revenue_actual'] else None,
+                "symbol": row["symbol"],
+                "company_name": row["company_name"],
+                "earnings_date": row["earnings_date"].isoformat(),
+                "earnings_time": row["earnings_time"],
+                "eps_estimate": float(row["eps_estimate"]) if row["eps_estimate"] else None,
+                "eps_actual": float(row["eps_actual"]) if row["eps_actual"] else None,
+                "revenue_estimate": (
+                    float(row["revenue_estimate"]) if row["revenue_estimate"] else None
+                ),
+                "revenue_actual": float(row["revenue_actual"]) if row["revenue_actual"] else None,
             }
             for row in rows
         ]
@@ -469,6 +488,7 @@ async def get_earnings_calendar(
 # ============================================================================
 # ENDPOINTS - SENTIMENT
 # ============================================================================
+
 
 @router.get("/sentiment/{symbol}")
 async def get_symbol_sentiment(
@@ -493,7 +513,7 @@ async def get_symbol_sentiment(
             datetime.utcnow() - timedelta(days=7),
         )
 
-        sentiment_counts = {row['sentiment']: row['count'] for row in rows}
+        sentiment_counts = {row["sentiment"]: row["count"] for row in rows}
         total = sum(sentiment_counts.values())
 
         if total == 0:
@@ -509,9 +529,9 @@ async def get_symbol_sentiment(
         return {
             "symbol": symbol.upper(),
             "sentiment": max(sentiment_counts, key=sentiment_counts.get),
-            "positive_percent": round((sentiment_counts.get('positive', 0) / total) * 100, 2),
-            "negative_percent": round((sentiment_counts.get('negative', 0) / total) * 100, 2),
-            "neutral_percent": round((sentiment_counts.get('neutral', 0) / total) * 100, 2),
+            "positive_percent": round((sentiment_counts.get("positive", 0) / total) * 100, 2),
+            "negative_percent": round((sentiment_counts.get("negative", 0) / total) * 100, 2),
+            "neutral_percent": round((sentiment_counts.get("neutral", 0) / total) * 100, 2),
             "total_articles": total,
         }
 
@@ -519,6 +539,7 @@ async def get_symbol_sentiment(
 # ============================================================================
 # ENDPOINTS - GLOBE DATA
 # ============================================================================
+
 
 @router.get("/globe-data")
 async def get_globe_news_data(
@@ -557,13 +578,13 @@ async def get_globe_news_data(
             HAVING COUNT(*) > 0
             ORDER BY article_count DESC
             """,
-            time_threshold
+            time_threshold,
         )
 
         # Get top headlines per country (top 3)
         countries_list = []
         for row in country_data:
-            country_code = row['country_code']
+            country_code = row["country_code"]
 
             # Get top 3 headlines for this country
             headlines = await conn.fetch(
@@ -576,43 +597,49 @@ async def get_globe_news_data(
                 LIMIT 3
                 """,
                 country_code,
-                time_threshold
+                time_threshold,
             )
 
             # Calculate sentiment score (-1 to 1)
-            total_articles = row['article_count']
+            total_articles = row["article_count"]
             if total_articles > 0:
-                sentiment_score = (
-                    (row['positive_count'] - row['negative_count']) / total_articles
-                )
+                sentiment_score = (row["positive_count"] - row["negative_count"]) / total_articles
             else:
                 sentiment_score = 0
 
-            countries_list.append({
-                "code": country_code,
-                "name": row['country'],
-                "region": row['region'],
-                "lat": float(row['latitude']),
-                "lng": float(row['longitude']),
-                "article_count": row['article_count'],
-                "sentiment_score": round(sentiment_score, 3),
-                "sentiment_breakdown": {
-                    "positive": row['positive_count'],
-                    "negative": row['negative_count'],
-                    "neutral": row['neutral_count']
-                },
-                "latest_time": row['latest_article_time'].isoformat() if row['latest_article_time'] else None,
-                "top_headlines": [
-                    {
-                        "id": h['id'],
-                        "title": h['title'],
-                        "source": h['source'],
-                        "sentiment": h['sentiment'],
-                        "published_at": h['published_at'].isoformat() if h['published_at'] else None
-                    }
-                    for h in headlines
-                ]
-            })
+            countries_list.append(
+                {
+                    "code": country_code,
+                    "name": row["country"],
+                    "region": row["region"],
+                    "lat": float(row["latitude"]),
+                    "lng": float(row["longitude"]),
+                    "article_count": row["article_count"],
+                    "sentiment_score": round(sentiment_score, 3),
+                    "sentiment_breakdown": {
+                        "positive": row["positive_count"],
+                        "negative": row["negative_count"],
+                        "neutral": row["neutral_count"],
+                    },
+                    "latest_time": (
+                        row["latest_article_time"].isoformat()
+                        if row["latest_article_time"]
+                        else None
+                    ),
+                    "top_headlines": [
+                        {
+                            "id": h["id"],
+                            "title": h["title"],
+                            "source": h["source"],
+                            "sentiment": h["sentiment"],
+                            "published_at": (
+                                h["published_at"].isoformat() if h["published_at"] else None
+                            ),
+                        }
+                        for h in headlines
+                    ],
+                }
+            )
 
         # Get breaking news (last hour)
         breaking_news = await conn.fetch(
@@ -629,23 +656,25 @@ async def get_globe_news_data(
             ORDER BY published_at DESC
             LIMIT 10
             """,
-            datetime.utcnow() - timedelta(hours=1)
+            datetime.utcnow() - timedelta(hours=1),
         )
 
         return {
             "countries": countries_list,
             "total_countries": len(countries_list),
-            "total_articles": sum(c['article_count'] for c in countries_list),
+            "total_articles": sum(c["article_count"] for c in countries_list),
             "time_range_hours": hours,
             "breaking_news": [
                 {
-                    "id": article['id'],
-                    "title": article['title'],
-                    "source": article['source'],
-                    "country_code": article['country_code'],
-                    "sentiment": article['sentiment'],
-                    "published_at": article['published_at'].isoformat() if article['published_at'] else None
+                    "id": article["id"],
+                    "title": article["title"],
+                    "source": article["source"],
+                    "country_code": article["country_code"],
+                    "sentiment": article["sentiment"],
+                    "published_at": (
+                        article["published_at"].isoformat() if article["published_at"] else None
+                    ),
                 }
                 for article in breaking_news
-            ]
+            ],
         }

@@ -2,6 +2,7 @@
 Cryptocurrency Payment Processor - RULES COMPLIANT
 Integrates with blockchain networks for Bitcoin and Ethereum payments
 """
+
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -34,13 +35,13 @@ class CryptoProcessor(PaymentProcessor):
 
     def _validate_config(self) -> None:
         """Validate crypto configuration"""
-        required = ['deposit_addresses']
+        required = ["deposit_addresses"]
 
         for key in required:
             if key not in self.config:
                 raise PaymentProcessorError(f"Missing crypto configuration: {key}")
 
-        if not isinstance(self.config['deposit_addresses'], dict):
+        if not isinstance(self.config["deposit_addresses"], dict):
             raise PaymentProcessorError("deposit_addresses must be a dictionary")
 
     async def _fetch_payment_method(self, payment_method_id: UUID) -> dict[str, Any]:
@@ -59,13 +60,13 @@ class CryptoProcessor(PaymentProcessor):
                 FROM payment_methods
                 WHERE id = $1
                 """,
-                payment_method_id
+                payment_method_id,
             )
 
             if not row:
                 raise PaymentProcessorError("Payment method not found")
 
-            if row['type'] != 'crypto_wallet':
+            if row["type"] != "crypto_wallet":
                 raise PaymentProcessorError("Payment method is not a crypto wallet")
 
             return dict(row)
@@ -87,7 +88,7 @@ class CryptoProcessor(PaymentProcessor):
         # P2PKH (legacy): starts with 1
         # P2SH: starts with 3
         # Bech32 (native SegWit): starts with bc1
-        valid_prefixes = ('1', '3', 'bc1')
+        valid_prefixes = ("1", "3", "bc1")
 
         if not address.startswith(valid_prefixes):
             return False
@@ -113,7 +114,7 @@ class CryptoProcessor(PaymentProcessor):
             return False
 
         # Must start with 0x and be 42 characters (0x + 40 hex chars)
-        if not address.startswith('0x'):
+        if not address.startswith("0x"):
             return False
 
         if len(address) != 42:
@@ -140,7 +141,7 @@ class CryptoProcessor(PaymentProcessor):
                 response = await client.get(url, timeout=10.0)
                 response.raise_for_status()
                 data = response.json()
-                return Decimal(str(data['USD']['last']))
+                return Decimal(str(data["USD"]["last"]))
         except Exception as e:
             raise PaymentProcessorError(f"Failed to get BTC price: {str(e)}") from e
 
@@ -159,7 +160,7 @@ class CryptoProcessor(PaymentProcessor):
                 response = await client.get(url, timeout=10.0)
                 response.raise_for_status()
                 data = response.json()
-                return Decimal(str(data['ethereum']['usd']))
+                return Decimal(str(data["ethereum"]["usd"]))
         except Exception as e:
             raise PaymentProcessorError(f"Failed to get ETH price: {str(e)}") from e
 
@@ -174,10 +175,10 @@ class CryptoProcessor(PaymentProcessor):
         Returns:
             Amount in crypto
         """
-        if network.lower() == 'bitcoin':
+        if network.lower() == "bitcoin":
             btc_price = await self._get_btc_price_usd()
             return usd_amount / btc_price
-        elif network.lower() == 'ethereum':
+        elif network.lower() == "ethereum":
             eth_price = await self._get_eth_price_usd()
             return usd_amount / eth_price
         else:
@@ -202,17 +203,22 @@ class CryptoProcessor(PaymentProcessor):
                 data = response.json()
 
                 # Extract relevant info
-                confirmations = data.get('block_height', 0)
+                confirmations = data.get("block_height", 0)
                 if confirmations > 0:
                     # Estimate confirmations (simplified)
                     confirmations = 1  # In production, calculate from current block height
 
                 return {
-                    'hash': tx_hash,
-                    'confirmations': confirmations,
-                    'amount_btc': Decimal(sum(out['value'] for out in data['out'])) / Decimal('100000000'),
-                    'time': datetime.fromtimestamp(data.get('time', 0)),
-                    'status': 'confirmed' if confirmations >= self.config.get('confirmations_required', 3) else 'pending'
+                    "hash": tx_hash,
+                    "confirmations": confirmations,
+                    "amount_btc": Decimal(sum(out["value"] for out in data["out"]))
+                    / Decimal("100000000"),
+                    "time": datetime.fromtimestamp(data.get("time", 0)),
+                    "status": (
+                        "confirmed"
+                        if confirmations >= self.config.get("confirmations_required", 3)
+                        else "pending"
+                    ),
                 }
         except Exception as e:
             raise PaymentProcessorError(f"Failed to check BTC transaction: {str(e)}") from e
@@ -227,7 +233,7 @@ class CryptoProcessor(PaymentProcessor):
         Returns:
             Transaction details
         """
-        api_key = self.config.get('blockchain_explorer_api_key', '')
+        api_key = self.config.get("blockchain_explorer_api_key", "")
         url = f"{self.ETHERSCAN_API}?module=proxy&action=eth_getTransactionByHash&txhash={tx_hash}&apikey={api_key}"
 
         try:
@@ -236,15 +242,15 @@ class CryptoProcessor(PaymentProcessor):
                 response.raise_for_status()
                 data = response.json()
 
-                if data['result']:
-                    tx = data['result']
+                if data["result"]:
+                    tx = data["result"]
 
                     # Convert hex to decimal
-                    value_wei = int(tx.get('value', '0x0'), 16)
-                    value_eth = Decimal(value_wei) / Decimal('1000000000000000000')
+                    value_wei = int(tx.get("value", "0x0"), 16)
+                    value_eth = Decimal(value_wei) / Decimal("1000000000000000000")
 
                     # Check if confirmed
-                    block_number = tx.get('blockNumber')
+                    block_number = tx.get("blockNumber")
                     confirmations = 0
 
                     if block_number:
@@ -252,23 +258,24 @@ class CryptoProcessor(PaymentProcessor):
                         current_block_url = f"{self.ETHERSCAN_API}?module=proxy&action=eth_blockNumber&apikey={api_key}"
                         block_response = await client.get(current_block_url, timeout=10.0)
                         current_block_data = block_response.json()
-                        current_block = int(current_block_data['result'], 16)
+                        current_block = int(current_block_data["result"], 16)
                         block_num = int(block_number, 16)
                         confirmations = current_block - block_num
 
                     return {
-                        'hash': tx_hash,
-                        'confirmations': confirmations,
-                        'amount_eth': value_eth,
-                        'from': tx.get('from'),
-                        'to': tx.get('to'),
-                        'status': 'confirmed' if confirmations >= self.config.get('confirmations_required', 12) else 'pending'
+                        "hash": tx_hash,
+                        "confirmations": confirmations,
+                        "amount_eth": value_eth,
+                        "from": tx.get("from"),
+                        "to": tx.get("to"),
+                        "status": (
+                            "confirmed"
+                            if confirmations >= self.config.get("confirmations_required", 12)
+                            else "pending"
+                        ),
                     }
                 else:
-                    return {
-                        'hash': tx_hash,
-                        'status': 'not_found'
-                    }
+                    return {"hash": tx_hash, "status": "not_found"}
 
         except Exception as e:
             raise PaymentProcessorError(f"Failed to check ETH transaction: {str(e)}") from e
@@ -278,7 +285,7 @@ class CryptoProcessor(PaymentProcessor):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process crypto deposit
@@ -288,10 +295,10 @@ class CryptoProcessor(PaymentProcessor):
         """
         # Fetch payment method
         payment_method = await self._fetch_payment_method(payment_method_id)
-        network = payment_method['crypto_network'].lower()
+        network = payment_method["crypto_network"].lower()
 
         # Get deposit address for this network
-        deposit_address = self.config['deposit_addresses'].get(network)
+        deposit_address = self.config["deposit_addresses"].get(network)
 
         if not deposit_address:
             raise PaymentProcessorError(f"No deposit address configured for {network}")
@@ -300,24 +307,26 @@ class CryptoProcessor(PaymentProcessor):
         crypto_amount = await self._convert_usd_to_crypto(amount, network)
 
         # Calculate fee
-        fee = await self.calculate_fee(amount, 'deposit', 'crypto_wallet')
+        fee = await self.calculate_fee(amount, "deposit", "crypto_wallet")
 
         # Generate unique deposit identifier (can use memo/destination tag for some networks)
         deposit_id = f"{user_id}-{datetime.now().timestamp()}"
 
         return {
-            'transaction_id': deposit_id,
-            'status': 'pending',  # Waiting for blockchain confirmation
-            'fee': fee,
-            'estimated_arrival': datetime.now() + timedelta(hours=1),  # Depends on network
-            'additional_data': {
-                'deposit_address': deposit_address,
-                'amount_crypto': str(crypto_amount),
-                'network': network,
-                'amount_usd': str(amount),
-                'instructions': f'Send exactly {crypto_amount:.8f} {network.upper()} to {deposit_address}',
-                'confirmations_required': self.config.get('confirmations_required', 3 if network == 'bitcoin' else 12)
-            }
+            "transaction_id": deposit_id,
+            "status": "pending",  # Waiting for blockchain confirmation
+            "fee": fee,
+            "estimated_arrival": datetime.now() + timedelta(hours=1),  # Depends on network
+            "additional_data": {
+                "deposit_address": deposit_address,
+                "amount_crypto": str(crypto_amount),
+                "network": network,
+                "amount_usd": str(amount),
+                "instructions": f"Send exactly {crypto_amount:.8f} {network.upper()} to {deposit_address}",
+                "confirmations_required": self.config.get(
+                    "confirmations_required", 3 if network == "bitcoin" else 12
+                ),
+            },
         }
 
     async def process_withdrawal(
@@ -325,7 +334,7 @@ class CryptoProcessor(PaymentProcessor):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process crypto withdrawal
@@ -334,20 +343,20 @@ class CryptoProcessor(PaymentProcessor):
         """
         # Fetch payment method
         payment_method = await self._fetch_payment_method(payment_method_id)
-        recipient_address = payment_method['crypto_address']
-        network = payment_method['crypto_network'].lower()
+        recipient_address = payment_method["crypto_address"]
+        network = payment_method["crypto_network"].lower()
 
         # Validate address
-        if network == 'bitcoin' and not self._validate_btc_address(recipient_address):
+        if network == "bitcoin" and not self._validate_btc_address(recipient_address):
             raise PaymentProcessorError("Invalid Bitcoin address")
-        elif network == 'ethereum' and not self._validate_eth_address(recipient_address):
+        elif network == "ethereum" and not self._validate_eth_address(recipient_address):
             raise PaymentProcessorError("Invalid Ethereum address")
 
         # Convert USD to crypto
         crypto_amount = await self._convert_usd_to_crypto(amount, network)
 
         # Calculate fee
-        fee = await self.calculate_fee(amount, 'withdrawal', 'crypto_wallet')
+        fee = await self.calculate_fee(amount, "withdrawal", "crypto_wallet")
 
         # In production, you would:
         # 1. Create and sign transaction using hot wallet private key
@@ -358,23 +367,21 @@ class CryptoProcessor(PaymentProcessor):
         # You'd use libraries like: python-bitcoinlib, web3.py, etc.
 
         return {
-            'transaction_id': f'pending_crypto_withdrawal_{datetime.now().timestamp()}',
-            'status': 'processing',
-            'fee': fee,
-            'estimated_arrival': datetime.now() + timedelta(hours=2),
-            'additional_data': {
-                'recipient_address': recipient_address,
-                'amount_crypto': str(crypto_amount),
-                'network': network,
-                'amount_usd': str(amount),
-                'note': 'Withdrawal will be processed within 24 hours'
-            }
+            "transaction_id": f"pending_crypto_withdrawal_{datetime.now().timestamp()}",
+            "status": "processing",
+            "fee": fee,
+            "estimated_arrival": datetime.now() + timedelta(hours=2),
+            "additional_data": {
+                "recipient_address": recipient_address,
+                "amount_crypto": str(crypto_amount),
+                "network": network,
+                "amount_usd": str(amount),
+                "note": "Withdrawal will be processed within 24 hours",
+            },
         }
 
     async def verify_payment_method(
-        self,
-        payment_method_id: UUID,
-        verification_data: dict[str, Any]
+        self, payment_method_id: UUID, verification_data: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Verify crypto wallet address
@@ -382,42 +389,36 @@ class CryptoProcessor(PaymentProcessor):
         Validates address format
         """
         payment_method = await self._fetch_payment_method(payment_method_id)
-        address = payment_method['crypto_address']
-        network = payment_method['crypto_network'].lower()
+        address = payment_method["crypto_address"]
+        network = payment_method["crypto_network"].lower()
 
         is_valid = False
 
-        if network == 'bitcoin':
+        if network == "bitcoin":
             is_valid = self._validate_btc_address(address)
-        elif network == 'ethereum':
+        elif network == "ethereum":
             is_valid = self._validate_eth_address(address)
         else:
             return {
-                'verified': False,
-                'message': f'Unsupported network: {network}',
-                'additional_data': {}
+                "verified": False,
+                "message": f"Unsupported network: {network}",
+                "additional_data": {},
             }
 
         if is_valid:
             return {
-                'verified': True,
-                'message': f'{network.title()} address verified',
-                'additional_data': {
-                    'address': address,
-                    'network': network
-                }
+                "verified": True,
+                "message": f"{network.title()} address verified",
+                "additional_data": {"address": address, "network": network},
             }
         else:
             return {
-                'verified': False,
-                'message': f'Invalid {network} address format',
-                'additional_data': {}
+                "verified": False,
+                "message": f"Invalid {network} address format",
+                "additional_data": {},
             }
 
-    async def get_transaction_status(
-        self,
-        external_transaction_id: str
-    ) -> dict[str, Any]:
+    async def get_transaction_status(self, external_transaction_id: str) -> dict[str, Any]:
         """
         Query crypto transaction status
 
@@ -425,31 +426,31 @@ class CryptoProcessor(PaymentProcessor):
             external_transaction_id: Transaction hash
         """
         # Determine if it's BTC or ETH based on format
-        if external_transaction_id.startswith('0x'):
+        if external_transaction_id.startswith("0x"):
             # Ethereum transaction
             try:
                 tx_data = await self._check_eth_transaction(external_transaction_id)
 
-                if tx_data['status'] == 'confirmed':
+                if tx_data["status"] == "confirmed":
                     return {
-                        'status': 'completed',
-                        'completed_at': datetime.now(),
-                        'failure_reason': None,
-                        'additional_data': tx_data
+                        "status": "completed",
+                        "completed_at": datetime.now(),
+                        "failure_reason": None,
+                        "additional_data": tx_data,
                     }
-                elif tx_data['status'] == 'pending':
+                elif tx_data["status"] == "pending":
                     return {
-                        'status': 'pending',
-                        'completed_at': None,
-                        'failure_reason': None,
-                        'additional_data': tx_data
+                        "status": "pending",
+                        "completed_at": None,
+                        "failure_reason": None,
+                        "additional_data": tx_data,
                     }
                 else:
                     return {
-                        'status': 'failed',
-                        'completed_at': None,
-                        'failure_reason': 'Transaction not found',
-                        'additional_data': tx_data
+                        "status": "failed",
+                        "completed_at": None,
+                        "failure_reason": "Transaction not found",
+                        "additional_data": tx_data,
                     }
             except PaymentProcessorError:
                 raise
@@ -458,28 +459,25 @@ class CryptoProcessor(PaymentProcessor):
             try:
                 tx_data = await self._check_btc_transaction(external_transaction_id)
 
-                if tx_data['status'] == 'confirmed':
+                if tx_data["status"] == "confirmed":
                     return {
-                        'status': 'completed',
-                        'completed_at': tx_data['time'],
-                        'failure_reason': None,
-                        'additional_data': tx_data
+                        "status": "completed",
+                        "completed_at": tx_data["time"],
+                        "failure_reason": None,
+                        "additional_data": tx_data,
                     }
                 else:
                     return {
-                        'status': 'pending',
-                        'completed_at': None,
-                        'failure_reason': None,
-                        'additional_data': tx_data
+                        "status": "pending",
+                        "completed_at": None,
+                        "failure_reason": None,
+                        "additional_data": tx_data,
                     }
             except PaymentProcessorError:
                 raise
 
     async def calculate_fee(
-        self,
-        amount: Decimal,
-        transaction_type: str,
-        payment_method_type: str
+        self, amount: Decimal, transaction_type: str, payment_method_type: str
     ) -> Decimal:
         """
         Calculate crypto processing fee
@@ -491,17 +489,17 @@ class CryptoProcessor(PaymentProcessor):
         In production, you'd fetch real-time network fees
         """
         # Platform fee: 1%
-        platform_fee_percent = Decimal('0.01')
+        platform_fee_percent = Decimal("0.01")
         platform_fee = amount * platform_fee_percent
 
         # Estimated network fee (in USD equivalent)
         # In production, fetch real-time gas prices
-        if transaction_type == 'withdrawal':
+        if transaction_type == "withdrawal":
             # Higher fee for withdrawals (we pay network fee)
-            network_fee = Decimal('5.00')  # Approximate
+            network_fee = Decimal("5.00")  # Approximate
         else:
             # Lower fee for deposits (user pays network fee)
-            network_fee = Decimal('0.50')
+            network_fee = Decimal("0.50")
 
         total_fee = platform_fee + network_fee
 
@@ -516,22 +514,22 @@ class CryptoProcessor(PaymentProcessor):
         # This would be implemented based on webhook provider
         # Example structure:
 
-        tx_hash = payload.get('hash')
-        confirmations = payload.get('confirmations', 0)
+        tx_hash = payload.get("hash")
+        confirmations = payload.get("confirmations", 0)
 
-        if confirmations >= self.config.get('confirmations_required', 3):
+        if confirmations >= self.config.get("confirmations_required", 3):
             return {
-                'event': 'transaction_confirmed',
-                'transaction_id': tx_hash,
-                'status': 'completed',
-                'confirmations': confirmations,
-                'additional_data': payload
+                "event": "transaction_confirmed",
+                "transaction_id": tx_hash,
+                "status": "completed",
+                "confirmations": confirmations,
+                "additional_data": payload,
             }
         else:
             return {
-                'event': 'transaction_detected',
-                'transaction_id': tx_hash,
-                'status': 'pending',
-                'confirmations': confirmations,
-                'additional_data': payload
+                "event": "transaction_detected",
+                "transaction_id": tx_hash,
+                "status": "pending",
+                "confirmations": confirmations,
+                "additional_data": payload,
             }

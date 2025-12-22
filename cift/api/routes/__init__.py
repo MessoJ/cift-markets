@@ -16,6 +16,12 @@ from cift.api.routes import (
 )
 
 __all__ = [
-    "auth", "market_data", "trading", "analytics",
-    "drilldowns", "watchlists", "transactions", "inference"
+    "auth",
+    "market_data",
+    "trading",
+    "analytics",
+    "drilldowns",
+    "watchlists",
+    "transactions",
+    "inference",
 ]

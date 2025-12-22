@@ -26,6 +26,7 @@ from cift.core.database import Base
 # USER MODELS
 # ============================================================================
 
+
 class User(Base):
     """User account model."""
 
@@ -44,8 +45,12 @@ class User(Base):
 
     # Relationships
     api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
-    trading_accounts = relationship("TradingAccount", back_populates="user", cascade="all, delete-orphan")
-    trading_strategies = relationship("TradingStrategy", back_populates="user", cascade="all, delete-orphan")
+    trading_accounts = relationship(
+        "TradingAccount", back_populates="user", cascade="all, delete-orphan"
+    )
+    trading_strategies = relationship(
+        "TradingStrategy", back_populates="user", cascade="all, delete-orphan"
+    )
     backtests = relationship("Backtest", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
 
@@ -59,7 +64,9 @@ class APIKey(Base):
     __tablename__ = "api_keys"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     key_hash = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(100), nullable=False)
     scopes = Column(JSON, default=list)
@@ -79,13 +86,16 @@ class APIKey(Base):
 # TRADING MODELS
 # ============================================================================
 
+
 class TradingAccount(Base):
     """Trading account connection to brokers."""
 
     __tablename__ = "trading_accounts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     broker = Column(String(50), nullable=False)
     account_id = Column(String(100), nullable=False)
     account_type = Column(String(50), nullable=False)  # paper, live
@@ -107,7 +117,9 @@ class TradingStrategy(Base):
     __tablename__ = "trading_strategies"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name = Column(String(100), nullable=False)
     description = Column(Text)
     config = Column(JSON, nullable=False)
@@ -126,6 +138,7 @@ class TradingStrategy(Base):
 # ============================================================================
 # ML MODELS
 # ============================================================================
+
 
 class ModelConfig(Base):
     """ML model configuration and metadata."""
@@ -149,14 +162,19 @@ class ModelConfig(Base):
 # BACKTEST MODELS
 # ============================================================================
 
+
 class Backtest(Base):
     """Backtest execution and results."""
 
     __tablename__ = "backtests"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    strategy_id = Column(UUID(as_uuid=True), ForeignKey("trading_strategies.id", ondelete="SET NULL"))
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    strategy_id = Column(
+        UUID(as_uuid=True), ForeignKey("trading_strategies.id", ondelete="SET NULL")
+    )
     name = Column(String(100), nullable=False)
     start_date = Column(DateTime(timezone=True), nullable=False)
     end_date = Column(DateTime(timezone=True), nullable=False)
@@ -164,7 +182,9 @@ class Backtest(Base):
     symbols = Column(ARRAY(String), nullable=False)
     config = Column(JSON, nullable=False)
     results = Column(JSON)
-    status = Column(String(50), default="pending", index=True)  # pending, running, completed, failed
+    status = Column(
+        String(50), default="pending", index=True
+    )  # pending, running, completed, failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime(timezone=True))
@@ -180,6 +200,7 @@ class Backtest(Base):
 # ============================================================================
 # AUDIT & ALERTS
 # ============================================================================
+
 
 class AuditLog(Base):
     """Audit trail for all critical actions."""
@@ -206,7 +227,9 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     alert_type = Column(String(50), nullable=False)  # drawdown, accuracy_drop, service_down
     severity = Column(String(20), nullable=False)  # info, warning, critical
     title = Column(String(255), nullable=False)

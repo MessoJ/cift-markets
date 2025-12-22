@@ -117,7 +117,9 @@ def backtest(
     ),
     commission_bps: float = typer.Option(1.0, help="Commission in bps per position change"),
     slippage_bps: float = typer.Option(1.0, help="Slippage in bps per position change"),
-    periods_per_year: int = typer.Option(252, help="Annualization periods (252 daily, 52 weekly, etc.)"),
+    periods_per_year: int = typer.Option(
+        252, help="Annualization periods (252 daily, 52 weekly, etc.)"
+    ),
 ):
     """Run a backtest."""
     logger.info(f"Running backtest for {strategy}...")
@@ -128,7 +130,11 @@ def backtest(
 
     import polars as pl
 
-    df = pl.read_parquet(data_path) if data_path.lower().endswith(".parquet") else pl.read_csv(data_path)
+    df = (
+        pl.read_parquet(data_path)
+        if data_path.lower().endswith(".parquet")
+        else pl.read_csv(data_path)
+    )
     required = {"returns", "signal"}
     missing = required - set(df.columns)
     if missing:
@@ -176,29 +182,53 @@ def walkforward(
     threshold: float = typer.Option(0.0, help="Signal threshold"),
     model: str = typer.Option("baseline", help="Model: baseline|logreg|xgboost"),
     n_lags: int = typer.Option(10, help="Number of lag features for logreg/xgboost"),
-    n_trials: int = typer.Option(1, help="Selection trials for DSR (if you searched many variants)"),
+    n_trials: int = typer.Option(
+        1, help="Selection trials for DSR (if you searched many variants)"
+    ),
     holdout_bars: int = typer.Option(0, help="Reserve final N bars as strict time holdout"),
     tune: bool = typer.Option(False, help="Tune logreg (C, threshold) via inner purged CV"),
     tune_splits: int = typer.Option(3, help="Inner CV splits for tuning"),
     c_grid: str = typer.Option("0.1,1.0,10.0", help="Comma-separated C values to try"),
-    threshold_grid: str = typer.Option("0.0,0.02,0.05", help="Comma-separated threshold values to try"),
-    use_fracdiff: bool = typer.Option(False, help="Apply fractional differentiation (De Prado) to close"),
+    threshold_grid: str = typer.Option(
+        "0.0,0.02,0.05", help="Comma-separated threshold values to try"
+    ),
+    use_fracdiff: bool = typer.Option(
+        False, help="Apply fractional differentiation (De Prado) to close"
+    ),
     fracdiff_d: float = typer.Option(0.4, help="FracDiff order (0 < d < 1)"),
     use_vol_features: bool = typer.Option(False, help="Add volatility + vol momentum features"),
     vol_window: int = typer.Option(20, help="Window for volatility features"),
-    use_triple_barrier: bool = typer.Option(False, help="Use Triple Barrier Method (PT/SL/Time) labels"),
-    tb_pt: float = typer.Option(2.0, help="Triple Barrier profit-take multiplier (barrier = pt * vol)"),
-    tb_sl: float = typer.Option(2.0, help="Triple Barrier stop-loss multiplier (barrier = sl * vol)"),
+    use_triple_barrier: bool = typer.Option(
+        False, help="Use Triple Barrier Method (PT/SL/Time) labels"
+    ),
+    tb_pt: float = typer.Option(
+        2.0, help="Triple Barrier profit-take multiplier (barrier = pt * vol)"
+    ),
+    tb_sl: float = typer.Option(
+        2.0, help="Triple Barrier stop-loss multiplier (barrier = sl * vol)"
+    ),
     tb_min_ret: float = typer.Option(0.0, help="Triple Barrier minimum return for non-zero label"),
-    use_meta_labeling: bool = typer.Option(False, help="Use meta-labeling (De Prado) for bet sizing/filtering"),
+    use_meta_labeling: bool = typer.Option(
+        False, help="Use meta-labeling (De Prado) for bet sizing/filtering"
+    ),
     meta_model: str = typer.Option("xgboost", help="Meta-model type: logreg|xgboost"),
     meta_use_sizing: bool = typer.Option(True, help="Use continuous bet sizing (vs binary filter)"),
     meta_threshold: float = typer.Option(0.5, help="Meta-model threshold for binary filter mode"),
-    use_sample_weights: bool = typer.Option(False, help="Use sample weights based on avg uniqueness (De Prado)"),
-    use_ta_features: bool = typer.Option(False, help="Add standard TA features (RSI, MACD, BB, ATR, MFI)"),
-    use_micro_features: bool = typer.Option(False, help="Add microstructure features (Spread, Efficiency, BP Vol)"),
-    vol_target: float = typer.Option(0.0, help="Annualized volatility target (e.g. 0.15). 0.0 to disable."),
-    tune_model: bool = typer.Option(False, help="Enable hyperparameter tuning (Random Search) for XGBoost"),
+    use_sample_weights: bool = typer.Option(
+        False, help="Use sample weights based on avg uniqueness (De Prado)"
+    ),
+    use_ta_features: bool = typer.Option(
+        False, help="Add standard TA features (RSI, MACD, BB, ATR, MFI)"
+    ),
+    use_micro_features: bool = typer.Option(
+        False, help="Add microstructure features (Spread, Efficiency, BP Vol)"
+    ),
+    vol_target: float = typer.Option(
+        0.0, help="Annualized volatility target (e.g. 0.15). 0.0 to disable."
+    ),
+    tune_model: bool = typer.Option(
+        False, help="Enable hyperparameter tuning (Random Search) for XGBoost"
+    ),
 ):
     """Leakage-safe walk-forward evaluation.
 

@@ -35,23 +35,25 @@ from loguru import logger
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class TransformerPrediction:
     """Prediction output from Transformer model."""
+
     timestamp: float
 
     # Core predictions
-    direction_prob: float      # P(price up in next 500ms)
-    magnitude: float           # Expected |price change| in bps
+    direction_prob: float  # P(price up in next 500ms)
+    magnitude: float  # Expected |price change| in bps
 
     # Order flow predictions
-    buy_pressure: float        # Expected net buy volume
-    sell_pressure: float       # Expected net sell volume
-    flow_imbalance: float      # Predicted imbalance
+    buy_pressure: float  # Expected net buy volume
+    sell_pressure: float  # Expected net sell volume
+    flow_imbalance: float  # Predicted imbalance
 
     # Attention insights
-    attention_pattern: str     # Dominant pattern detected
-    key_features: list[str]    # Most important features
+    attention_pattern: str  # Dominant pattern detected
+    key_features: list[str]  # Most important features
 
     # Confidence
     confidence: float
@@ -60,6 +62,7 @@ class TransformerPrediction:
 # ============================================================================
 # POSITIONAL ENCODING
 # ============================================================================
+
 
 class RotaryPositionalEmbedding(nn.Module):
     """
@@ -94,7 +97,7 @@ class RotaryPositionalEmbedding(nn.Module):
         # Compute frequency bands (geometric series)
         # θ_i = base^(-2i/d) for i in [0, d/2)
         inv_freq = 1.0 / (base ** (torch.arange(0, d_model, 2).float() / d_model))
-        self.register_buffer('inv_freq', inv_freq)
+        self.register_buffer("inv_freq", inv_freq)
 
         # Precompute cos and sin for all positions
         self._build_cache(max_len)
@@ -105,13 +108,13 @@ class RotaryPositionalEmbedding(nn.Module):
         t = torch.arange(seq_len, device=self.inv_freq.device).float()
 
         # Outer product: [seq_len, d_model/2]
-        freqs = torch.einsum('i,j->ij', t, self.inv_freq)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
 
         # Duplicate for pairs: [seq_len, d_model]
         emb = torch.cat([freqs, freqs], dim=-1)
 
-        self.register_buffer('cos_cached', emb.cos())
-        self.register_buffer('sin_cached', emb.sin())
+        self.register_buffer("cos_cached", emb.cos())
+        self.register_buffer("sin_cached", emb.sin())
 
     def _rotate_half(self, x: torch.Tensor) -> torch.Tensor:
         """Rotate half the hidden dims."""
@@ -142,8 +145,8 @@ class RotaryPositionalEmbedding(nn.Module):
             self._build_cache(seq_offset + seq_len)
 
         # Get relevant positions
-        cos = self.cos_cached[seq_offset:seq_offset + seq_len]
-        sin = self.sin_cached[seq_offset:seq_offset + seq_len]
+        cos = self.cos_cached[seq_offset : seq_offset + seq_len]
+        sin = self.sin_cached[seq_offset : seq_offset + seq_len]
 
         # Reshape for broadcasting: [1, 1, seq, d_model]
         cos = cos.unsqueeze(0).unsqueeze(0)
@@ -268,15 +271,12 @@ class VariableSelectionNetwork(nn.Module):
         self.num_features = num_features
 
         # Per-feature GRN
-        self.feature_grns = nn.ModuleList([
-            GatedResidualNetwork(d_model, dropout=dropout)
-            for _ in range(num_features)
-        ])
+        self.feature_grns = nn.ModuleList(
+            [GatedResidualNetwork(d_model, dropout=dropout) for _ in range(num_features)]
+        )
 
         # Softmax weights across features
-        self.weight_grn = GatedResidualNetwork(
-            num_features * d_model, d_model, dropout=dropout
-        )
+        self.weight_grn = GatedResidualNetwork(num_features * d_model, d_model, dropout=dropout)
 
         self.softmax = nn.Softmax(dim=-1)
 
@@ -301,7 +301,7 @@ class VariableSelectionNetwork(nn.Module):
         weight_input = self.weight_grn(flat)
 
         # Reshape to [batch, seq, num_features]
-        weights = weight_input[..., :self.num_features]
+        weights = weight_input[..., : self.num_features]
         weights = self.softmax(weights)
 
         # Weighted sum: [batch, seq, d_model]
@@ -335,16 +335,12 @@ class TemporalPositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
 
         pe = pe.unsqueeze(0)  # [1, max_len, d_model]
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
         # Learnable time-scale embedding
         self.time_scale_embed = nn.Embedding(4, d_model // 4)  # tick, second, minute, hour
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        time_scale: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, time_scale: torch.Tensor | None = None) -> torch.Tensor:
         """
         Add positional encoding to input.
 
@@ -355,14 +351,18 @@ class TemporalPositionalEncoding(nn.Module):
         Returns:
             Position-encoded tensor
         """
-        x = x + self.pe[:, :x.size(1)]
+        x = x + self.pe[:, : x.size(1)]
 
         if time_scale is not None:
             # Add time-scale embedding
             ts_embed = self.time_scale_embed(time_scale)  # [batch, d_model//4]
-            ts_embed = ts_embed.unsqueeze(1).expand(-1, x.size(1), -1)  # [batch, seq_len, d_model//4]
+            ts_embed = ts_embed.unsqueeze(1).expand(
+                -1, x.size(1), -1
+            )  # [batch, seq_len, d_model//4]
             # Pad to d_model and add
-            padding = torch.zeros(ts_embed.size(0), ts_embed.size(1), x.size(2) - ts_embed.size(2), device=x.device)
+            padding = torch.zeros(
+                ts_embed.size(0), ts_embed.size(1), x.size(2) - ts_embed.size(2), device=x.device
+            )
             ts_embed = torch.cat([ts_embed, padding], dim=-1)
             x = x + ts_embed * 0.1  # Scale down time-scale embedding
 
@@ -372,6 +372,7 @@ class TemporalPositionalEncoding(nn.Module):
 # ============================================================================
 # ATTENTION LAYERS
 # ============================================================================
+
 
 class MultiHeadAttention(nn.Module):
     """
@@ -453,11 +454,13 @@ class MultiHeadAttention(nn.Module):
 
         # Causal masking
         if self.causal:
-            causal_mask = torch.triu(torch.ones(seq_q, seq_k, device=query.device), diagonal=1).bool()
-            scores = scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float('-inf'))
+            causal_mask = torch.triu(
+                torch.ones(seq_q, seq_k, device=query.device), diagonal=1
+            ).bool()
+            scores = scores.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
         if mask is not None:
-            scores = scores.masked_fill(mask.unsqueeze(1).unsqueeze(2), float('-inf'))
+            scores = scores.masked_fill(mask.unsqueeze(1).unsqueeze(2), float("-inf"))
 
         attention = F.softmax(scores, dim=-1)
         self._attention_weights = attention.detach()
@@ -494,8 +497,8 @@ class CrossTimeframeAttention(nn.Module):
 
     def forward(
         self,
-        query_tf: torch.Tensor,    # Fine timeframe [batch, seq_fine, d_model]
-        key_tf: torch.Tensor,      # Coarse timeframe [batch, seq_coarse, d_model]
+        query_tf: torch.Tensor,  # Fine timeframe [batch, seq_fine, d_model]
+        key_tf: torch.Tensor,  # Coarse timeframe [batch, seq_coarse, d_model]
     ) -> torch.Tensor:
         """Cross-attend from fine to coarse timeframe."""
         attended = self.attention(query_tf, key_tf, key_tf)
@@ -505,6 +508,7 @@ class CrossTimeframeAttention(nn.Module):
 # ============================================================================
 # TRANSFORMER ENCODER
 # ============================================================================
+
 
 class TransformerEncoderLayer(nn.Module):
     """
@@ -543,11 +547,7 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         # Self-attention with residual
         attended = self.self_attention(x, x, x, mask)
         x = self.norm1(x + self.dropout(attended))
@@ -576,16 +576,14 @@ class TransformerEncoder(nn.Module):
     ):
         super().__init__()
 
-        self.layers = nn.ModuleList([
-            TransformerEncoderLayer(d_model, num_heads, d_ff, dropout, causal)
-            for _ in range(num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                TransformerEncoderLayer(d_model, num_heads, d_ff, dropout, causal)
+                for _ in range(num_layers)
+            ]
+        )
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         for layer in self.layers:
             x = layer(x, mask)
         return x
@@ -594,6 +592,7 @@ class TransformerEncoder(nn.Module):
 # ============================================================================
 # ORDER FLOW TRANSFORMER
 # ============================================================================
+
 
 class OrderFlowTransformer(nn.Module):
     """
@@ -619,16 +618,16 @@ class OrderFlowTransformer(nn.Module):
 
     def __init__(
         self,
-        feature_dim: int = 35,           # Features per timestep
-        d_model: int = 128,               # Model dimension
-        num_heads: int = 8,               # Attention heads
-        num_layers: int = 4,              # Encoder layers
-        d_ff: int = 512,                  # Feed-forward dimension
+        feature_dim: int = 35,  # Features per timestep
+        d_model: int = 128,  # Model dimension
+        num_heads: int = 8,  # Attention heads
+        num_layers: int = 4,  # Encoder layers
+        d_ff: int = 512,  # Feed-forward dimension
         dropout: float = 0.1,
         max_seq_len: int = 500,
-        num_timeframes: int = 3,          # tick, second, minute
+        num_timeframes: int = 3,  # tick, second, minute
         prediction_horizon_ms: float = 500.0,
-        use_vsn: bool = True,             # NEW: Enable Variable Selection Network
+        use_vsn: bool = True,  # NEW: Enable Variable Selection Network
     ):
         super().__init__()
 
@@ -642,35 +641,39 @@ class OrderFlowTransformer(nn.Module):
         if use_vsn:
             self.vsn = VariableSelectionNetwork(feature_dim, d_model, dropout)
             # VSN projects to d_model, so embedding is identity or projection
-            self.feature_embeds = nn.ModuleList([
-                nn.Identity() for _ in range(num_timeframes)
-            ])
+            self.feature_embeds = nn.ModuleList([nn.Identity() for _ in range(num_timeframes)])
         else:
             self.vsn = None
             # Feature embedding for each timeframe
-            self.feature_embeds = nn.ModuleList([
-                nn.Sequential(
-                    nn.Linear(feature_dim, d_model),
-                    nn.LayerNorm(d_model),
-                    nn.GELU(),
-                )
-                for _ in range(num_timeframes)
-            ])
+            self.feature_embeds = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Linear(feature_dim, d_model),
+                        nn.LayerNorm(d_model),
+                        nn.GELU(),
+                    )
+                    for _ in range(num_timeframes)
+                ]
+            )
 
         # Positional encoding
         self.pos_encoder = TemporalPositionalEncoding(d_model, max_seq_len, dropout)
 
         # Transformer encoders per timeframe
-        self.encoders = nn.ModuleList([
-            TransformerEncoder(num_layers // 2, d_model, num_heads, d_ff, dropout, causal=True)
-            for _ in range(num_timeframes)
-        ])
+        self.encoders = nn.ModuleList(
+            [
+                TransformerEncoder(num_layers // 2, d_model, num_heads, d_ff, dropout, causal=True)
+                for _ in range(num_timeframes)
+            ]
+        )
 
         # Cross-timeframe attention (fine to coarse)
-        self.cross_attention = nn.ModuleList([
-            CrossTimeframeAttention(d_model, num_heads, dropout)
-            for _ in range(num_timeframes - 1)
-        ])
+        self.cross_attention = nn.ModuleList(
+            [
+                CrossTimeframeAttention(d_model, num_heads, dropout)
+                for _ in range(num_timeframes - 1)
+            ]
+        )
 
         # Final fusion encoder
         self.fusion_encoder = TransformerEncoder(
@@ -733,13 +736,15 @@ class OrderFlowTransformer(nn.Module):
         }
         self._buffer_sizes = [200, 60, 30]  # Max history per timeframe
 
-        logger.info(f"OrderFlowTransformer initialized (d_model={d_model}, heads={num_heads}, layers={num_layers})")
+        logger.info(
+            f"OrderFlowTransformer initialized (d_model={d_model}, heads={num_heads}, layers={num_layers})"
+        )
 
     def forward(
         self,
-        tick_features: torch.Tensor,      # [batch, seq_tick, feature_dim]
-        second_features: torch.Tensor,    # [batch, seq_sec, feature_dim]
-        minute_features: torch.Tensor,    # [batch, seq_min, feature_dim]
+        tick_features: torch.Tensor,  # [batch, seq_tick, feature_dim]
+        second_features: torch.Tensor,  # [batch, seq_sec, feature_dim]
+        minute_features: torch.Tensor,  # [batch, seq_min, feature_dim]
         tick_mask: torch.Tensor | None = None,
         second_mask: torch.Tensor | None = None,
         minute_mask: torch.Tensor | None = None,
@@ -801,7 +806,9 @@ class OrderFlowTransformer(nn.Module):
 
         # Self-attention within each timeframe
         encoded = []
-        for _i, (x_emb, encoder, mask) in enumerate(zip(embedded, self.encoders, masks, strict=False)):
+        for _i, (x_emb, encoder, mask) in enumerate(
+            zip(embedded, self.encoders, masks, strict=False)
+        ):
             enc = encoder(x_emb, mask)
             encoded.append(enc)
 
@@ -835,9 +842,9 @@ class OrderFlowTransformer(nn.Module):
 
     def predict(
         self,
-        tick_features: np.ndarray,      # [seq_tick, feature_dim]
-        second_features: np.ndarray,    # [seq_sec, feature_dim]
-        minute_features: np.ndarray,    # [seq_min, feature_dim]
+        tick_features: np.ndarray,  # [seq_tick, feature_dim]
+        second_features: np.ndarray,  # [seq_sec, feature_dim]
+        minute_features: np.ndarray,  # [seq_min, feature_dim]
         timestamp: float = 0.0,
     ) -> TransformerPrediction:
         """
@@ -930,6 +937,7 @@ class OrderFlowTransformer(nn.Module):
 # LOSS FUNCTIONS
 # ============================================================================
 
+
 class OrderFlowLoss(nn.Module):
     """
     Combined loss for order flow prediction.
@@ -977,41 +985,30 @@ class OrderFlowLoss(nn.Module):
         losses = {}
 
         # Direction loss
-        direction_loss = self.bce(
-            predictions["direction"],
-            targets["direction"]
-        )
+        direction_loss = self.bce(predictions["direction"], targets["direction"])
         losses["direction"] = direction_loss.item()
 
         # Magnitude loss
-        magnitude_loss = self.huber(
-            predictions["magnitude"],
-            targets["magnitude"]
-        )
+        magnitude_loss = self.huber(predictions["magnitude"], targets["magnitude"])
         losses["magnitude"] = magnitude_loss.item()
 
         # Imbalance loss
-        imbalance_loss = self.mse(
-            predictions["imbalance"],
-            targets["imbalance"]
-        )
+        imbalance_loss = self.mse(predictions["imbalance"], targets["imbalance"])
         losses["imbalance"] = imbalance_loss.item()
 
         # Calibration loss (confidence should match accuracy)
         with torch.no_grad():
-            correct = (
-                (predictions["direction"] > 0.5) == (targets["direction"] > 0.5)
-            ).float()
+            correct = ((predictions["direction"] > 0.5) == (targets["direction"] > 0.5)).float()
 
         calibration_loss = self.mse(predictions["confidence"], correct)
         losses["calibration"] = calibration_loss.item()
 
         # Total weighted loss
         total_loss = (
-            self.direction_weight * direction_loss +
-            self.magnitude_weight * magnitude_loss +
-            self.imbalance_weight * imbalance_loss +
-            self.calibration_weight * calibration_loss
+            self.direction_weight * direction_loss
+            + self.magnitude_weight * magnitude_loss
+            + self.imbalance_weight * imbalance_loss
+            + self.calibration_weight * calibration_loss
         )
 
         losses["total"] = total_loss.item()
@@ -1022,6 +1019,7 @@ class OrderFlowLoss(nn.Module):
 # ============================================================================
 # TRAINING UTILITIES
 # ============================================================================
+
 
 class TransformerTrainer:
     """Training loop for Transformer model."""
@@ -1061,7 +1059,7 @@ class TransformerTrainer:
             lr = self.base_lr * 0.5 * (1 + math.cos(math.pi * min(progress, 1.0)))
 
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = lr
+            param_group["lr"] = lr
 
     def train_step(
         self,
@@ -1092,8 +1090,7 @@ class TransformerTrainer:
         min_t = torch.tensor(minute_features, dtype=torch.float32, device=self.device)
 
         targets_t = {
-            k: torch.tensor(v, dtype=torch.float32, device=self.device)
-            for k, v in targets.items()
+            k: torch.tensor(v, dtype=torch.float32, device=self.device) for k, v in targets.items()
         }
 
         # Forward pass

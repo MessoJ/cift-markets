@@ -26,8 +26,10 @@ from cift.core.config import settings
 # CONSTANTS
 # ============================================================================
 
+
 class PolygonTimespan(str, Enum):
     """Polygon timespan values."""
+
     MINUTE = "minute"
     HOUR = "hour"
     DAY = "day"
@@ -40,6 +42,7 @@ class PolygonTimespan(str, Enum):
 # ============================================================================
 # POLYGON CLIENT
 # ============================================================================
+
 
 class PolygonClient:
     """
@@ -69,18 +72,11 @@ class PolygonClient:
         if self._initialized:
             return
 
-        connector = aiohttp.TCPConnector(
-            limit=100,
-            limit_per_host=30,
-            ttl_dns_cache=300
-        )
+        connector = aiohttp.TCPConnector(limit=100, limit_per_host=30, ttl_dns_cache=300)
 
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
 
-        self.session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout
-        )
+        self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
 
         self._initialized = True
         logger.info("Polygon client initialized")
@@ -92,11 +88,7 @@ class PolygonClient:
             self._initialized = False
             logger.info("Polygon client closed")
 
-    async def _request(
-        self,
-        endpoint: str,
-        params: dict | None = None
-    ) -> dict[str, Any]:
+    async def _request(self, endpoint: str, params: dict | None = None) -> dict[str, Any]:
         """
         Make HTTP request to Polygon API.
 
@@ -194,7 +186,7 @@ class PolygonClient:
         timespan: PolygonTimespan,
         from_date: datetime,
         to_date: datetime,
-        limit: int = 5000
+        limit: int = 5000,
     ) -> dict[str, Any]:
         """
         Get aggregate bars (OHLCV) for a symbol.
@@ -217,17 +209,15 @@ class PolygonClient:
         from_str = from_date.strftime("%Y-%m-%d")
         to_str = to_date.strftime("%Y-%m-%d")
 
-        endpoint = f"/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan.value}/{from_str}/{to_str}"
+        endpoint = (
+            f"/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan.value}/{from_str}/{to_str}"
+        )
 
         params = {"limit": limit, "adjusted": "true", "sort": "asc"}
 
         return await self._request(endpoint, params)
 
-    async def get_daily_open_close(
-        self,
-        symbol: str,
-        date: datetime
-    ) -> dict[str, Any]:
+    async def get_daily_open_close(self, symbol: str, date: datetime) -> dict[str, Any]:
         """
         Get OHLC for a specific day.
 
@@ -272,11 +262,7 @@ class PolygonClient:
         endpoint = f"/v3/reference/tickers/{symbol}"
         return await self._request(endpoint)
 
-    async def get_tickers(
-        self,
-        market: str = "stocks",
-        limit: int = 100
-    ) -> dict[str, Any]:
+    async def get_tickers(self, market: str = "stocks", limit: int = 100) -> dict[str, Any]:
         """
         Get list of tickers.
 
@@ -317,6 +303,7 @@ class PolygonClient:
 # HELPER FUNCTIONS
 # ============================================================================
 
+
 async def get_latest_price_polygon(symbol: str) -> float | None:
     """
     Get latest price from Polygon (for price lookup).
@@ -346,9 +333,7 @@ async def get_latest_price_polygon(symbol: str) -> float | None:
 
 
 async def ingest_polygon_data(
-    symbols: list[str],
-    days: int = 30,
-    timespan: PolygonTimespan = PolygonTimespan.MINUTE
+    symbols: list[str], days: int = 30, timespan: PolygonTimespan = PolygonTimespan.MINUTE
 ):
     """
     Ingest historical data from Polygon to QuestDB.
@@ -374,7 +359,7 @@ async def ingest_polygon_data(
                     multiplier=1,
                     timespan=timespan,
                     from_date=start_date,
-                    to_date=end_date
+                    to_date=end_date,
                 )
 
                 results = response.get("results", [])
@@ -389,6 +374,7 @@ async def ingest_polygon_data(
 
                 # Rate limiting (Polygon free tier: 5 req/min)
                 import asyncio
+
                 await asyncio.sleep(12)  # 5 requests per minute = 12 seconds between requests
 
             except Exception as e:

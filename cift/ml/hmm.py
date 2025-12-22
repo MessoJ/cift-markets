@@ -44,13 +44,15 @@ from loguru import logger
 # DATA STRUCTURES
 # ============================================================================
 
+
 class MarketRegime(IntEnum):
     """Market regime enumeration."""
-    LOW_VOLATILITY = 0     # Quiet, range-bound
-    TRENDING_UP = 1        # Bullish momentum
-    TRENDING_DOWN = 2      # Bearish momentum
-    HIGH_VOLATILITY = 3    # Choppy, high uncertainty
-    CRISIS = 4             # Extreme dislocation
+
+    LOW_VOLATILITY = 0  # Quiet, range-bound
+    TRENDING_UP = 1  # Bullish momentum
+    TRENDING_DOWN = 2  # Bearish momentum
+    HIGH_VOLATILITY = 3  # Choppy, high uncertainty
+    CRISIS = 4  # Extreme dislocation
 
     @property
     def description(self) -> str:
@@ -67,22 +69,23 @@ class MarketRegime(IntEnum):
 @dataclass
 class RegimePrediction:
     """Prediction output from HMM model."""
+
     timestamp: float
 
     # Current regime
     current_regime: MarketRegime
-    regime_probability: float      # Confidence in current regime
+    regime_probability: float  # Confidence in current regime
 
     # All regime probabilities
     regime_probs: dict[MarketRegime, float]
 
     # Regime metrics
-    persistence: float             # Expected duration of current regime
-    transition_prob: float         # P(regime change in next window)
+    persistence: float  # Expected duration of current regime
+    transition_prob: float  # P(regime change in next window)
 
     # Derived signals
-    volatility_regime: str         # "low", "normal", "high", "extreme"
-    trend_regime: str              # "none", "up", "down"
+    volatility_regime: str  # "low", "normal", "high", "extreme"
+    trend_regime: str  # "none", "up", "down"
 
     # Risk adjustment
     suggested_position_scale: float  # 0.0 to 1.5
@@ -91,11 +94,12 @@ class RegimePrediction:
 @dataclass
 class RegimeFeatures:
     """Features for regime detection."""
+
     # Volatility features
     realized_vol_1m: float
     realized_vol_5m: float
     realized_vol_30m: float
-    vol_of_vol: float              # Volatility of volatility
+    vol_of_vol: float  # Volatility of volatility
 
     # Spread features
     spread_mean: float
@@ -103,14 +107,14 @@ class RegimeFeatures:
     spread_percentile: float
 
     # Volume features
-    volume_ratio: float            # Current / average
+    volume_ratio: float  # Current / average
     volume_imbalance: float
 
     # Return features
     return_1m: float
     return_5m: float
     return_30m: float
-    return_autocorr: float         # Return autocorrelation
+    return_autocorr: float  # Return autocorrelation
 
     # Microstructure
     order_flow_imbalance: float
@@ -118,29 +122,33 @@ class RegimeFeatures:
     kyle_lambda: float
 
     def to_numpy(self) -> np.ndarray:
-        return np.array([
-            self.realized_vol_1m,
-            self.realized_vol_5m,
-            self.realized_vol_30m,
-            self.vol_of_vol,
-            self.spread_mean,
-            self.spread_std,
-            self.spread_percentile,
-            self.volume_ratio,
-            self.volume_imbalance,
-            self.return_1m,
-            self.return_5m,
-            self.return_30m,
-            self.return_autocorr,
-            self.order_flow_imbalance,
-            self.vpin,
-            self.kyle_lambda,
-        ], dtype=np.float32)
+        return np.array(
+            [
+                self.realized_vol_1m,
+                self.realized_vol_5m,
+                self.realized_vol_30m,
+                self.vol_of_vol,
+                self.spread_mean,
+                self.spread_std,
+                self.spread_percentile,
+                self.volume_ratio,
+                self.volume_imbalance,
+                self.return_1m,
+                self.return_5m,
+                self.return_30m,
+                self.return_autocorr,
+                self.order_flow_imbalance,
+                self.vpin,
+                self.kyle_lambda,
+            ],
+            dtype=np.float32,
+        )
 
 
 # ============================================================================
 # EMISSION DISTRIBUTIONS
 # ============================================================================
+
 
 class GaussianEmission(nn.Module):
     """
@@ -192,9 +200,9 @@ class GaussianEmission(nn.Module):
             # Log probability of multivariate Gaussian with diagonal cov
             diff = obs - means
             log_prob = -0.5 * (
-                self.observation_dim * math.log(2 * math.pi) +
-                self.log_vars.sum(dim=-1) +  # log|Σ|
-                (diff ** 2 / vars).sum(dim=-1)  # Mahalanobis
+                self.observation_dim * math.log(2 * math.pi)
+                + self.log_vars.sum(dim=-1)  # log|Σ|
+                + (diff**2 / vars).sum(dim=-1)  # Mahalanobis
             )
         else:
             # Full covariance case
@@ -204,9 +212,7 @@ class GaussianEmission(nn.Module):
                 L = self.cholesky[s]
                 cov = L @ L.T + 1e-6 * torch.eye(self.observation_dim, device=L.device)
 
-                dist = torch.distributions.MultivariateNormal(
-                    self.means[s], covariance_matrix=cov
-                )
+                dist = torch.distributions.MultivariateNormal(self.means[s], covariance_matrix=cov)
 
                 log_prob[:, :, s] = dist.log_prob(observations)
 
@@ -254,9 +260,9 @@ class MixtureOfGaussiansEmission(nn.Module):
         # Gaussian log prob for each component
         diff = obs - means
         component_log_prob = -0.5 * (
-            obs_dim * math.log(2 * math.pi) +
-            self.log_vars.sum(dim=-1) +
-            (diff ** 2 / vars).sum(dim=-1)
+            obs_dim * math.log(2 * math.pi)
+            + self.log_vars.sum(dim=-1)
+            + (diff**2 / vars).sum(dim=-1)
         )  # [batch, seq_len, num_states, num_components]
 
         # Mixture weights
@@ -272,6 +278,7 @@ class MixtureOfGaussiansEmission(nn.Module):
 # ============================================================================
 # HIDDEN MARKOV MODEL
 # ============================================================================
+
 
 class MarketRegimeHMM(nn.Module):
     """
@@ -303,9 +310,9 @@ class MarketRegimeHMM(nn.Module):
         observation_dim: int = 16,
         emission_type: str = "gaussian",  # "gaussian" or "gmm"
         num_gmm_components: int = 3,
-        min_state_duration: int = 5,       # Minimum timesteps in a state
-        use_io_hmm: bool = True,           # NEW: Enable Input-Output HMM
-        transition_feature_dim: int = 4,   # Features for transition conditioning
+        min_state_duration: int = 5,  # Minimum timesteps in a state
+        use_io_hmm: bool = True,  # NEW: Enable Input-Output HMM
+        transition_feature_dim: int = 4,  # Features for transition conditioning
     ):
         super().__init__()
 
@@ -321,21 +328,25 @@ class MarketRegimeHMM(nn.Module):
         if use_io_hmm:
             # IO-HMM: Transition matrix is a function of features
             # P(z_t = j | z_{t-1} = i, x_t) = softmax(W_i @ x_t + b_i)
-            self.transition_nets = nn.ModuleList([
-                nn.Sequential(
-                    nn.Linear(transition_feature_dim, num_states * 2),
-                    nn.Tanh(),
-                    nn.Linear(num_states * 2, num_states),
-                )
-                for _ in range(num_states)  # One network per source state
-            ])
+            self.transition_nets = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Linear(transition_feature_dim, num_states * 2),
+                        nn.Tanh(),
+                        nn.Linear(num_states * 2, num_states),
+                    )
+                    for _ in range(num_states)  # One network per source state
+                ]
+            )
 
             # Bias towards persistence (diagonal dominance)
             self.transition_bias = nn.Parameter(
                 torch.eye(num_states) * 2.0 + torch.ones(num_states, num_states) * 0.1
             )
 
-            logger.info(f"IO-HMM enabled: transitions conditioned on {transition_feature_dim} features")
+            logger.info(
+                f"IO-HMM enabled: transitions conditioned on {transition_feature_dim} features"
+            )
         else:
             # Standard HMM: Fixed transition matrix
             init_trans = torch.eye(num_states) * 2.0  # Favor staying
@@ -356,20 +367,26 @@ class MarketRegimeHMM(nn.Module):
         self.log_duration_params = nn.Parameter(torch.ones(num_states) * math.log(10.0))
 
         # Position scaling per regime
-        self.position_scales = nn.Parameter(torch.tensor([
-            1.0,   # Low vol: normal
-            1.2,   # Trend up: slightly higher
-            1.2,   # Trend down: slightly higher
-            0.5,   # High vol: reduce
-            0.1,   # Crisis: minimal
-        ]))
+        self.position_scales = nn.Parameter(
+            torch.tensor(
+                [
+                    1.0,  # Low vol: normal
+                    1.2,  # Trend up: slightly higher
+                    1.2,  # Trend down: slightly higher
+                    0.5,  # High vol: reduce
+                    0.1,  # Crisis: minimal
+                ]
+            )
+        )
 
         # For online inference
         self._alpha = None  # Forward probabilities
         self._current_state = None
         self._state_duration = 0
 
-        logger.info(f"MarketRegimeHMM initialized ({num_states} states, {emission_type} emissions, IO-HMM={use_io_hmm})")
+        logger.info(
+            f"MarketRegimeHMM initialized ({num_states} states, {emission_type} emissions, IO-HMM={use_io_hmm})"
+        )
 
     def get_transition_matrix(
         self,
@@ -389,7 +406,7 @@ class MarketRegimeHMM(nn.Module):
         """
         if not self.use_io_hmm or transition_features is None:
             # Standard HMM
-            if hasattr(self, 'log_transition'):
+            if hasattr(self, "log_transition"):
                 return F.softmax(self.log_transition, dim=1)
             else:
                 # Return biased uniform if IO-HMM but no features provided
@@ -459,7 +476,9 @@ class MarketRegimeHMM(nn.Module):
             if self.use_io_hmm and transition_features is not None:
                 # Get features at time t for each batch
                 trans_feat_t = transition_features[:, t, :]  # [batch, transition_feature_dim]
-                trans_probs = self.get_transition_matrix(trans_feat_t)  # [batch, num_states, num_states]
+                trans_probs = self.get_transition_matrix(
+                    trans_feat_t
+                )  # [batch, num_states, num_states]
                 log_trans = torch.log(trans_probs + 1e-10)
 
                 # alpha[t] = emission[t] * sum_s(alpha[t-1, s] * trans[s, current])
@@ -467,8 +486,10 @@ class MarketRegimeHMM(nn.Module):
                 alpha_trans = alpha.unsqueeze(-1) + log_trans
             else:
                 # Standard HMM: fixed transition matrix
-                if hasattr(self, 'log_transition'):
-                    log_trans = F.log_softmax(self.log_transition, dim=1)  # [num_states, num_states]
+                if hasattr(self, "log_transition"):
+                    log_trans = F.log_softmax(
+                        self.log_transition, dim=1
+                    )  # [num_states, num_states]
                 else:
                     log_trans = F.log_softmax(self.transition_bias, dim=1)
                 alpha_trans = alpha.unsqueeze(-1) + log_trans.unsqueeze(0)
@@ -478,11 +499,7 @@ class MarketRegimeHMM(nn.Module):
 
             if mask is not None:
                 # Keep previous alpha where masked
-                alpha = torch.where(
-                    mask[:, t].unsqueeze(-1),
-                    alpha,
-                    all_alpha[-1]
-                )
+                alpha = torch.where(mask[:, t].unsqueeze(-1), alpha, all_alpha[-1])
 
             all_alpha.append(alpha)
 
@@ -537,7 +554,7 @@ class MarketRegimeHMM(nn.Module):
                 delta_trans = delta.unsqueeze(-1) + log_trans  # [batch, num_states, num_states]
             else:
                 # Standard HMM
-                if hasattr(self, 'log_transition'):
+                if hasattr(self, "log_transition"):
                     log_trans = F.log_softmax(self.log_transition, dim=1)
                 else:
                     log_trans = F.log_softmax(self.transition_bias, dim=1)
@@ -615,10 +632,7 @@ class MarketRegimeHMM(nn.Module):
             state_probs = F.softmax(alpha[0, -1], dim=0).cpu().numpy()
 
             # Create regime probabilities dict
-            regime_probs = {
-                MarketRegime(i): float(state_probs[i])
-                for i in range(self.num_states)
-            }
+            regime_probs = {MarketRegime(i): float(state_probs[i]) for i in range(self.num_states)}
 
             # Get transition probabilities
             trans_matrix = self.transition_matrix.cpu().numpy()
@@ -725,7 +739,9 @@ class MarketRegimeHMM(nn.Module):
             Dictionary with regime statistics
         """
         device = next(self.parameters()).device
-        obs = torch.tensor(observations.reshape(1, *observations.shape), dtype=torch.float32, device=device)
+        obs = torch.tensor(
+            observations.reshape(1, *observations.shape), dtype=torch.float32, device=device
+        )
 
         # Get state sequence
         best_path, _ = self.viterbi_algorithm(obs)
@@ -773,6 +789,7 @@ class MarketRegimeHMM(nn.Module):
 # ============================================================================
 # TRAINING UTILITIES
 # ============================================================================
+
 
 class HMMTrainer:
     """Training loop for HMM model."""
@@ -838,7 +855,7 @@ class HMMTrainer:
         for _i in range(num_samples):
             # Sample random starting points
             starts = np.random.randint(0, total_len - seq_len, size=batch_size)
-            batch = np.stack([data[s:s+seq_len] for s in starts])
+            batch = np.stack([data[s : s + seq_len] for s in starts])
 
             loss = self.train_step(batch)
             total_loss += loss

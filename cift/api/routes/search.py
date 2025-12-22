@@ -34,8 +34,10 @@ router = APIRouter(prefix="/search", tags=["Search"])
 # MODELS
 # ============================================================================
 
+
 class SearchResult(BaseModel):
     """Single search result item"""
+
     id: str
     type: str  # symbol, order, position, watchlist, news, asset
     title: str
@@ -49,6 +51,7 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     """Search response with categorized results"""
+
     query: str
     total_results: int
     results: list[SearchResult]
@@ -60,11 +63,15 @@ class SearchResponse(BaseModel):
 # SEARCH ENDPOINTS
 # ============================================================================
 
+
 @router.get("", response_model=SearchResponse)
 async def global_search(
     q: str = Query(..., min_length=1, max_length=100, description="Search query"),
     limit: int = Query(20, ge=1, le=100, description="Max results to return"),
-    types: str | None = Query(None, description="Comma-separated types to search: symbol,order,position,watchlist,news,asset"),
+    types: str | None = Query(
+        None,
+        description="Comma-separated types to search: symbol,order,position,watchlist,news,asset",
+    ),
     user_id: UUID = Depends(get_current_user_id),
     pool: asyncpg.Pool = Depends(get_postgres_pool),
 ):
@@ -84,7 +91,9 @@ async def global_search(
     start_time = datetime.now()
 
     # Parse search types filter
-    search_types = types.split(',') if types else ['symbol', 'order', 'position', 'watchlist', 'news', 'asset']
+    search_types = (
+        types.split(",") if types else ["symbol", "order", "position", "watchlist", "news", "asset"]
+    )
     search_types = [t.strip() for t in search_types]
 
     query_upper = q.upper()
@@ -99,7 +108,7 @@ async def global_search(
             # ================================================================
             # 1. SEARCH SYMBOLS (Market Data)
             # ================================================================
-            if 'symbol' in search_types:
+            if "symbol" in search_types:
                 try:
                     symbol_rows = await conn.fetch(
                         """
@@ -116,37 +125,49 @@ async def global_search(
                         LIMIT $2
                         """,
                         query_pattern,
-                        limit
+                        limit,
                     )
 
                     for row in symbol_rows:
-                        change_indicator = "🟢" if row['change'] and row['change'] > 0 else "🔴" if row['change'] and row['change'] < 0 else "⚪"
-                        results.append(SearchResult(
-                            id=row['symbol'],
-                            type='symbol',
-                            title=row['symbol'],
-                            subtitle=f"${row['price']:.2f}" if row['price'] else "N/A",
-                            description=f"{change_indicator} {row['change_pct']:.2f}% • Vol: {row['volume']:,}" if row['change_pct'] and row['volume'] else None,
-                            link=f"/trading?symbol={row['symbol']}",
-                            icon="📈",
-                            metadata={
-                                'price': float(row['price']) if row['price'] else None,
-                                'change': float(row['change']) if row['change'] else None,
-                                'change_pct': float(row['change_pct']) if row['change_pct'] else None,
-                                'volume': row['volume']
-                            },
-                            relevance_score=100.0 if row['symbol'] == query_upper else 80.0
-                        ))
+                        change_indicator = (
+                            "🟢"
+                            if row["change"] and row["change"] > 0
+                            else "🔴" if row["change"] and row["change"] < 0 else "⚪"
+                        )
+                        results.append(
+                            SearchResult(
+                                id=row["symbol"],
+                                type="symbol",
+                                title=row["symbol"],
+                                subtitle=f"${row['price']:.2f}" if row["price"] else "N/A",
+                                description=(
+                                    f"{change_indicator} {row['change_pct']:.2f}% • Vol: {row['volume']:,}"
+                                    if row["change_pct"] and row["volume"]
+                                    else None
+                                ),
+                                link=f"/trading?symbol={row['symbol']}",
+                                icon="📈",
+                                metadata={
+                                    "price": float(row["price"]) if row["price"] else None,
+                                    "change": float(row["change"]) if row["change"] else None,
+                                    "change_pct": (
+                                        float(row["change_pct"]) if row["change_pct"] else None
+                                    ),
+                                    "volume": row["volume"],
+                                },
+                                relevance_score=100.0 if row["symbol"] == query_upper else 80.0,
+                            )
+                        )
 
-                    categories['symbol'] = len(symbol_rows)
+                    categories["symbol"] = len(symbol_rows)
                 except Exception as e:
                     logger.warning(f"Symbol search failed: {e}")
-                    categories['symbol'] = 0
+                    categories["symbol"] = 0
 
             # ================================================================
             # 2. SEARCH ORDERS
             # ================================================================
-            if 'order' in search_types:
+            if "order" in search_types:
                 try:
                     order_rows = await conn.fetch(
                         """
@@ -166,37 +187,48 @@ async def global_search(
                         """,
                         user_id,
                         query_pattern,
-                        limit
+                        limit,
                     )
 
                     for row in order_rows:
-                        status_emoji = {"pending": "⏳", "filled": "✅", "cancelled": "❌", "rejected": "🚫"}.get(row['status'], "📋")
-                        results.append(SearchResult(
-                            id=str(row['id']),
-                            type='order',
-                            title=f"{row['symbol']} {row['side'].upper()}",
-                            subtitle=f"{row['quantity']} @ ${row['limit_price']:.2f}" if row['limit_price'] else f"{row['quantity']} shares",
-                            description=f"{status_emoji} {row['status'].capitalize()} • {row['order_type']}",
-                            link=f"/orders?id={row['id']}",
-                            icon="📝",
-                            metadata={
-                                'symbol': row['symbol'],
-                                'side': row['side'],
-                                'quantity': float(row['quantity']),
-                                'status': row['status']
-                            },
-                            relevance_score=70.0
-                        ))
+                        status_emoji = {
+                            "pending": "⏳",
+                            "filled": "✅",
+                            "cancelled": "❌",
+                            "rejected": "🚫",
+                        }.get(row["status"], "📋")
+                        results.append(
+                            SearchResult(
+                                id=str(row["id"]),
+                                type="order",
+                                title=f"{row['symbol']} {row['side'].upper()}",
+                                subtitle=(
+                                    f"{row['quantity']} @ ${row['limit_price']:.2f}"
+                                    if row["limit_price"]
+                                    else f"{row['quantity']} shares"
+                                ),
+                                description=f"{status_emoji} {row['status'].capitalize()} • {row['order_type']}",
+                                link=f"/orders?id={row['id']}",
+                                icon="📝",
+                                metadata={
+                                    "symbol": row["symbol"],
+                                    "side": row["side"],
+                                    "quantity": float(row["quantity"]),
+                                    "status": row["status"],
+                                },
+                                relevance_score=70.0,
+                            )
+                        )
 
-                    categories['order'] = len(order_rows)
+                    categories["order"] = len(order_rows)
                 except Exception as e:
                     logger.warning(f"Order search failed: {e}")
-                    categories['order'] = 0
+                    categories["order"] = 0
 
             # ================================================================
             # 3. SEARCH POSITIONS
             # ================================================================
-            if 'position' in search_types:
+            if "position" in search_types:
                 try:
                     position_rows = await conn.fetch(
                         """
@@ -213,37 +245,59 @@ async def global_search(
                         """,
                         user_id,
                         query_pattern,
-                        limit
+                        limit,
                     )
 
                     for row in position_rows:
-                        pnl_emoji = "🟢" if row['unrealized_pnl'] and row['unrealized_pnl'] > 0 else "🔴" if row['unrealized_pnl'] and row['unrealized_pnl'] < 0 else "⚪"
-                        results.append(SearchResult(
-                            id=str(row['id']),
-                            type='position',
-                            title=row['symbol'],
-                            subtitle=f"{row['quantity']} shares @ ${row['current_price']:.2f}" if row['current_price'] else f"{row['quantity']} shares",
-                            description=f"{pnl_emoji} ${row['unrealized_pnl']:.2f} ({row['unrealized_pnl_pct']:.2f}%)" if row['unrealized_pnl'] and row['unrealized_pnl_pct'] else None,
-                            link=f"/portfolio?symbol={row['symbol']}",
-                            icon="💼",
-                            metadata={
-                                'symbol': row['symbol'],
-                                'quantity': float(row['quantity']),
-                                'avg_cost': float(row['avg_cost']) if row['avg_cost'] else None,
-                                'unrealized_pnl': float(row['unrealized_pnl']) if row['unrealized_pnl'] else None
-                            },
-                            relevance_score=90.0
-                        ))
+                        pnl_emoji = (
+                            "🟢"
+                            if row["unrealized_pnl"] and row["unrealized_pnl"] > 0
+                            else (
+                                "🔴"
+                                if row["unrealized_pnl"] and row["unrealized_pnl"] < 0
+                                else "⚪"
+                            )
+                        )
+                        results.append(
+                            SearchResult(
+                                id=str(row["id"]),
+                                type="position",
+                                title=row["symbol"],
+                                subtitle=(
+                                    f"{row['quantity']} shares @ ${row['current_price']:.2f}"
+                                    if row["current_price"]
+                                    else f"{row['quantity']} shares"
+                                ),
+                                description=(
+                                    f"{pnl_emoji} ${row['unrealized_pnl']:.2f} ({row['unrealized_pnl_pct']:.2f}%)"
+                                    if row["unrealized_pnl"] and row["unrealized_pnl_pct"]
+                                    else None
+                                ),
+                                link=f"/portfolio?symbol={row['symbol']}",
+                                icon="💼",
+                                metadata={
+                                    "symbol": row["symbol"],
+                                    "quantity": float(row["quantity"]),
+                                    "avg_cost": float(row["avg_cost"]) if row["avg_cost"] else None,
+                                    "unrealized_pnl": (
+                                        float(row["unrealized_pnl"])
+                                        if row["unrealized_pnl"]
+                                        else None
+                                    ),
+                                },
+                                relevance_score=90.0,
+                            )
+                        )
 
-                    categories['position'] = len(position_rows)
+                    categories["position"] = len(position_rows)
                 except Exception as e:
                     logger.warning(f"Position search failed: {e}")
-                    categories['position'] = 0
+                    categories["position"] = 0
 
             # ================================================================
             # 4. SEARCH WATCHLISTS
             # ================================================================
-            if 'watchlist' in search_types:
+            if "watchlist" in search_types:
                 try:
                     watchlist_rows = await conn.fetch(
                         """
@@ -263,34 +317,40 @@ async def global_search(
                         user_id,
                         query_pattern,
                         query_upper,
-                        limit
+                        limit,
                     )
 
                     for row in watchlist_rows:
-                        results.append(SearchResult(
-                            id=str(row['id']),
-                            type='watchlist',
-                            title=row['name'],
-                            subtitle=f"{len(row['symbols'])} symbols" if row['symbols'] else "Empty list",
-                            description=row['description'] or "No description",
-                            link=f"/watchlists?id={row['id']}",
-                            icon="⭐" if row['is_default'] else "📋",
-                            metadata={
-                                'symbols': row['symbols'],
-                                'is_default': row['is_default']
-                            },
-                            relevance_score=60.0
-                        ))
+                        results.append(
+                            SearchResult(
+                                id=str(row["id"]),
+                                type="watchlist",
+                                title=row["name"],
+                                subtitle=(
+                                    f"{len(row['symbols'])} symbols"
+                                    if row["symbols"]
+                                    else "Empty list"
+                                ),
+                                description=row["description"] or "No description",
+                                link=f"/watchlists?id={row['id']}",
+                                icon="⭐" if row["is_default"] else "📋",
+                                metadata={
+                                    "symbols": row["symbols"],
+                                    "is_default": row["is_default"],
+                                },
+                                relevance_score=60.0,
+                            )
+                        )
 
-                    categories['watchlist'] = len(watchlist_rows)
+                    categories["watchlist"] = len(watchlist_rows)
                 except Exception as e:
                     logger.warning(f"Watchlist search failed: {e}")
-                    categories['watchlist'] = 0
+                    categories["watchlist"] = 0
 
             # ================================================================
             # 5. SEARCH NEWS ARTICLES
             # ================================================================
-            if 'news' in search_types:
+            if "news" in search_types:
                 try:
                     news_rows = await conn.fetch(
                         """
@@ -306,36 +366,48 @@ async def global_search(
                         LIMIT $2
                         """,
                         query_pattern,
-                        limit
+                        limit,
                     )
 
                     for row in news_rows:
-                        sentiment_emoji = {"positive": "😊", "negative": "😟", "neutral": "😐"}.get(row['sentiment'], "📰")
-                        results.append(SearchResult(
-                            id=str(row['id']),
-                            type='news',
-                            title=row['title'],
-                            subtitle=row['category'] or "News",
-                            description=row['summary'][:100] + "..." if row['summary'] and len(row['summary']) > 100 else row['summary'],
-                            link=f"/news/{row['id']}",
-                            icon=sentiment_emoji,
-                            metadata={
-                                'category': row['category'],
-                                'sentiment': row['sentiment'],
-                                'published_at': row['published_at'].isoformat() if row['published_at'] else None
-                            },
-                            relevance_score=50.0
-                        ))
+                        sentiment_emoji = {"positive": "😊", "negative": "😟", "neutral": "😐"}.get(
+                            row["sentiment"], "📰"
+                        )
+                        results.append(
+                            SearchResult(
+                                id=str(row["id"]),
+                                type="news",
+                                title=row["title"],
+                                subtitle=row["category"] or "News",
+                                description=(
+                                    row["summary"][:100] + "..."
+                                    if row["summary"] and len(row["summary"]) > 100
+                                    else row["summary"]
+                                ),
+                                link=f"/news/{row['id']}",
+                                icon=sentiment_emoji,
+                                metadata={
+                                    "category": row["category"],
+                                    "sentiment": row["sentiment"],
+                                    "published_at": (
+                                        row["published_at"].isoformat()
+                                        if row["published_at"]
+                                        else None
+                                    ),
+                                },
+                                relevance_score=50.0,
+                            )
+                        )
 
-                    categories['news'] = len(news_rows)
+                    categories["news"] = len(news_rows)
                 except Exception as e:
                     logger.warning(f"News search failed: {e}")
-                    categories['news'] = 0
+                    categories["news"] = 0
 
             # ================================================================
             # 6. SEARCH ASSET LOCATIONS
             # ================================================================
-            if 'asset' in search_types:
+            if "asset" in search_types:
                 try:
                     asset_rows = await conn.fetch(
                         """
@@ -354,44 +426,45 @@ async def global_search(
                         LIMIT $2
                         """,
                         query_pattern,
-                        limit
+                        limit,
                     )
 
                     for row in asset_rows:
                         type_emoji = {
-                            'central_bank': '🏦',
-                            'commodity_market': '📦',
-                            'government': '🏛️',
-                            'tech_hq': '💻',
-                            'energy': '⚡'
-                        }.get(row['asset_type'], '🌍')
+                            "central_bank": "🏦",
+                            "commodity_market": "📦",
+                            "government": "🏛️",
+                            "tech_hq": "💻",
+                            "energy": "⚡",
+                        }.get(row["asset_type"], "🌍")
 
-                        results.append(SearchResult(
-                            id=str(row['id']),
-                            type='asset',
-                            title=f"{row['name']} ({row['code']})",
-                            subtitle=f"{row['city']}, {row['country']}",
-                            description=f"{row['asset_type'].replace('_', ' ').title()}",
-                            link=f"/globe?asset={row['id']}",
-                            icon=type_emoji,
-                            metadata={
-                                'code': row['code'],
-                                'asset_type': row['asset_type'],
-                                'importance_score': row['importance_score']
-                            },
-                            relevance_score=float(row['importance_score']) / 100 * 50
-                        ))
+                        results.append(
+                            SearchResult(
+                                id=str(row["id"]),
+                                type="asset",
+                                title=f"{row['name']} ({row['code']})",
+                                subtitle=f"{row['city']}, {row['country']}",
+                                description=f"{row['asset_type'].replace('_', ' ').title()}",
+                                link=f"/globe?asset={row['id']}",
+                                icon=type_emoji,
+                                metadata={
+                                    "code": row["code"],
+                                    "asset_type": row["asset_type"],
+                                    "importance_score": row["importance_score"],
+                                },
+                                relevance_score=float(row["importance_score"]) / 100 * 50,
+                            )
+                        )
 
-                    categories['asset'] = len(asset_rows)
+                    categories["asset"] = len(asset_rows)
                 except Exception as e:
                     logger.warning(f"Asset search failed: {e}")
-                    categories['asset'] = 0
+                    categories["asset"] = 0
 
     except Exception as e:
         logger.error(f"Global search error: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Search failed"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Search failed"
         ) from e
 
     # Sort results by relevance score
@@ -410,7 +483,7 @@ async def global_search(
         total_results=len(results),
         results=results,
         categories=categories,
-        took_ms=round(elapsed_ms, 2)
+        took_ms=round(elapsed_ms, 2),
     )
 
 
@@ -440,10 +513,10 @@ async def get_search_suggestions(
                 LIMIT $2
                 """,
                 query_pattern,
-                limit
+                limit,
             )
 
-            suggestions = [row['symbol'] for row in rows]
+            suggestions = [row["symbol"] for row in rows]
 
             return suggestions
 

@@ -291,11 +291,13 @@ def test_walkforward_full_stack_brutal(tmp_path):
     df = _make_synthetic_prices(n=600, seed=999)
     # Add High/Low/Volume for micro features
     # Synthetic High/Low
-    df = df.with_columns([
-        (pl.col("close") * 1.01).alias("high"),
-        (pl.col("close") * 0.99).alias("low"),
-        pl.lit(1000).alias("volume"),
-    ])
+    df = df.with_columns(
+        [
+            (pl.col("close") * 1.01).alias("high"),
+            (pl.col("close") * 0.99).alias("low"),
+            pl.lit(1000).alias("volume"),
+        ]
+    )
     p = tmp_path / "data.csv"
     df.write_csv(p)
 

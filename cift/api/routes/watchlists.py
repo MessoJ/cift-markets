@@ -23,8 +23,10 @@ async def get_current_user_id(current_user: User = Depends(get_current_active_us
 # MODELS
 # ============================================================================
 
+
 class WatchlistCreate(BaseModel):
     """Create watchlist request."""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
     symbols: list[str] = Field(default_factory=list)
@@ -33,6 +35,7 @@ class WatchlistCreate(BaseModel):
 
 class WatchlistUpdate(BaseModel):
     """Update watchlist request."""
+
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = None
     symbols: list[str] | None = None
@@ -43,6 +46,7 @@ class WatchlistUpdate(BaseModel):
 # WATCHLIST CRUD
 # ============================================================================
 
+
 @router.get("")
 async def list_watchlists(
     user_id: UUID = Depends(get_current_user_id),
@@ -52,14 +56,17 @@ async def list_watchlists(
     Performance: ~2-3ms
     """
     async with db_manager.pool.acquire() as conn:
-        rows = await conn.fetch("""
+        rows = await conn.fetch(
+            """
             SELECT
                 id, name, description, symbols, is_default,
                 created_at, updated_at
             FROM watchlists
             WHERE user_id = $1
             ORDER BY is_default DESC, sort_order ASC, created_at DESC
-        """, user_id)
+        """,
+            user_id,
+        )
 
     return {"watchlists": [dict(row) for row in rows]}
 
@@ -80,16 +87,22 @@ async def create_watchlist(
     if watchlist.is_default:
         async with db_manager.pool.acquire() as conn:
             await conn.execute(
-                "UPDATE watchlists SET is_default = FALSE WHERE user_id = $1",
-                user_id
+                "UPDATE watchlists SET is_default = FALSE WHERE user_id = $1", user_id
             )
 
     async with db_manager.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             INSERT INTO watchlists (user_id, name, description, symbols, is_default)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING *
-        """, user_id, watchlist.name, watchlist.description, symbols, watchlist.is_default)
+        """,
+            user_id,
+            watchlist.name,
+            watchlist.description,
+            symbols,
+            watchlist.is_default,
+        )
 
     return {"watchlist": dict(row)}
 
@@ -105,10 +118,14 @@ async def get_watchlist(
     Performance: ~3-10ms (depending on include_prices)
     """
     async with db_manager.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             SELECT * FROM watchlists
             WHERE id = $1 AND user_id = $2
-        """, watchlist_id, user_id)
+        """,
+            watchlist_id,
+            user_id,
+        )
 
         if not row:
             raise HTTPException(status_code=404, detail="Watchlist not found")
@@ -116,16 +133,19 @@ async def get_watchlist(
         watchlist = dict(row)
 
         # Get prices if requested
-        if include_prices and watchlist['symbols']:
-            prices = await conn.fetch("""
+        if include_prices and watchlist["symbols"]:
+            prices = await conn.fetch(
+                """
                 SELECT
                     symbol, price, change, change_pct,
                     volume, high, low, open
                 FROM market_data_cache
                 WHERE symbol = ANY($1)
-            """, watchlist['symbols'])
+            """,
+                watchlist["symbols"],
+            )
 
-            watchlist['prices'] = [dict(p) for p in prices]
+            watchlist["prices"] = [dict(p) for p in prices]
 
     return {"watchlist": watchlist}
 
@@ -171,7 +191,8 @@ async def update_watchlist(
             async with db_manager.pool.acquire() as conn:
                 await conn.execute(
                     "UPDATE watchlists SET is_default = FALSE WHERE user_id = $1 AND id != $2",
-                    user_id, watchlist_id
+                    user_id,
+                    watchlist_id,
                 )
 
     if not updates:
@@ -203,8 +224,7 @@ async def delete_watchlist(
     """
     async with db_manager.pool.acquire() as conn:
         result = await conn.execute(
-            "DELETE FROM watchlists WHERE id = $1 AND user_id = $2",
-            watchlist_id, user_id
+            "DELETE FROM watchlists WHERE id = $1 AND user_id = $2", watchlist_id, user_id
         )
 
         if result == "DELETE 0":
@@ -226,15 +246,22 @@ async def add_symbol_to_watchlist(
     symbol = symbol.upper()
 
     async with db_manager.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             UPDATE watchlists
             SET symbols = array_append(symbols, $3)
             WHERE id = $1 AND user_id = $2 AND NOT ($3 = ANY(symbols))
             RETURNING *
-        """, watchlist_id, user_id, symbol)
+        """,
+            watchlist_id,
+            user_id,
+            symbol,
+        )
 
         if not row:
-            raise HTTPException(status_code=404, detail="Watchlist not found or symbol already exists")
+            raise HTTPException(
+                status_code=404, detail="Watchlist not found or symbol already exists"
+            )
 
     return {"watchlist": dict(row)}
 
@@ -252,12 +279,17 @@ async def remove_symbol_from_watchlist(
     symbol = symbol.upper()
 
     async with db_manager.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             UPDATE watchlists
             SET symbols = array_remove(symbols, $3)
             WHERE id = $1 AND user_id = $2
             RETURNING *
-        """, watchlist_id, user_id, symbol)
+        """,
+            watchlist_id,
+            user_id,
+            symbol,
+        )
 
         if not row:
             raise HTTPException(status_code=404, detail="Watchlist not found")

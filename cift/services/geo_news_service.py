@@ -68,7 +68,7 @@ class GeoNewsService:
                 "lng": -98.5795,
                 "major_index": "S&P 500",
                 "currency": "USD",
-                "timezone": "America/New_York"
+                "timezone": "America/New_York",
             },
             "GB": {
                 "name": "United Kingdom",
@@ -76,7 +76,7 @@ class GeoNewsService:
                 "lng": -3.4360,
                 "major_index": "FTSE 100",
                 "currency": "GBP",
-                "timezone": "Europe/London"
+                "timezone": "Europe/London",
             },
             "DE": {
                 "name": "Germany",
@@ -84,7 +84,7 @@ class GeoNewsService:
                 "lng": 10.4515,
                 "major_index": "DAX",
                 "currency": "EUR",
-                "timezone": "Europe/Berlin"
+                "timezone": "Europe/Berlin",
             },
             "JP": {
                 "name": "Japan",
@@ -92,7 +92,7 @@ class GeoNewsService:
                 "lng": 138.2529,
                 "major_index": "Nikkei 225",
                 "currency": "JPY",
-                "timezone": "Asia/Tokyo"
+                "timezone": "Asia/Tokyo",
             },
             "CN": {
                 "name": "China",
@@ -100,7 +100,7 @@ class GeoNewsService:
                 "lng": 104.1954,
                 "major_index": "Shanghai Composite",
                 "currency": "CNY",
-                "timezone": "Asia/Shanghai"
+                "timezone": "Asia/Shanghai",
             },
             "CA": {
                 "name": "Canada",
@@ -108,7 +108,7 @@ class GeoNewsService:
                 "lng": -106.3468,
                 "major_index": "TSX Composite",
                 "currency": "CAD",
-                "timezone": "America/Toronto"
+                "timezone": "America/Toronto",
             },
             "AU": {
                 "name": "Australia",
@@ -116,7 +116,7 @@ class GeoNewsService:
                 "lng": 133.7751,
                 "major_index": "ASX 200",
                 "currency": "AUD",
-                "timezone": "Australia/Sydney"
+                "timezone": "Australia/Sydney",
             },
             "BR": {
                 "name": "Brazil",
@@ -124,7 +124,7 @@ class GeoNewsService:
                 "lng": -51.9253,
                 "major_index": "Bovespa",
                 "currency": "BRL",
-                "timezone": "America/Sao_Paulo"
+                "timezone": "America/Sao_Paulo",
             },
             "IN": {
                 "name": "India",
@@ -132,7 +132,7 @@ class GeoNewsService:
                 "lng": 78.9629,
                 "major_index": "BSE Sensex",
                 "currency": "INR",
-                "timezone": "Asia/Kolkata"
+                "timezone": "Asia/Kolkata",
             },
             "KR": {
                 "name": "South Korea",
@@ -140,7 +140,7 @@ class GeoNewsService:
                 "lng": 127.7669,
                 "major_index": "KOSPI",
                 "currency": "KRW",
-                "timezone": "Asia/Seoul"
+                "timezone": "Asia/Seoul",
             },
             "FR": {
                 "name": "France",
@@ -148,7 +148,7 @@ class GeoNewsService:
                 "lng": 2.2137,
                 "major_index": "CAC 40",
                 "currency": "EUR",
-                "timezone": "Europe/Paris"
+                "timezone": "Europe/Paris",
             },
             "IT": {
                 "name": "Italy",
@@ -156,21 +156,25 @@ class GeoNewsService:
                 "lng": 12.5674,
                 "major_index": "FTSE MIB",
                 "currency": "EUR",
-                "timezone": "Europe/Rome"
-            }
+                "timezone": "Europe/Rome",
+            },
         }
 
         # Economic indicator mappings
         self.economic_indicators = [
-            "GDP Growth", "Inflation Rate", "Unemployment Rate",
-            "Interest Rate", "Trade Balance", "Consumer Confidence",
-            "Manufacturing PMI", "Services PMI", "Retail Sales"
+            "GDP Growth",
+            "Inflation Rate",
+            "Unemployment Rate",
+            "Interest Rate",
+            "Trade Balance",
+            "Consumer Confidence",
+            "Manufacturing PMI",
+            "Services PMI",
+            "Retail Sales",
         ]
 
     async def get_global_news_heatmap(
-        self,
-        hours_back: int = 24,
-        impact_threshold: int = 2
+        self, hours_back: int = 24, impact_threshold: int = 2
     ) -> dict[str, Any]:
         """Get global news heatmap data for interactive globe visualization."""
 
@@ -195,15 +199,13 @@ class GeoNewsService:
                 "longitude": mapping["lng"],
                 "major_index": mapping.get("major_index"),
                 "currency": mapping.get("currency"),
-
                 # Market data
                 "market_data": country_data.get(country_code, {}),
-
                 # News metrics
                 "news_count": country_metrics.get(country_code, {}).get("count", 0),
                 "avg_sentiment": country_metrics.get(country_code, {}).get("sentiment", 0),
                 "max_impact": country_metrics.get(country_code, {}).get("max_impact", 1),
-                "recent_events": country_metrics.get(country_code, {}).get("events", [])
+                "recent_events": country_metrics.get(country_code, {}).get("events", []),
             }
 
             globe_data.append(country_info)
@@ -214,14 +216,10 @@ class GeoNewsService:
             "total_events": len(geo_events),
             "countries": globe_data,
             "global_sentiment": self._calculate_global_sentiment(geo_events),
-            "top_stories": await self._get_top_global_stories(geo_events, 10)
+            "top_stories": await self._get_top_global_stories(geo_events, 10),
         }
 
-    async def get_country_detail(
-        self,
-        country_code: str,
-        days_back: int = 7
-    ) -> dict[str, Any]:
+    async def get_country_detail(self, country_code: str, days_back: int = 7) -> dict[str, Any]:
         """Get detailed information for a specific country."""
 
         if country_code not in self.country_mappings:
@@ -241,25 +239,24 @@ class GeoNewsService:
         return {
             "country_code": country_code,
             "country_name": mapping["name"],
-            "location": {
-                "latitude": mapping["lat"],
-                "longitude": mapping["lng"]
-            },
+            "location": {"latitude": mapping["lat"], "longitude": mapping["lng"]},
             "market_data": market_data,
             "economic_indicators": economic_data,
             "news_events": news_events,
             "news_summary": {
                 "total_events": len(news_events),
-                "avg_sentiment": sum(e.get("sentiment_score", 0) for e in news_events) / len(news_events) if news_events else 0,
+                "avg_sentiment": (
+                    sum(e.get("sentiment_score", 0) for e in news_events) / len(news_events)
+                    if news_events
+                    else 0
+                ),
                 "categories": self._extract_categories(news_events),
-                "trending_symbols": self._extract_trending_symbols(news_events)
-            }
+                "trending_symbols": self._extract_trending_symbols(news_events),
+            },
         }
 
     async def _generate_geo_news_events(
-        self,
-        hours_back: int,
-        impact_threshold: int
+        self, hours_back: int, impact_threshold: int
     ) -> list[GeoNewsEvent]:
         """Generate realistic geo-located news events for visualization."""
 
@@ -276,9 +273,7 @@ class GeoNewsService:
 
             for i in range(event_count):
                 # Generate realistic event
-                event_time = current_time - timedelta(
-                    hours=hours_back * (i + 1) / event_count
-                )
+                event_time = current_time - timedelta(hours=hours_back * (i + 1) / event_count)
 
                 event = self._generate_country_event(
                     country_code, mapping, event_time, impact_threshold
@@ -297,11 +292,7 @@ class GeoNewsService:
         return major_markets.get(country_code, 2)
 
     def _generate_country_event(
-        self,
-        country_code: str,
-        mapping: dict,
-        event_time: datetime,
-        min_impact: int
+        self, country_code: str, mapping: dict, event_time: datetime, min_impact: int
     ) -> GeoNewsEvent | None:
         """Generate a realistic news event for a country."""
 
@@ -314,36 +305,36 @@ class GeoNewsService:
                 "summary": "Central bank announces {action} in interest rates to {reason}.",
                 "impact": 4,
                 "categories": ["monetary_policy", "interest_rates"],
-                "indicators": ["Interest Rate", "Currency"]
+                "indicators": ["Interest Rate", "Currency"],
             },
             "gdp_data": {
                 "title": "{country} GDP Grows {percent}% in Q{quarter}",
                 "summary": "Economic growth {trend} expectations amid {factors}.",
                 "impact": 3,
                 "categories": ["economic_data", "gdp"],
-                "indicators": ["GDP Growth"]
+                "indicators": ["GDP Growth"],
             },
             "trade_deal": {
                 "title": "{country} Signs Major Trade Agreement with {partner}",
                 "summary": "New trade partnership expected to boost {sectors} sectors.",
                 "impact": 3,
                 "categories": ["trade", "international"],
-                "indicators": ["Trade Balance"]
+                "indicators": ["Trade Balance"],
             },
             "regulatory": {
                 "title": "{country} Regulators Announce New {sector} Rules",
                 "summary": "New regulations aim to {objective} in the {sector} sector.",
                 "impact": 2,
                 "categories": ["regulation", "policy"],
-                "indicators": ["Regulatory Environment"]
+                "indicators": ["Regulatory Environment"],
             },
             "corporate": {
                 "title": "Major {country} Company Reports {result} Earnings",
                 "summary": "{company} performance {direction} on {factors}.",
                 "impact": 2,
                 "categories": ["earnings", "corporate"],
-                "indicators": ["Corporate Performance"]
-            }
+                "indicators": ["Corporate Performance"],
+            },
         }
 
         # Randomly select event type
@@ -363,7 +354,7 @@ class GeoNewsService:
             country=mapping["name"],
             country_code=country_code,
             latitude=mapping["lat"] + random.uniform(-2, 2),  # Add some variation
-            longitude=mapping["lng"] + random.uniform(-2, 2)
+            longitude=mapping["lng"] + random.uniform(-2, 2),
         )
 
         event = GeoNewsEvent(
@@ -378,7 +369,7 @@ class GeoNewsService:
             categories=template["categories"],
             symbols_affected=self._get_affected_symbols(country_code, event_type),
             economic_indicators=template["indicators"],
-            sentiment_score=random.uniform(-0.5, 0.8)  # Slightly positive bias
+            sentiment_score=random.uniform(-0.5, 0.8),  # Slightly positive bias
         )
 
         return event
@@ -392,40 +383,40 @@ class GeoNewsService:
             return {
                 "action": random.choice(["Raises", "Cuts", "Maintains"]),
                 "amount": f"{random.choice([0.25, 0.5, 0.75])}%",
-                "reason": random.choice([
-                    "combat inflation", "stimulate growth", "maintain stability"
-                ])
+                "reason": random.choice(
+                    ["combat inflation", "stimulate growth", "maintain stability"]
+                ),
             }
         elif event_type == "gdp_data":
             return {
                 "percent": round(random.uniform(0.5, 4.2), 1),
                 "quarter": random.choice(["1", "2", "3", "4"]),
                 "trend": random.choice(["exceeds", "meets", "falls short of"]),
-                "factors": random.choice([
-                    "strong consumer spending", "export growth", "government investment"
-                ])
+                "factors": random.choice(
+                    ["strong consumer spending", "export growth", "government investment"]
+                ),
             }
         elif event_type == "trade_deal":
             partners = ["United States", "European Union", "China", "Japan", "ASEAN"]
             return {
                 "partner": random.choice(partners),
-                "sectors": random.choice(["technology", "manufacturing", "agriculture"])
+                "sectors": random.choice(["technology", "manufacturing", "agriculture"]),
             }
         elif event_type == "regulatory":
             return {
                 "sector": random.choice(["fintech", "banking", "technology", "energy"]),
-                "objective": random.choice([
-                    "enhance transparency", "improve security", "promote competition"
-                ])
+                "objective": random.choice(
+                    ["enhance transparency", "improve security", "promote competition"]
+                ),
             }
         elif event_type == "corporate":
             return {
                 "company": f"Leading {self.country_mappings[country_code]['name']} Corporation",
                 "result": random.choice(["Strong", "Mixed", "Disappointing"]),
                 "direction": random.choice(["improves", "declines", "stabilizes"]),
-                "factors": random.choice([
-                    "market expansion", "operational efficiency", "global demand"
-                ])
+                "factors": random.choice(
+                    ["market expansion", "operational efficiency", "global demand"]
+                ),
             }
 
         return {}
@@ -443,6 +434,7 @@ class GeoNewsService:
         }
 
         import random
+
         symbols = country_symbols.get(country_code, [])
         return random.sample(symbols, min(2, len(symbols))) if symbols else []
 
@@ -464,7 +456,7 @@ class GeoNewsService:
                 "currency": mapping.get("currency"),
                 "currency_rate": round(random.uniform(0.5, 150), 4),
                 "market_status": random.choice(["open", "closed", "pre_market"]),
-                "volume": random.randint(100000000, 2000000000)
+                "volume": random.randint(100000000, 2000000000),
             }
 
         return market_data
@@ -487,14 +479,10 @@ class GeoNewsService:
             "interest_rate": round(random.uniform(0.0, 6.0), 2),
             "consumer_confidence": round(random.uniform(80, 120), 1),
             "manufacturing_pmi": round(random.uniform(45, 65), 1),
-            "last_updated": datetime.utcnow().isoformat()
+            "last_updated": datetime.utcnow().isoformat(),
         }
 
-    async def _get_country_news(
-        self,
-        country_code: str,
-        days_back: int
-    ) -> list[dict]:
+    async def _get_country_news(self, country_code: str, days_back: int) -> list[dict]:
         """Get news events for a specific country."""
 
         events = await self._generate_geo_news_events(days_back * 24, 1)
@@ -511,7 +499,7 @@ class GeoNewsService:
                 "impact_level": event.impact_level,
                 "categories": event.categories,
                 "symbols_affected": event.symbols_affected,
-                "sentiment_score": event.sentiment_score
+                "sentiment_score": event.sentiment_score,
             }
             for event in events
             if event.location.country_code == country_code
@@ -532,7 +520,7 @@ class GeoNewsService:
                     "count": 0,
                     "sentiment_sum": 0,
                     "max_impact": 0,
-                    "events": []
+                    "events": [],
                 }
 
             metrics = country_metrics[country]
@@ -542,12 +530,14 @@ class GeoNewsService:
 
             # Store recent high-impact events
             if event.impact_level >= 3:
-                metrics["events"].append({
-                    "title": event.title,
-                    "impact": event.impact_level,
-                    "sentiment": event.sentiment_score,
-                    "published_at": event.published_at.isoformat()
-                })
+                metrics["events"].append(
+                    {
+                        "title": event.title,
+                        "impact": event.impact_level,
+                        "sentiment": event.sentiment_score,
+                        "published_at": event.published_at.isoformat(),
+                    }
+                )
 
         # Calculate averages
         for _country, metrics in country_metrics.items():
@@ -557,11 +547,9 @@ class GeoNewsService:
                 metrics["sentiment"] = 0
 
             # Keep only top 5 events
-            metrics["events"] = sorted(
-                metrics["events"],
-                key=lambda x: x["impact"],
-                reverse=True
-            )[:5]
+            metrics["events"] = sorted(metrics["events"], key=lambda x: x["impact"], reverse=True)[
+                :5
+            ]
 
         return country_metrics
 
@@ -577,19 +565,11 @@ class GeoNewsService:
 
         return weighted_sum / total_weight if total_weight > 0 else 0.0
 
-    async def _get_top_global_stories(
-        self,
-        events: list[GeoNewsEvent],
-        limit: int
-    ) -> list[dict]:
+    async def _get_top_global_stories(self, events: list[GeoNewsEvent], limit: int) -> list[dict]:
         """Get top global stories by impact."""
 
         # Sort by impact level and recency
-        sorted_events = sorted(
-            events,
-            key=lambda x: (x.impact_level, x.published_at),
-            reverse=True
-        )
+        sorted_events = sorted(events, key=lambda x: (x.impact_level, x.published_at), reverse=True)
 
         return [
             {
@@ -601,7 +581,7 @@ class GeoNewsService:
                 "impact_level": event.impact_level,
                 "sentiment_score": event.sentiment_score,
                 "published_at": event.published_at.isoformat(),
-                "categories": event.categories
+                "categories": event.categories,
             }
             for event in sorted_events[:limit]
         ]
@@ -617,10 +597,7 @@ class GeoNewsService:
 
         category_counts = Counter(all_categories)
 
-        return [
-            {"category": cat, "count": count}
-            for cat, count in category_counts.most_common(10)
-        ]
+        return [{"category": cat, "count": count} for cat, count in category_counts.most_common(10)]
 
     def _extract_trending_symbols(self, events: list[dict]) -> list[dict]:
         """Extract trending symbols from news."""
@@ -646,7 +623,8 @@ class GeoNewsService:
         async with pool.acquire() as conn:
             for event in events:
                 try:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT INTO geo_news_events (
                             id, title, summary, url, source, published_at,
                             country, country_code, latitude, longitude,
@@ -659,12 +637,21 @@ class GeoNewsService:
                             impact_level = EXCLUDED.impact_level,
                             sentiment_score = EXCLUDED.sentiment_score
                     """,
-                        event.id, event.title, event.summary, event.url, event.source,
-                        event.published_at, event.location.country, event.location.country_code,
-                        event.location.latitude, event.location.longitude,
-                        event.impact_level, json.dumps(event.categories),
-                        json.dumps(event.symbols_affected), json.dumps(event.economic_indicators),
-                        event.sentiment_score
+                        event.id,
+                        event.title,
+                        event.summary,
+                        event.url,
+                        event.source,
+                        event.published_at,
+                        event.location.country,
+                        event.location.country_code,
+                        event.location.latitude,
+                        event.location.longitude,
+                        event.impact_level,
+                        json.dumps(event.categories),
+                        json.dumps(event.symbols_affected),
+                        json.dumps(event.economic_indicators),
+                        event.sentiment_score,
                     )
 
                 except Exception as e:
@@ -673,6 +660,7 @@ class GeoNewsService:
 
 # Global geo news service
 _geo_news_service = None
+
 
 def get_geo_news_service() -> GeoNewsService:
     """Get the global geo news service instance."""
@@ -694,7 +682,9 @@ async def generate_geo_news_data():
         # Generate global heatmap data
         heatmap_data = await geo_service.get_global_news_heatmap(hours_back=48)
 
-        logger.success(f"Generated globe data: {heatmap_data['total_events']} events across {len(heatmap_data['countries'])} countries")
+        logger.success(
+            f"Generated globe data: {heatmap_data['total_events']} events across {len(heatmap_data['countries'])} countries"
+        )
 
         return heatmap_data
 

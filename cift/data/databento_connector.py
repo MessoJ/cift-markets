@@ -33,40 +33,46 @@ from cift.core.config import settings
 # DATABENTO ENUMS
 # ============================================================================
 
+
 class Schema(str, Enum):
     """Databento data schemas."""
-    MBO = "mbo"           # Market-by-Order (L3)
-    MBP_1 = "mbp-1"       # Top of book
-    MBP_10 = "mbp-10"     # Top 10 levels
-    TRADES = "trades"     # Trade ticks
-    OHLCV_1S = "ohlcv-1s" # 1-second bars
-    OHLCV_1M = "ohlcv-1m" # 1-minute bars
+
+    MBO = "mbo"  # Market-by-Order (L3)
+    MBP_1 = "mbp-1"  # Top of book
+    MBP_10 = "mbp-10"  # Top 10 levels
+    TRADES = "trades"  # Trade ticks
+    OHLCV_1S = "ohlcv-1s"  # 1-second bars
+    OHLCV_1M = "ohlcv-1m"  # 1-minute bars
 
 
 class Action(IntEnum):
     """Order action types for MBO data."""
-    ADD = 65      # 'A' - New order
-    CANCEL = 67   # 'C' - Order cancelled
-    MODIFY = 77   # 'M' - Order modified
-    TRADE = 84    # 'T' - Trade execution
-    FILL = 70     # 'F' - Order filled
-    CLEAR = 82    # 'R' - Clear book
+
+    ADD = 65  # 'A' - New order
+    CANCEL = 67  # 'C' - Order cancelled
+    MODIFY = 77  # 'M' - Order modified
+    TRADE = 84  # 'T' - Trade execution
+    FILL = 70  # 'F' - Order filled
+    CLEAR = 82  # 'R' - Clear book
 
 
 class Side(IntEnum):
     """Order side."""
+
     ASK = 65  # 'A'
     BID = 66  # 'B'
-    NONE = 78 # 'N'
+    NONE = 78  # 'N'
 
 
 # ============================================================================
 # DATA MODELS
 # ============================================================================
 
+
 @dataclass
 class L3Order:
     """Individual order in the order book (L3 data)."""
+
     order_id: int
     symbol: str
     side: Side
@@ -97,6 +103,7 @@ class L3Order:
 @dataclass
 class BookLevel:
     """Single price level in aggregated book."""
+
     price: float
     size: int
     count: int  # Number of orders at this level
@@ -115,6 +122,7 @@ class L3OrderBook:
     - Aggregated price levels
     - Order lifecycle tracking
     """
+
     symbol: str
     bids: dict[int, L3Order] = field(default_factory=dict)  # order_id -> Order
     asks: dict[int, L3Order] = field(default_factory=dict)
@@ -262,6 +270,7 @@ class L3OrderBook:
 @dataclass
 class TradeRecord:
     """Trade execution record."""
+
     symbol: str
     price: float
     size: int
@@ -284,6 +293,7 @@ class TradeRecord:
 # DATABENTO CONNECTOR
 # ============================================================================
 
+
 class DatabentoConnector:
     """
     Institutional-grade Databento L3 market data connector.
@@ -304,7 +314,7 @@ class DatabentoConnector:
         Args:
             api_key: Databento API key
         """
-        self.api_key = api_key or getattr(settings, 'databento_api_key', '')
+        self.api_key = api_key or getattr(settings, "databento_api_key", "")
 
         # Order books by symbol
         self._books: dict[str, L3OrderBook] = {}

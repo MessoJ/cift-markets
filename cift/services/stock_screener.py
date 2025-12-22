@@ -18,12 +18,12 @@ from cift.core.database import get_postgres_pool
 
 
 class ScreenerOperator(str, Enum):
-    GT = ">"      # Greater than
-    LT = "<"      # Less than
-    GTE = ">="    # Greater than or equal
-    LTE = "<="    # Less than or equal
-    EQ = "="      # Equal to
-    NE = "!="     # Not equal to
+    GT = ">"  # Greater than
+    LT = "<"  # Less than
+    GTE = ">="  # Greater than or equal
+    LTE = "<="  # Less than or equal
+    EQ = "="  # Equal to
+    NE = "!="  # Not equal to
     BETWEEN = "between"
     IN = "in"
     NOT_IN = "not_in"
@@ -57,7 +57,6 @@ class StockScreenerService:
             "volume": "Volume",
             "avg_volume_10d": "10-day avg volume",
             "market_cap": "Market capitalization",
-
             # Technical Indicators
             "rsi": "RSI (14)",
             "sma_20": "20-day SMA",
@@ -68,21 +67,18 @@ class StockScreenerService:
             "macd": "MACD",
             "bollinger_upper": "Bollinger Upper",
             "bollinger_lower": "Bollinger Lower",
-
             # Fundamentals (mock for now)
             "pe_ratio": "P/E Ratio",
             "pb_ratio": "P/B Ratio",
             "dividend_yield": "Dividend Yield %",
             "eps": "Earnings Per Share",
             "revenue_growth": "Revenue Growth %",
-
             # Performance
             "return_1d": "1-day return %",
             "return_1w": "1-week return %",
             "return_1m": "1-month return %",
             "return_3m": "3-month return %",
             "return_1y": "1-year return %",
-
             # Risk Metrics
             "beta": "Beta",
             "volatility_30d": "30-day volatility",
@@ -168,9 +164,9 @@ class StockScreenerService:
 
         # Process criteria
         for _i, criteria in enumerate(request.criteria):
-            field = criteria['field']
-            operator = criteria['operator']
-            value = criteria['value']
+            field = criteria["field"]
+            operator = criteria["operator"]
+            value = criteria["value"]
 
             if field not in self.supported_fields:
                 continue
@@ -194,7 +190,7 @@ class StockScreenerService:
                 params.append(value)
             elif operator == "between":
                 where_conditions.append(f"{field} BETWEEN ${param_idx} AND ${param_idx + 1}")
-                params.extend([value, criteria.get('value2')])
+                params.extend([value, criteria.get("value2")])
 
         # Add WHERE clause
         if where_conditions:
@@ -214,27 +210,29 @@ class StockScreenerService:
         """Add calculated fields and real-time data."""
 
         # Technical analysis signals
-        price = float(stock_data.get('price', 0))
-        sma_20 = float(stock_data.get('sma_20', 0))
-        sma_50 = float(stock_data.get('sma_50', 0))
+        price = float(stock_data.get("price", 0))
+        sma_20 = float(stock_data.get("sma_20", 0))
+        sma_50 = float(stock_data.get("sma_50", 0))
 
-        stock_data['trend_signal'] = "bullish" if price > sma_20 > sma_50 else "bearish"
-        stock_data['momentum'] = "strong" if abs(stock_data.get('change_percent', 0)) > 3 else "weak"
+        stock_data["trend_signal"] = "bullish" if price > sma_20 > sma_50 else "bearish"
+        stock_data["momentum"] = (
+            "strong" if abs(stock_data.get("change_percent", 0)) > 3 else "weak"
+        )
 
         # Risk classification
-        beta = stock_data.get('beta', 1.0)
-        stock_data['risk_level'] = "high" if beta > 1.5 else "medium" if beta > 0.8 else "low"
+        beta = stock_data.get("beta", 1.0)
+        stock_data["risk_level"] = "high" if beta > 1.5 else "medium" if beta > 0.8 else "low"
 
         # Market cap category
-        market_cap = stock_data.get('market_cap', 0)
+        market_cap = stock_data.get("market_cap", 0)
         if market_cap > 200_000_000_000:
-            stock_data['cap_category'] = "mega"
+            stock_data["cap_category"] = "mega"
         elif market_cap > 10_000_000_000:
-            stock_data['cap_category'] = "large"
+            stock_data["cap_category"] = "large"
         elif market_cap > 2_000_000_000:
-            stock_data['cap_category'] = "mid"
+            stock_data["cap_category"] = "mid"
         else:
-            stock_data['cap_category'] = "small"
+            stock_data["cap_category"] = "small"
 
     async def _save_screen(self, request: ScreenerRequest, user_id: str) -> str:
         """Save screen criteria for future use."""
@@ -243,14 +241,20 @@ class StockScreenerService:
 
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO saved_screens (
                     id, user_id, name, criteria, sort_by, sort_order, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (id) DO NOTHING
             """,
-                screen_id, user_id, request.name, json.dumps(request.criteria),
-                request.sort_by, request.sort_order, datetime.utcnow()
+                screen_id,
+                user_id,
+                request.name,
+                json.dumps(request.criteria),
+                request.sort_by,
+                request.sort_order,
+                datetime.utcnow(),
             )
 
         logger.info(f"Saved screen: {screen_id}")
@@ -261,22 +265,25 @@ class StockScreenerService:
 
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT id, name, criteria, sort_by, sort_order, created_at, last_run
                 FROM saved_screens
                 WHERE user_id = $1
                 ORDER BY created_at DESC
-            """, user_id)
+            """,
+                user_id,
+            )
 
         return [
             {
-                "screen_id": row['id'],
-                "name": row['name'],
-                "criteria": json.loads(row['criteria']),
-                "sort_by": row['sort_by'],
-                "sort_order": row['sort_order'],
-                "created_at": row['created_at'],
-                "last_run": row['last_run'],
+                "screen_id": row["id"],
+                "name": row["name"],
+                "criteria": json.loads(row["criteria"]),
+                "sort_by": row["sort_by"],
+                "sort_order": row["sort_order"],
+                "created_at": row["created_at"],
+                "last_run": row["last_run"],
             }
             for row in rows
         ]
@@ -286,28 +293,37 @@ class StockScreenerService:
 
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT name, criteria, sort_by, sort_order
                 FROM saved_screens
                 WHERE id = $1 AND user_id = $2
-            """, screen_id, user_id)
+            """,
+                screen_id,
+                user_id,
+            )
 
             if not row:
                 raise ValueError(f"Screen {screen_id} not found")
 
             # Update last run time
-            await conn.execute("""
+            await conn.execute(
+                """
                 UPDATE saved_screens SET last_run = $3
                 WHERE id = $1 AND user_id = $2
-            """, screen_id, user_id, datetime.utcnow())
+            """,
+                screen_id,
+                user_id,
+                datetime.utcnow(),
+            )
 
         # Build request from saved data
         request = ScreenerRequest(
-            name=row['name'],
-            criteria=json.loads(row['criteria']),
-            sort_by=row['sort_by'],
-            sort_order=row['sort_order'],
-            save_screen=False
+            name=row["name"],
+            criteria=json.loads(row["criteria"]),
+            sort_by=row["sort_by"],
+            sort_order=row["sort_order"],
+            save_screen=False,
         )
 
         return await self.screen_stocks(request, user_id)
@@ -325,7 +341,7 @@ class StockScreenerService:
                     {"field": "market_cap", "operator": ">", "value": 1_000_000_000},
                 ],
                 "sort_by": "change_percent",
-                "sort_order": "desc"
+                "sort_order": "desc",
             },
             {
                 "name": "Value Opportunities",
@@ -336,7 +352,7 @@ class StockScreenerService:
                     {"field": "dividend_yield", "operator": ">", "value": 2},
                 ],
                 "sort_by": "pe_ratio",
-                "sort_order": "asc"
+                "sort_order": "asc",
             },
             {
                 "name": "Breakout Candidates",
@@ -347,7 +363,7 @@ class StockScreenerService:
                     {"field": "change_percent", "operator": ">", "value": 3},
                 ],
                 "sort_by": "volume",
-                "sort_order": "desc"
+                "sort_order": "desc",
             },
             {
                 "name": "Dividend Champions",
@@ -358,13 +374,14 @@ class StockScreenerService:
                     {"field": "beta", "operator": "<", "value": 1.2},
                 ],
                 "sort_by": "dividend_yield",
-                "sort_order": "desc"
-            }
+                "sort_order": "desc",
+            },
         ]
 
 
 # Global screener instance
 _screener_service = None
+
 
 def get_screener_service() -> StockScreenerService:
     """Get global screener service instance."""

@@ -32,11 +32,12 @@ def frac_diff_ffd(series: np.ndarray, d: float, thres: float = 1e-5) -> np.ndarr
         return np.full(len(series), np.nan)
 
     # Using valid mode convolution
-    res = np.convolve(series, w, mode='valid')
+    res = np.convolve(series, w, mode="valid")
 
     # Pad the beginning with NaNs to match original length
     pad = np.full(len(series) - len(res), np.nan)
     return np.concatenate([pad, res])
+
 
 def volatility_yang_zhang(
     df: pl.DataFrame,
@@ -44,7 +45,7 @@ def volatility_yang_zhang(
     open_col: str = "open",
     high_col: str = "high",
     low_col: str = "low",
-    close_col: str = "close"
+    close_col: str = "close",
 ) -> pl.Series:
     """
     Yang-Zhang Volatility Estimator (Minimum Variance).
@@ -69,11 +70,11 @@ def volatility_yang_zhang(
 
     # Overnight volatility (open - close_prev)
     # We need rolling variance of this term
-    term_o = (log_o - log_c_prev)
+    term_o = log_o - log_c_prev
     var_o = term_o.rolling_var(window_size=window)
 
     # Open-to-Close volatility (close - open)
-    term_c = (log_c - log_o)
+    term_c = log_c - log_o
     var_c = term_c.rolling_var(window_size=window)
 
     # Rogers-Satchell volatility (rolling mean of RS term)
@@ -91,11 +92,9 @@ def volatility_yang_zhang(
 
     return yz_var.sqrt().alias("vol_yz")
 
+
 def amihud_illiquidity(
-    df: pl.DataFrame,
-    window: int = 30,
-    close_col: str = "close",
-    volume_col: str = "volume"
+    df: pl.DataFrame, window: int = 30, close_col: str = "close", volume_col: str = "volume"
 ) -> pl.Series:
     """
     Amihud Illiquidity: Average of |Return| / (Price * Volume)
@@ -127,6 +126,7 @@ def get_technical_features(
     - ATR (14)
     - MFI (14)
     """
+
     # Helper for EMA
     def ema(series: pl.Expr, span: int) -> pl.Expr:
         return series.ewm_mean(span=span, adjust=False)
@@ -164,7 +164,7 @@ def get_technical_features(
     tr3 = (pl.col(low_col) - prev_close).abs()
     # Polars max_horizontal equivalent
     tr = pl.max_horizontal(tr1, tr2, tr3)
-    atr = ema(tr, 14) # Using EMA smoothing for ATR
+    atr = ema(tr, 14)  # Using EMA smoothing for ATR
 
     # 5. MFI (14) - Money Flow Index
     # Typical Price
@@ -182,16 +182,18 @@ def get_technical_features(
     mfi_ratio = pos_mf / (neg_mf + 1e-9)
     mfi = 100 - (100 / (1 + mfi_ratio))
 
-    return df.with_columns([
-        rsi.alias("rsi_14"),
-        macd_line.alias("macd_line"),
-        signal_line.alias("macd_signal"),
-        macd_hist.alias("macd_hist"),
-        bb_width.alias("bb_width"),
-        bb_pct.alias("bb_pct"),
-        atr.alias("atr_14"),
-        mfi.alias("mfi_14"),
-    ])
+    return df.with_columns(
+        [
+            rsi.alias("rsi_14"),
+            macd_line.alias("macd_line"),
+            signal_line.alias("macd_signal"),
+            macd_hist.alias("macd_hist"),
+            bb_width.alias("bb_width"),
+            bb_pct.alias("bb_pct"),
+            atr.alias("atr_14"),
+            mfi.alias("mfi_14"),
+        ]
+    )
 
 
 def get_microstructure_features(
@@ -199,7 +201,7 @@ def get_microstructure_features(
     high_col: str = "high",
     low_col: str = "low",
     close_col: str = "close",
-    window: int = 14
+    window: int = 14,
 ) -> pl.DataFrame:
     """
     Generate microstructure and efficiency features.
@@ -229,8 +231,10 @@ def get_microstructure_features(
     hl_log_sq = (pl.col(high_col) / pl.col(low_col)).log().pow(2)
     bp_vol = (hl_log_sq.rolling_mean(window_size=window) / (4 * np.log(2))).sqrt()
 
-    return df.with_columns([
-        avg_spread.alias("hl_spread"),
-        ker.alias("ker_14"),
-        bp_vol.alias("vol_bp_14"),
-    ])
+    return df.with_columns(
+        [
+            avg_spread.alias("hl_spread"),
+            ker.alias("ker_14"),
+            bp_vol.alias("vol_bp_14"),
+        ]
+    )

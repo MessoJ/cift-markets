@@ -30,6 +30,7 @@ from cift.core.features_numba import (
 # BENCHMARK UTILITIES
 # ============================================================================
 
+
 class BenchmarkResult:
     """Store benchmark results."""
 
@@ -108,9 +109,7 @@ def benchmark(func: Callable, iterations: int = 1000, warmup: int = 100) -> Benc
 
 
 async def benchmark_async(
-    func: Callable,
-    iterations: int = 1000,
-    warmup: int = 100
+    func: Callable, iterations: int = 1000, warmup: int = 100
 ) -> BenchmarkResult:
     """
     Benchmark an async function.
@@ -143,6 +142,7 @@ async def benchmark_async(
 # NUMBA BENCHMARKS
 # ============================================================================
 
+
 def benchmark_numba_features():
     """Benchmark Numba-optimized feature calculations."""
     logger.info("🔥 Benchmarking Numba-optimized features...")
@@ -166,8 +166,7 @@ def benchmark_numba_features():
 
     # Order Flow Imbalance
     result = benchmark(
-        lambda: calculate_ofi(bid_prices, ask_prices, bid_volumes, ask_volumes),
-        iterations=10000
+        lambda: calculate_ofi(bid_prices, ask_prices, bid_volumes, ask_volumes), iterations=10000
     )
     results["OFI (5 levels)"] = result
     logger.info(f"✅ OFI: {result.mean:.3f}ms")
@@ -189,30 +188,35 @@ def benchmark_numba_features():
 # POLARS BENCHMARKS
 # ============================================================================
 
+
 def benchmark_polars_operations():
     """Benchmark Polars data processing operations."""
     logger.info("⚡ Benchmarking Polars operations...")
 
     # Generate sample OHLCV data
     n_rows = 100000
-    df = pl.DataFrame({
-        "timestamp": [datetime.utcnow() - timedelta(minutes=i) for i in range(n_rows)],
-        "symbol": ["AAPL"] * n_rows,
-        "open": np.random.randn(n_rows) * 5 + 150,
-        "high": np.random.randn(n_rows) * 5 + 152,
-        "low": np.random.randn(n_rows) * 5 + 148,
-        "close": np.random.randn(n_rows) * 5 + 150,
-        "volume": np.random.randint(1000, 100000, n_rows),
-    })
+    df = pl.DataFrame(
+        {
+            "timestamp": [datetime.utcnow() - timedelta(minutes=i) for i in range(n_rows)],
+            "symbol": ["AAPL"] * n_rows,
+            "open": np.random.randn(n_rows) * 5 + 150,
+            "high": np.random.randn(n_rows) * 5 + 152,
+            "low": np.random.randn(n_rows) * 5 + 148,
+            "close": np.random.randn(n_rows) * 5 + 150,
+            "volume": np.random.randint(1000, 100000, n_rows),
+        }
+    )
 
     results = {}
 
     # GroupBy aggregation
     def groupby_test():
-        return df.groupby("symbol").agg([
-            pl.col("close").mean().alias("avg_close"),
-            pl.col("volume").sum().alias("total_volume"),
-        ])
+        return df.groupby("symbol").agg(
+            [
+                pl.col("close").mean().alias("avg_close"),
+                pl.col("volume").sum().alias("total_volume"),
+            ]
+        )
 
     result = benchmark(groupby_test, iterations=1000)
     results["GroupBy (100K rows)"] = result
@@ -220,20 +224,24 @@ def benchmark_polars_operations():
 
     # Rolling window calculations
     def rolling_test():
-        return df.with_columns([
-            pl.col("close").rolling_mean(window_size=20).alias("sma_20"),
-            pl.col("close").rolling_std(window_size=20).alias("std_20"),
-        ])
+        return df.with_columns(
+            [
+                pl.col("close").rolling_mean(window_size=20).alias("sma_20"),
+                pl.col("close").rolling_std(window_size=20).alias("std_20"),
+            ]
+        )
 
     result = benchmark(rolling_test, iterations=100)
     results["Rolling Window (100K rows)"] = result
     logger.info(f"✅ Rolling Window: {result.mean:.3f}ms")
 
     # Join operation
-    df2 = pl.DataFrame({
-        "symbol": ["AAPL"],
-        "sector": ["Technology"],
-    })
+    df2 = pl.DataFrame(
+        {
+            "symbol": ["AAPL"],
+            "sector": ["Technology"],
+        }
+    )
 
     def join_test():
         return df.join(df2, on="symbol", how="left")
@@ -256,6 +264,7 @@ def benchmark_polars_operations():
 # ============================================================================
 # SERIALIZATION BENCHMARKS
 # ============================================================================
+
 
 def benchmark_serialization():
     """Benchmark MessagePack vs JSON serialization."""
@@ -315,6 +324,7 @@ def benchmark_serialization():
 # DATABASE BENCHMARKS (Async)
 # ============================================================================
 
+
 async def benchmark_database_queries():
     """Benchmark database query performance."""
     logger.info("🗄️ Benchmarking database queries...")
@@ -358,11 +368,12 @@ async def benchmark_database_queries():
 # MAIN BENCHMARK RUNNER
 # ============================================================================
 
+
 async def run_all_benchmarks():
     """Run all benchmarks and generate report."""
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("CIFT Markets - Performance Benchmark Suite")
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("")
 
     all_results = {}
@@ -386,9 +397,9 @@ async def run_all_benchmarks():
     logger.info("")
 
     # Generate summary report
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("BENCHMARK SUMMARY")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     for category, results in all_results.items():
         logger.info(f"\n{category}:")
@@ -397,9 +408,9 @@ async def run_all_benchmarks():
             logger.info(f"  {name:40s} {result.mean:8.3f}ms ± {result.std:6.3f}ms")
 
     logger.info("")
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("✅ All benchmarks completed")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     return all_results
 

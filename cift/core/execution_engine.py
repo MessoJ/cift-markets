@@ -29,6 +29,7 @@ from cift.core.trading_queries import (
 # ORDER EXECUTION ENGINE
 # ============================================================================
 
+
 class ExecutionEngine:
     """
     Order execution engine for processing orders and managing positions.
@@ -66,10 +67,7 @@ class ExecutionEngine:
         while self.is_running:
             try:
                 # Get order from queue with timeout
-                order_data = await asyncio.wait_for(
-                    self._order_queue.get(),
-                    timeout=1.0
-                )
+                order_data = await asyncio.wait_for(self._order_queue.get(), timeout=1.0)
 
                 # Execute order
                 await self.execute_order(order_data)
@@ -126,15 +124,21 @@ class ExecutionEngine:
                         qty=quantity,
                         side=side,
                         order_type=order_type,
-                        limit_price=float(order_data.get("price")) if order_data.get("price") else None,
-                        client_order_id=str(order_id)
+                        limit_price=(
+                            float(order_data.get("price")) if order_data.get("price") else None
+                        ),
+                        client_order_id=str(order_id),
                     )
 
                     # Update local order with Alpaca ID and status
                     # We don't mark it as filled yet, we let the sync process handle that
                     # or we could map the initial status
-                    alpaca_status = alpaca_order.get('status')
-                    db_status = 'open' if alpaca_status in ['new', 'accepted', 'pending_new'] else alpaca_status
+                    alpaca_status = alpaca_order.get("status")
+                    db_status = (
+                        "open"
+                        if alpaca_status in ["new", "accepted", "pending_new"]
+                        else alpaca_status
+                    )
 
                     await self._update_order_status(
                         order_id,
@@ -167,15 +171,12 @@ class ExecutionEngine:
                 symbol=symbol,
                 side=side,
                 quantity=quantity,
-                price=execution_price
+                price=execution_price,
             )
 
             # Update order status to 'filled'
             await self._update_order_status(
-                order_id,
-                "filled",
-                filled_quantity=quantity,
-                avg_fill_price=execution_price
+                order_id, "filled", filled_quantity=quantity, avg_fill_price=execution_price
             )
 
             logger.info(f"Order {order_id} filled at ${execution_price}")
@@ -184,20 +185,10 @@ class ExecutionEngine:
             logger.error(f"Order execution failed for {order_id}: {e}")
 
             # Update order status to 'rejected'
-            await self._update_order_status(
-                order_id,
-                "rejected",
-                rejected_reason=str(e)
-            )
+            await self._update_order_status(order_id, "rejected", rejected_reason=str(e))
 
     async def _simulate_fill(
-        self,
-        order_id: UUID,
-        user_id: UUID,
-        symbol: str,
-        side: str,
-        quantity: float,
-        price: float
+        self, order_id: UUID, user_id: UUID, symbol: str, side: str, quantity: float, price: float
     ):
         """
         Simulate order fill for paper trading.
@@ -227,7 +218,7 @@ class ExecutionEngine:
         if not account:
             raise Exception(f"No active account found for user {user_id}")
 
-        account_id = account['id']
+        account_id = account["id"]
 
         # Insert fill record
         fill_query = """
@@ -239,15 +230,10 @@ class ExecutionEngine:
 
         async with db_manager.pool.acquire() as conn:
             fill_result = await conn.fetchrow(
-                fill_query,
-                order_id,
-                quantity,
-                price,
-                fill_value,
-                commission
+                fill_query, order_id, quantity, price, fill_value, commission
             )
 
-        fill_id = fill_result['id']
+        fill_id = fill_result["id"]
 
         # Record revenue
         try:
@@ -260,12 +246,12 @@ class ExecutionEngine:
             async with db_manager.pool.acquire() as conn:
                 await conn.execute(
                     revenue_query,
-                    'trading_commission',
+                    "trading_commission",
                     commission,
                     fill_id,
                     user_id,
                     account_id,
-                    f"Commission for {side} {quantity} {symbol}"
+                    f"Commission for {side} {quantity} {symbol}",
                 )
         except Exception as e:
             logger.error(f"Failed to record revenue for fill {fill_id}: {e}")
@@ -279,7 +265,7 @@ class ExecutionEngine:
             symbol=symbol,
             side=side,
             quantity=quantity,
-            price=price
+            price=price,
         )
 
         # Publish fill event to NATS (5-10x lower latency)
@@ -300,13 +286,7 @@ class ExecutionEngine:
         await nats.publish(f"orders.fills.{symbol}", fill_event)
 
     async def _update_position(
-        self,
-        user_id: UUID,
-        account_id: UUID,
-        symbol: str,
-        side: str,
-        quantity: float,
-        price: float
+        self, user_id: UUID, account_id: UUID, symbol: str, side: str, quantity: float, price: float
     ):
         """
         Update position after fill.
@@ -360,15 +340,15 @@ class ExecutionEngine:
                     price,
                     total_cost,
                     price,
-                    market_value
+                    market_value,
                 )
 
             logger.info(f"Opened new {position_side} position: {quantity} {symbol} @ ${price}")
 
         else:
             # Update existing position
-            current_qty = float(position['quantity'])
-            current_avg_cost = float(position['avg_cost'])
+            current_qty = float(position["quantity"])
+            current_avg_cost = float(position["avg_cost"])
 
             # Calculate new quantity
             if side == "buy":
@@ -385,9 +365,7 @@ class ExecutionEngine:
 
                 # Move to position history
                 await self._close_position(
-                    position_id=position['id'],
-                    exit_price=price,
-                    realized_pnl=realized_pnl
+                    position_id=position["id"], exit_price=price, realized_pnl=realized_pnl
                 )
 
                 logger.info(f"Closed position: {symbol} with P&L ${realized_pnl:.2f}")
@@ -431,17 +409,12 @@ class ExecutionEngine:
                         total_cost,
                         price,
                         market_value,
-                        position['id']
+                        position["id"],
                     )
 
                 logger.info(f"Updated position: {new_qty} {symbol} @ avg ${new_avg_cost:.2f}")
 
-    async def _close_position(
-        self,
-        position_id: UUID,
-        exit_price: float,
-        realized_pnl: float
-    ):
+    async def _close_position(self, position_id: UUID, exit_price: float, realized_pnl: float):
         """
         Close position and move to history.
 
@@ -469,31 +442,31 @@ class ExecutionEngine:
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         """
 
-        quantity = abs(float(position['quantity']))
-        avg_cost = float(position['avg_cost'])
-        total_cost = float(position['total_cost'])
+        quantity = abs(float(position["quantity"]))
+        avg_cost = float(position["avg_cost"])
+        total_cost = float(position["total_cost"])
         total_proceeds = quantity * exit_price
         realized_pnl_pct = (realized_pnl / total_cost * 100) if total_cost > 0 else 0
 
-        hold_duration = (datetime.utcnow() - position['opened_at']).total_seconds()
+        hold_duration = (datetime.utcnow() - position["opened_at"]).total_seconds()
 
         async with db_manager.pool.acquire() as conn:
             await conn.execute(
                 history_query,
-                position['user_id'],
-                position['account_id'],
-                position['symbol'],
+                position["user_id"],
+                position["account_id"],
+                position["symbol"],
                 quantity,
-                position['side'],
+                position["side"],
                 avg_cost,
                 exit_price,
                 total_cost,
                 total_proceeds,
                 realized_pnl,
                 realized_pnl_pct,
-                position['opened_at'],
+                position["opened_at"],
                 datetime.utcnow(),
-                int(hold_duration)
+                int(hold_duration),
             )
 
         # Delete from positions
@@ -510,7 +483,7 @@ class ExecutionEngine:
         status: str,
         filled_quantity: float | None = None,
         avg_fill_price: float | None = None,
-        rejected_reason: str | None = None
+        rejected_reason: str | None = None,
     ):
         """
         Update order status.

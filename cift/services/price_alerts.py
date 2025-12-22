@@ -119,17 +119,22 @@ class PriceAlertService:
         # Store in database
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO price_alerts (
                     id, user_id, symbol, alert_type, target_value,
                     notification_methods, status, expires_at, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
-                alert.id, alert.user_id, alert.symbol.upper(), alert.alert_type.value,
+                alert.id,
+                alert.user_id,
+                alert.symbol.upper(),
+                alert.alert_type.value,
                 alert.condition_value,
-                alert.notification_methods, # Pass list directly for text[]
-                'active' if alert.is_active else 'disabled',
-                alert.expires_at, alert.created_at
+                alert.notification_methods,  # Pass list directly for text[]
+                "active" if alert.is_active else "disabled",
+                alert.expires_at,
+                alert.created_at,
             )
 
         # Add to active monitoring
@@ -145,9 +150,12 @@ class PriceAlertService:
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
             # Get current alert
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT * FROM price_alerts WHERE id = $1
-            """, alert_id)
+            """,
+                alert_id,
+            )
 
             if not row:
                 return False
@@ -158,15 +166,15 @@ class PriceAlertService:
             param_count = 1
 
             for field, value in updates.items():
-                if field == 'condition_value':
+                if field == "condition_value":
                     update_fields.append(f"target_value = ${param_count}")
                     params.append(value)
                     param_count += 1
-                elif field == 'is_active':
+                elif field == "is_active":
                     update_fields.append(f"status = ${param_count}")
-                    params.append('active' if value else 'disabled')
+                    params.append("active" if value else "disabled")
                     param_count += 1
-                elif field == 'notification_methods':
+                elif field == "notification_methods":
                     update_fields.append(f"notification_methods = ${param_count}")
                     # Ensure it's a list of strings
                     if isinstance(value, list):
@@ -174,7 +182,7 @@ class PriceAlertService:
                     else:
                         params.append([])
                     param_count += 1
-                elif field in ['alert_type', 'expires_at']:
+                elif field in ["alert_type", "expires_at"]:
                     update_fields.append(f"{field} = ${param_count}")
                     params.append(value)
                     param_count += 1
@@ -184,14 +192,17 @@ class PriceAlertService:
 
             params.append(alert_id)
 
-            await conn.execute(f"""
+            await conn.execute(
+                f"""
                 UPDATE price_alerts
                 SET {', '.join(update_fields)}
                 WHERE id = ${param_count}
-            """, *params)
+            """,
+                *params,
+            )
 
         # Reload alerts for this symbol
-        symbol = row['symbol']
+        symbol = row["symbol"]
         await self._reload_symbol_alerts(symbol)
 
         logger.info(f"Updated price alert {alert_id}")
@@ -203,29 +214,36 @@ class PriceAlertService:
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
             # Get alert info before deletion
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT symbol FROM price_alerts
                 WHERE id = $1 AND user_id = $2
-            """, alert_id, user_id)
+            """,
+                alert_id,
+                user_id,
+            )
 
             if not row:
                 return False
 
             # Delete the alert
-            result = await conn.execute("""
+            result = await conn.execute(
+                """
                 DELETE FROM price_alerts
                 WHERE id = $1 AND user_id = $2
-            """, alert_id, user_id)
+            """,
+                alert_id,
+                user_id,
+            )
 
             if result == "DELETE 0":
                 return False
 
         # Remove from active monitoring
-        symbol = row['symbol']
+        symbol = row["symbol"]
         if symbol in self.active_alerts:
             self.active_alerts[symbol] = [
-                alert for alert in self.active_alerts[symbol]
-                if alert.id != alert_id
+                alert for alert in self.active_alerts[symbol] if alert.id != alert_id
             ]
 
             if not self.active_alerts[symbol]:
@@ -234,7 +252,9 @@ class PriceAlertService:
         logger.info(f"Deleted price alert {alert_id}")
         return True
 
-    async def get_user_alerts(self, user_id: UUID, include_triggered: bool = True) -> list[PriceAlert]:
+    async def get_user_alerts(
+        self, user_id: UUID, include_triggered: bool = True
+    ) -> list[PriceAlert]:
         """Get all alerts for a user."""
 
         pool = await get_postgres_pool()
@@ -254,7 +274,7 @@ class PriceAlertService:
         alerts = []
         for row in rows:
             # Handle notification_methods (Postgres array)
-            methods_list = row['notification_methods'] or []
+            methods_list = row["notification_methods"] or []
 
             notification_methods = [
                 NotificationMethod(method)
@@ -262,21 +282,23 @@ class PriceAlertService:
                 if method in [m.value for m in NotificationMethod]
             ]
 
-            alerts.append(PriceAlert(
-                id=row['id'],
-                user_id=row['user_id'],
-                symbol=row['symbol'],
-                alert_type=AlertType(row['alert_type']),
-                condition_value=float(row['target_value']),
-                condition_value2=None,
-                notification_methods=notification_methods,
-                message=None,
-                is_active=row['status'] == 'active',
-                expires_at=row['expires_at'],
-                created_at=row['created_at'],
-                triggered_at=row['triggered_at'],
-                trigger_price=float(row['current_value']) if row['current_value'] else None
-            ))
+            alerts.append(
+                PriceAlert(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    symbol=row["symbol"],
+                    alert_type=AlertType(row["alert_type"]),
+                    condition_value=float(row["target_value"]),
+                    condition_value2=None,
+                    notification_methods=notification_methods,
+                    message=None,
+                    is_active=row["status"] == "active",
+                    expires_at=row["expires_at"],
+                    created_at=row["created_at"],
+                    triggered_at=row["triggered_at"],
+                    trigger_price=float(row["current_value"]) if row["current_value"] else None,
+                )
+            )
 
         return alerts
 
@@ -285,7 +307,8 @@ class PriceAlertService:
 
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            stats = await conn.fetchrow("""
+            stats = await conn.fetchrow(
+                """
                 SELECT
                     COUNT(*) as total_alerts,
                     COUNT(*) FILTER (WHERE is_active = true AND triggered_at IS NULL) as active_alerts,
@@ -293,33 +316,36 @@ class PriceAlertService:
                     COUNT(*) FILTER (WHERE expires_at < NOW()) as expired_alerts
                 FROM price_alerts
                 WHERE user_id = $1
-            """, user_id)
+            """,
+                user_id,
+            )
 
-        return dict(stats) if stats else {
-            "total_alerts": 0,
-            "active_alerts": 0,
-            "triggered_alerts": 0,
-            "expired_alerts": 0
-        }
+        return (
+            dict(stats)
+            if stats
+            else {"total_alerts": 0, "active_alerts": 0, "triggered_alerts": 0, "expired_alerts": 0}
+        )
 
     async def _load_active_alerts(self):
         """Load active alerts from database."""
 
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT * FROM price_alerts
                 WHERE status = 'active'
                 AND triggered_at IS NULL
                 AND (expires_at IS NULL OR expires_at > NOW())
-            """)
+            """
+            )
 
         self.active_alerts.clear()
 
         for row in rows:
             try:
                 # Handle notification_methods (Postgres array)
-                methods_list = row['notification_methods'] or []
+                methods_list = row["notification_methods"] or []
 
                 notification_methods = [
                     NotificationMethod(method)
@@ -329,17 +355,19 @@ class PriceAlertService:
 
                 # Map DB schema to PriceAlert model
                 alert = PriceAlert(
-                    id=row['id'],
-                    user_id=row['user_id'],
-                    symbol=row['symbol'],
-                    alert_type=AlertType(row['alert_type']),
-                    condition_value=float(row['target_value']), # Map target_value -> condition_value
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    symbol=row["symbol"],
+                    alert_type=AlertType(row["alert_type"]),
+                    condition_value=float(
+                        row["target_value"]
+                    ),  # Map target_value -> condition_value
                     condition_value2=None,
                     notification_methods=notification_methods,
                     message=None,
-                    is_active=row['status'] == 'active', # Map status -> is_active
-                    expires_at=row['expires_at'],
-                    created_at=row['created_at']
+                    is_active=row["status"] == "active",  # Map status -> is_active
+                    expires_at=row["expires_at"],
+                    created_at=row["created_at"],
                 )
 
                 await self._add_to_monitoring(alert)
@@ -357,9 +385,7 @@ class PriceAlertService:
             self.active_alerts[symbol] = []
 
         # Remove existing alert with same ID
-        self.active_alerts[symbol] = [
-            a for a in self.active_alerts[symbol] if a.id != alert.id
-        ]
+        self.active_alerts[symbol] = [a for a in self.active_alerts[symbol] if a.id != alert.id]
 
         # Add new alert
         self.active_alerts[symbol].append(alert)
@@ -371,12 +397,15 @@ class PriceAlertService:
 
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT * FROM price_alerts
                 WHERE symbol = $1 AND status = 'active'
                 AND triggered_at IS NULL
                 AND (expires_at IS NULL OR expires_at > NOW())
-            """, symbol)
+            """,
+                symbol,
+            )
 
         # Clear existing alerts for this symbol
         if symbol in self.active_alerts:
@@ -386,7 +415,7 @@ class PriceAlertService:
         for row in rows:
             try:
                 # Handle notification_methods (Postgres array)
-                methods_list = row['notification_methods'] or []
+                methods_list = row["notification_methods"] or []
 
                 notification_methods = [
                     NotificationMethod(method)
@@ -395,17 +424,19 @@ class PriceAlertService:
                 ]
 
                 alert = PriceAlert(
-                    id=row['id'],
-                    user_id=row['user_id'],
-                    symbol=row['symbol'],
-                    alert_type=AlertType(row['alert_type']),
-                    condition_value=float(row['target_value']), # Map target_value -> condition_value
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    symbol=row["symbol"],
+                    alert_type=AlertType(row["alert_type"]),
+                    condition_value=float(
+                        row["target_value"]
+                    ),  # Map target_value -> condition_value
                     condition_value2=None,
                     notification_methods=notification_methods,
                     message=None,
-                    is_active=row['status'] == 'active',
-                    expires_at=row['expires_at'],
-                    created_at=row['created_at']
+                    is_active=row["status"] == "active",
+                    expires_at=row["expires_at"],
+                    created_at=row["created_at"],
                 )
 
                 await self._add_to_monitoring(alert)
@@ -430,7 +461,7 @@ class PriceAlertService:
                 continue
 
             price_data = market_data[symbol]
-            current_price = float(price_data.get('price', 0))
+            current_price = float(price_data.get("price", 0))
 
             if current_price <= 0:
                 continue
@@ -446,8 +477,10 @@ class PriceAlertService:
                             trigger_time=datetime.utcnow(),
                             condition_met=self._get_condition_description(alert, current_price),
                             user_id=alert.user_id,
-                            notification_methods=[method.value for method in alert.notification_methods],
-                            message=alert.message or f"{symbol} price alert triggered"
+                            notification_methods=[
+                                method.value for method in alert.notification_methods
+                            ],
+                            message=alert.message or f"{symbol} price alert triggered",
                         )
 
                         triggered_alerts.append(trigger)
@@ -470,19 +503,22 @@ class PriceAlertService:
             for symbol in symbols:
                 try:
                     # Get latest price from market_data_cache
-                    row = await conn.fetchrow("""
+                    row = await conn.fetchrow(
+                        """
                         SELECT price, volume, bid, ask, change_percent
                         FROM market_data_cache
                         WHERE symbol = $1
-                    """, symbol)
+                    """,
+                        symbol,
+                    )
 
                     if row:
                         market_data[symbol] = {
-                            'price': float(row['price']),
-                            'volume': int(row['volume'] or 0),
-                            'bid': float(row['bid'] or 0),
-                            'ask': float(row['ask'] or 0),
-                            'change_percent': float(row['change_percent'] or 0),
+                            "price": float(row["price"]),
+                            "volume": int(row["volume"] or 0),
+                            "bid": float(row["bid"] or 0),
+                            "ask": float(row["ask"] or 0),
+                            "change_percent": float(row["change_percent"] or 0),
                         }
 
                 except Exception as e:
@@ -493,7 +529,7 @@ class PriceAlertService:
     async def _check_alert_condition(self, alert: PriceAlert, price_data: dict) -> bool:
         """Check if alert condition is met."""
 
-        current_price = price_data['price']
+        current_price = price_data["price"]
 
         if alert.alert_type == AlertType.PRICE_ABOVE:
             return current_price >= alert.condition_value
@@ -502,12 +538,12 @@ class PriceAlertService:
             return current_price <= alert.condition_value
 
         elif alert.alert_type == AlertType.PRICE_CHANGE_PERCENT:
-            change_percent = abs(price_data.get('change_percent', 0))
+            change_percent = abs(price_data.get("change_percent", 0))
             return change_percent >= alert.condition_value
 
         elif alert.alert_type == AlertType.VOLUME_SPIKE:
             # Check if volume is X times higher than average
-            volume = price_data.get('volume', 0)
+            volume = price_data.get("volume", 0)
             # Mock average volume check
             avg_volume = 1000000  # Should get from database
             return volume >= avg_volume * alert.condition_value
@@ -544,11 +580,16 @@ class PriceAlertService:
             # Mark alert as triggered in database
             pool = await get_postgres_pool()
             async with pool.acquire() as conn:
-                await conn.execute("""
+                await conn.execute(
+                    """
                     UPDATE price_alerts
                     SET triggered_at = $2, current_value = $3, status = 'triggered'
                     WHERE id = $1
-                """, trigger.alert_id, trigger.trigger_time, trigger.trigger_price)
+                """,
+                    trigger.alert_id,
+                    trigger.trigger_time,
+                    trigger.trigger_price,
+                )
 
                 # Store alert trigger history
                 # NOTE: alert_triggers table does not exist yet, skipping insertion
@@ -566,7 +607,8 @@ class PriceAlertService:
             # Remove from active monitoring
             if trigger.symbol in self.active_alerts:
                 self.active_alerts[trigger.symbol] = [
-                    alert for alert in self.active_alerts[trigger.symbol]
+                    alert
+                    for alert in self.active_alerts[trigger.symbol]
                     if alert.id != trigger.alert_id
                 ]
 
@@ -617,21 +659,25 @@ class PriceAlertService:
         # Store in database for in-app display
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO notifications (
                     id, user_id, title, message, notification_type, metadata, created_at
                 ) VALUES ($1, $2, $3, $4, 'alert', $5, $6)
             """,
-                uuid4(), trigger.user_id,
+                uuid4(),
+                trigger.user_id,
                 f"{trigger.symbol} Price Alert",
                 f"{trigger.symbol}: {trigger.condition_met}",
-                json.dumps({
-                    "alert_id": str(trigger.alert_id),
-                    "symbol": trigger.symbol,
-                    "trigger_price": trigger.trigger_price,
-                    "condition_met": trigger.condition_met
-                }),
-                trigger.trigger_time
+                json.dumps(
+                    {
+                        "alert_id": str(trigger.alert_id),
+                        "symbol": trigger.symbol,
+                        "trigger_price": trigger.trigger_price,
+                        "condition_met": trigger.condition_met,
+                    }
+                ),
+                trigger.trigger_time,
             )
 
         logger.info(f"🔔 In-app notification created for {trigger.symbol} alert")
@@ -651,11 +697,14 @@ class PriceAlertService:
         # Validate symbol exists
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
-            exists = await conn.fetchval("""
+            exists = await conn.fetchval(
+                """
                 SELECT EXISTS(
                     SELECT 1 FROM market_data_cache WHERE symbol = $1
                 )
-            """, alert.symbol.upper())
+            """,
+                alert.symbol.upper(),
+            )
 
             if not exists:
                 raise ValueError(f"Symbol {alert.symbol} not found")
@@ -663,6 +712,7 @@ class PriceAlertService:
 
 # Global alert service instance
 _alert_service = None
+
 
 def get_alert_service() -> PriceAlertService:
     """Get the global alert service instance."""

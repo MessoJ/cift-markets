@@ -27,14 +27,17 @@ from loguru import logger
 # Try to import numba for JIT compilation
 try:
     from numba import jit
+
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
     logger.warning("Numba not available, falling back to pure Python")
+
     # Create no-op decorator
     def jit(*args, **kwargs):
         def decorator(func):
             return func
+
         return decorator
 
 
@@ -42,11 +45,13 @@ except ImportError:
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class OrderBookSnapshot:
     """
     Point-in-time snapshot of order book state with computed features.
     """
+
     symbol: str
     timestamp: int  # Nanoseconds
 
@@ -62,26 +67,26 @@ class OrderBookSnapshot:
     spread_bps: float = 0.0
 
     # Imbalance metrics
-    imbalance_l1: float = 0.0      # Top of book imbalance
-    imbalance_l5: float = 0.0      # Top 5 levels
-    imbalance_l10: float = 0.0     # Top 10 levels
-    weighted_imbalance: float = 0.0 # Distance-weighted
+    imbalance_l1: float = 0.0  # Top of book imbalance
+    imbalance_l5: float = 0.0  # Top 5 levels
+    imbalance_l10: float = 0.0  # Top 10 levels
+    weighted_imbalance: float = 0.0  # Distance-weighted
 
     # Volume metrics
-    bid_depth_5: int = 0           # Total bid volume top 5
-    ask_depth_5: int = 0           # Total ask volume top 5
+    bid_depth_5: int = 0  # Total bid volume top 5
+    ask_depth_5: int = 0  # Total ask volume top 5
     bid_depth_10: int = 0
     ask_depth_10: int = 0
 
     # Pressure metrics
-    bid_pressure: float = 0.0      # Rate of bid additions
-    ask_pressure: float = 0.0      # Rate of ask additions
-    net_pressure: float = 0.0      # bid_pressure - ask_pressure
+    bid_pressure: float = 0.0  # Rate of bid additions
+    ask_pressure: float = 0.0  # Rate of ask additions
+    net_pressure: float = 0.0  # bid_pressure - ask_pressure
 
     # Microstructure
-    trade_flow: float = 0.0        # Signed trade volume
-    vpin: float = 0.0              # Volume-synchronized probability of informed trading
-    kyle_lambda: float = 0.0       # Kyle's lambda (price impact)
+    trade_flow: float = 0.0  # Signed trade volume
+    vpin: float = 0.0  # Volume-synchronized probability of informed trading
+    kyle_lambda: float = 0.0  # Kyle's lambda (price impact)
 
     # Arrival rates (for Hawkes)
     bid_arrival_rate: float = 0.0  # Orders per second
@@ -97,6 +102,7 @@ class OrderBookSnapshot:
 @dataclass
 class TradeFlow:
     """Aggregated trade flow data."""
+
     symbol: str
     timestamp: int
     buy_volume: int = 0
@@ -123,12 +129,9 @@ class TradeFlow:
 # ============================================================================
 
 if NUMBA_AVAILABLE:
+
     @jit(nopython=True, cache=True)
-    def compute_imbalance_numba(
-        bid_sizes: np.ndarray,
-        ask_sizes: np.ndarray,
-        levels: int
-    ) -> float:
+    def compute_imbalance_numba(bid_sizes: np.ndarray, ask_sizes: np.ndarray, levels: int) -> float:
         """Compute order book imbalance for given levels."""
         bid_sum = 0.0
         ask_sum = 0.0
@@ -152,7 +155,7 @@ if NUMBA_AVAILABLE:
         ask_prices: np.ndarray,
         ask_sizes: np.ndarray,
         mid_price: float,
-        levels: int
+        levels: int,
     ) -> float:
         """
         Compute distance-weighted imbalance.
@@ -184,9 +187,7 @@ if NUMBA_AVAILABLE:
 
     @jit(nopython=True, cache=True)
     def compute_arrival_rate_numba(
-        timestamps: np.ndarray,
-        current_time: int,
-        window_ns: int
+        timestamps: np.ndarray, current_time: int, window_ns: int
     ) -> float:
         """Compute event arrival rate in events per second."""
         count = 0
@@ -201,9 +202,7 @@ if NUMBA_AVAILABLE:
 
     @jit(nopython=True, cache=True)
     def compute_vpin_numba(
-        buy_volumes: np.ndarray,
-        sell_volumes: np.ndarray,
-        bucket_volume: float
+        buy_volumes: np.ndarray, sell_volumes: np.ndarray, bucket_volume: float
     ) -> float:
         """
         Compute Volume-Synchronized Probability of Informed Trading (VPIN).
@@ -232,7 +231,9 @@ else:
         total = bid_sum + ask_sum
         return (bid_sum - ask_sum) / total if total > 0 else 0.0
 
-    def compute_weighted_imbalance_numba(bid_prices, bid_sizes, ask_prices, ask_sizes, mid_price, levels):
+    def compute_weighted_imbalance_numba(
+        bid_prices, bid_sizes, ask_prices, ask_sizes, mid_price, levels
+    ):
         bid_weighted = sum(
             size / (1 + mid_price - price)
             for price, size in zip(bid_prices[:levels], bid_sizes[:levels], strict=False)
@@ -264,6 +265,7 @@ else:
 # ============================================================================
 # ORDER BOOK PROCESSOR
 # ============================================================================
+
 
 class OrderBookProcessor:
     """
@@ -450,9 +452,7 @@ class OrderBookProcessor:
         imbalance_l10 = compute_imbalance_numba(self.bid_sizes, self.ask_sizes, 10)
 
         weighted_imbalance = compute_weighted_imbalance_numba(
-            self.bid_prices, self.bid_sizes,
-            self.ask_prices, self.ask_sizes,
-            mid_price, 10
+            self.bid_prices, self.bid_sizes, self.ask_prices, self.ask_sizes, mid_price, 10
         )
 
         # Depth metrics
@@ -556,28 +556,31 @@ class OrderBookProcessor:
 
         snap = self._last_snapshot
 
-        return np.array([
-            snap.mid_price,
-            snap.spread_bps,
-            snap.imbalance_l1,
-            snap.imbalance_l5,
-            snap.imbalance_l10,
-            snap.weighted_imbalance,
-            snap.bid_depth_5,
-            snap.ask_depth_5,
-            snap.bid_depth_10,
-            snap.ask_depth_10,
-            snap.bid_pressure,
-            snap.ask_pressure,
-            snap.net_pressure,
-            snap.trade_flow,
-            snap.vpin,
-            snap.kyle_lambda,
-            snap.bid_arrival_rate,
-            snap.ask_arrival_rate,
-            snap.trade_arrival_rate,
-            snap.cancel_rate,
-        ], dtype=np.float32)
+        return np.array(
+            [
+                snap.mid_price,
+                snap.spread_bps,
+                snap.imbalance_l1,
+                snap.imbalance_l5,
+                snap.imbalance_l10,
+                snap.weighted_imbalance,
+                snap.bid_depth_5,
+                snap.ask_depth_5,
+                snap.bid_depth_10,
+                snap.ask_depth_10,
+                snap.bid_pressure,
+                snap.ask_pressure,
+                snap.net_pressure,
+                snap.trade_flow,
+                snap.vpin,
+                snap.kyle_lambda,
+                snap.bid_arrival_rate,
+                snap.ask_arrival_rate,
+                snap.trade_arrival_rate,
+                snap.cancel_rate,
+            ],
+            dtype=np.float32,
+        )
 
     @property
     def feature_names(self) -> list[str]:

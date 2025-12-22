@@ -22,8 +22,10 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 # MODELS
 # ============================================================================
 
+
 class PriceAlert(BaseModel):
     """Price alert model"""
+
     id: str
     user_id: str
     symbol: str
@@ -39,23 +41,25 @@ class PriceAlert(BaseModel):
 
 class CreateAlertRequest(BaseModel):
     """Create alert request"""
+
     symbol: str = Field(..., min_length=1, max_length=10)
     alert_type: str = Field(..., pattern="^(price_above|price_below|price_change|volume)$")
     target_value: Decimal | None = Field(None, gt=0)
     condition_value: Decimal | None = Field(None, gt=0, description="Alias for target_value")
-    notification_methods: list[str] = Field(default=['email', 'push'])
+    notification_methods: list[str] = Field(default=["email", "push"])
     expires_in_days: int | None = Field(default=30, ge=1, le=365)
     message: str | None = None
 
     def __init__(self, **data):
         # Handle alias for target_value
-        if 'condition_value' in data and 'target_value' not in data:
-            data['target_value'] = data['condition_value']
+        if "condition_value" in data and "target_value" not in data:
+            data["target_value"] = data["condition_value"]
         super().__init__(**data)
 
 
 class Notification(BaseModel):
     """Notification model"""
+
     id: str
     user_id: str
     notification_type: str  # 'alert', 'order', 'news', 'system'
@@ -70,6 +74,7 @@ class Notification(BaseModel):
 # ============================================================================
 # ENDPOINTS - PRICE ALERTS
 # ============================================================================
+
 
 @router.get("")
 async def get_alerts(
@@ -118,17 +123,17 @@ async def get_alerts(
 
         return [
             PriceAlert(
-                id=row['id'],
-                user_id=row['user_id'],
-                symbol=row['symbol'],
-                alert_type=row['alert_type'],
-                target_value=row['target_value'],
-                current_value=row['current_value'],
-                status=row['status'],
-                notification_methods=row['notification_methods'] or [],
-                created_at=row['created_at'],
-                triggered_at=row['triggered_at'],
-                expires_at=row['expires_at'],
+                id=row["id"],
+                user_id=row["user_id"],
+                symbol=row["symbol"],
+                alert_type=row["alert_type"],
+                target_value=row["target_value"],
+                current_value=row["current_value"],
+                status=row["status"],
+                notification_methods=row["notification_methods"] or [],
+                created_at=row["created_at"],
+                triggered_at=row["triggered_at"],
+                expires_at=row["expires_at"],
             )
             for row in rows
         ]
@@ -168,17 +173,17 @@ async def get_alert(
             raise HTTPException(status_code=404, detail="Alert not found")
 
         return PriceAlert(
-            id=row['id'],
-            user_id=row['user_id'],
-            symbol=row['symbol'],
-            alert_type=row['alert_type'],
-            target_value=row['target_value'],
-            current_value=row['current_value'],
-            status=row['status'],
-            notification_methods=row['notification_methods'] or [],
-            created_at=row['created_at'],
-            triggered_at=row['triggered_at'],
-            expires_at=row['expires_at'],
+            id=row["id"],
+            user_id=row["user_id"],
+            symbol=row["symbol"],
+            alert_type=row["alert_type"],
+            target_value=row["target_value"],
+            current_value=row["current_value"],
+            status=row["status"],
+            notification_methods=row["notification_methods"] or [],
+            created_at=row["created_at"],
+            triggered_at=row["triggered_at"],
+            expires_at=row["expires_at"],
         )
 
 
@@ -191,7 +196,7 @@ async def create_alert(
     pool = await get_postgres_pool()
 
     # Validate notification methods
-    valid_methods = {'email', 'sms', 'push'}
+    valid_methods = {"email", "sms", "push"}
     if not all(m in valid_methods for m in request.notification_methods):
         raise HTTPException(status_code=400, detail="Invalid notification method")
 
@@ -199,6 +204,7 @@ async def create_alert(
     expires_at = None
     if request.expires_in_days:
         from datetime import timedelta
+
         expires_at = datetime.utcnow() + timedelta(days=request.expires_in_days)
 
     async with pool.acquire() as conn:
@@ -236,11 +242,13 @@ async def create_alert(
             expires_at,
         )
 
-        logger.info(f"Price alert created: id={row['id']}, user_id={user_id}, symbol={request.symbol}")
+        logger.info(
+            f"Price alert created: id={row['id']}, user_id={user_id}, symbol={request.symbol}"
+        )
 
         return {
-            "alert_id": row['id'],
-            "created_at": row['created_at'],
+            "alert_id": row["id"],
+            "created_at": row["created_at"],
             "message": "Alert created successfully",
         }
 
@@ -306,6 +314,7 @@ async def bulk_delete_alerts(
 # ENDPOINTS - NOTIFICATIONS
 # ============================================================================
 
+
 @router.get("/notifications")
 async def get_notifications(
     is_read: bool | None = None,
@@ -352,15 +361,15 @@ async def get_notifications(
 
         notifications = [
             Notification(
-                id=row['id'],
-                user_id=row['user_id'],
-                notification_type=row['notification_type'],
-                title=row['title'],
-                message=row['message'],
-                is_read=row['is_read'],
-                created_at=row['created_at'],
-                read_at=row['read_at'],
-                metadata=row['metadata'],
+                id=row["id"],
+                user_id=row["user_id"],
+                notification_type=row["notification_type"],
+                title=row["title"],
+                message=row["message"],
+                is_read=row["is_read"],
+                created_at=row["created_at"],
+                read_at=row["read_at"],
+                metadata=row["metadata"],
             )
             for row in rows
         ]
@@ -466,6 +475,7 @@ async def delete_notification(
 # ENDPOINTS - SETTINGS
 # ============================================================================
 
+
 @router.get("/settings")
 async def get_notification_settings(
     user_id: UUID = Depends(get_current_user_id),
@@ -530,13 +540,13 @@ async def update_notification_settings(
                 marketing_notifications = EXCLUDED.marketing_notifications
             """,
             user_id,
-            settings.get('email_notifications', True),
-            settings.get('sms_notifications', False),
-            settings.get('push_notifications', True),
-            settings.get('alert_notifications', True),
-            settings.get('order_notifications', True),
-            settings.get('news_notifications', True),
-            settings.get('marketing_notifications', False),
+            settings.get("email_notifications", True),
+            settings.get("sms_notifications", False),
+            settings.get("push_notifications", True),
+            settings.get("alert_notifications", True),
+            settings.get("order_notifications", True),
+            settings.get("news_notifications", True),
+            settings.get("marketing_notifications", False),
         )
 
         return {"success": True, "message": "Settings updated"}
