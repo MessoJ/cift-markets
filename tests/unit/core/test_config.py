@@ -1,5 +1,4 @@
-"""
-CIFT Markets - Configuration Tests
+"""CIFT Markets - Configuration Tests.
 
 Tests for settings validation and configuration management.
 """
@@ -10,11 +9,35 @@ from pydantic import ValidationError
 from cift.core.config import Settings, get_settings
 
 
+def _clear_external_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure Settings() uses code defaults, not CI env vars."""
+
+    for key in (
+        # Postgres
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        # Redis/Dragonfly
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "REDIS_DB",
+        # QuestDB
+        "QUESTDB_HOST",
+        "QUESTDB_HTTP_PORT",
+        "QUESTDB_PG_PORT",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 class TestSettings:
     """Test Settings configuration."""
 
-    def test_settings_default_values(self):
+    def test_settings_default_values(self, monkeypatch):
         """Test that settings have correct default values."""
+        _clear_external_env(monkeypatch)
         settings = Settings()
 
         assert settings.app_name == "CIFT Markets"
@@ -23,8 +46,9 @@ class TestSettings:
         assert settings.postgres_db == "cift_markets"
         assert settings.redis_db == 0
 
-    def test_settings_postgres_url(self):
+    def test_settings_postgres_url(self, monkeypatch):
         """Test PostgreSQL URL construction."""
+        _clear_external_env(monkeypatch)
         settings = Settings()
         url = settings.postgres_url
 
@@ -33,8 +57,9 @@ class TestSettings:
         assert settings.postgres_db in url
         assert str(settings.postgres_port) in url
 
-    def test_settings_questdb_url(self):
+    def test_settings_questdb_url(self, monkeypatch):
         """Test QuestDB URL construction."""
+        _clear_external_env(monkeypatch)
         settings = Settings()
 
         http_url = settings.questdb_http_url
@@ -45,24 +70,27 @@ class TestSettings:
         assert "postgresql://" in pg_url
         assert str(settings.questdb_pg_port) in pg_url
 
-    def test_settings_redis_url_no_password(self):
+    def test_settings_redis_url_no_password(self, monkeypatch):
         """Test Redis URL without password."""
+        _clear_external_env(monkeypatch)
         settings = Settings(redis_password=None)
         url = settings.redis_url
 
         assert url.startswith("redis://")
         assert "@" not in url  # No password
 
-    def test_settings_redis_url_with_password(self):
+    def test_settings_redis_url_with_password(self, monkeypatch):
         """Test Redis URL with password."""
+        _clear_external_env(monkeypatch)
         settings = Settings(redis_password="testpass")
         url = settings.redis_url
 
         assert "redis://:" in url  # Password format
         assert "testpass" in url
 
-    def test_secret_key_validation_length(self):
+    def test_secret_key_validation_length(self, monkeypatch):
         """Test that secret keys must be at least 32 characters."""
+        _clear_external_env(monkeypatch)
         with pytest.raises(ValidationError) as exc_info:
             Settings(secret_key="short", app_env="production")
 
@@ -75,8 +103,9 @@ class TestSettings:
 
         assert settings1 is settings2
 
-    def test_kafka_topic_names(self):
+    def test_kafka_topic_names(self, monkeypatch):
         """Test Kafka topic configuration."""
+        _clear_external_env(monkeypatch)
         settings = Settings()
 
         assert settings.kafka_topic_market_data == "market-data"
@@ -84,15 +113,17 @@ class TestSettings:
         assert settings.kafka_topic_orders == "orders"
         assert settings.kafka_topic_positions == "positions"
 
-    def test_mlflow_configuration(self):
+    def test_mlflow_configuration(self, monkeypatch):
         """Test MLflow settings."""
+        _clear_external_env(monkeypatch)
         settings = Settings()
 
         assert settings.mlflow_tracking_uri == "http://localhost:5000"
         assert settings.mlflow_experiment_name == "cift-markets"
 
-    def test_risk_management_defaults(self):
+    def test_risk_management_defaults(self, monkeypatch):
         """Test risk management default values."""
+        _clear_external_env(monkeypatch)
         settings = Settings()
 
         assert settings.max_position_size == 10000.0
