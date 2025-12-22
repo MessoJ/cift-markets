@@ -304,7 +304,11 @@ class RedisManager:
     async def close(self) -> None:
         """Close Redis connection."""
         if self.client:
-            await self.client.close()
+            aclose = getattr(self.client, "aclose", None)
+            if callable(aclose):
+                await aclose()
+            else:
+                await self.client.close()
             logger.info("Redis connection closed")
             self._is_initialized = False
 
