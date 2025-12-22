@@ -142,7 +142,7 @@ class CryptoProcessor(PaymentProcessor):
                 data = response.json()
                 return Decimal(str(data['USD']['last']))
         except Exception as e:
-            raise PaymentProcessorError(f"Failed to get BTC price: {str(e)}")
+            raise PaymentProcessorError(f"Failed to get BTC price: {str(e)}") from e
 
     async def _get_eth_price_usd(self) -> Decimal:
         """
@@ -161,7 +161,7 @@ class CryptoProcessor(PaymentProcessor):
                 data = response.json()
                 return Decimal(str(data['ethereum']['usd']))
         except Exception as e:
-            raise PaymentProcessorError(f"Failed to get ETH price: {str(e)}")
+            raise PaymentProcessorError(f"Failed to get ETH price: {str(e)}") from e
 
     async def _convert_usd_to_crypto(self, usd_amount: Decimal, network: str) -> Decimal:
         """
@@ -215,7 +215,7 @@ class CryptoProcessor(PaymentProcessor):
                     'status': 'confirmed' if confirmations >= self.config.get('confirmations_required', 3) else 'pending'
                 }
         except Exception as e:
-            raise PaymentProcessorError(f"Failed to check BTC transaction: {str(e)}")
+            raise PaymentProcessorError(f"Failed to check BTC transaction: {str(e)}") from e
 
     async def _check_eth_transaction(self, tx_hash: str) -> dict[str, Any]:
         """
@@ -271,7 +271,7 @@ class CryptoProcessor(PaymentProcessor):
                     }
 
         except Exception as e:
-            raise PaymentProcessorError(f"Failed to check ETH transaction: {str(e)}")
+            raise PaymentProcessorError(f"Failed to check ETH transaction: {str(e)}") from e
 
     async def process_deposit(
         self,
