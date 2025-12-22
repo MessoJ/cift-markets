@@ -19,24 +19,24 @@ You must now add the following secrets to your GitHub repository for the deploym
 
 | Name | Value |
 | :--- | :--- |
-| `GH_CLIENT_ID` | `Ov23liKhbfcXw0MTCR97` |
-| `GH_CLIENT_SECRET` | `f5377d213e5171b1833938b839fcdb17b563405d` |
+| `GH_CLIENT_ID` | `your_github_oauth_client_id` |
+| `GH_CLIENT_SECRET` | `your_github_oauth_client_secret` |
 | `FRONTEND_URL` | `http://20.250.40.67:3000` |
 | `API_BASE_URL` | `http://20.250.40.67:8000` |
 
 ### Application Secrets (From your .env)
 | Name | Value |
 | :--- | :--- |
-| `POSTGRES_PASSWORD` | `changeme123` |
-| `JWT_SECRET_KEY` | `M6xuob6TCLasgTUuQTsTpJEdNS_icxLoKdJSzw0hJOJFalWzhEw3OxA-y0CWUv0d` |
-| `SECRET_KEY` | `8erB62ICTl0RmSHhQWvcFsaVnzGrLNhb6iC0HUQ55wJn1E119uJHG-iT2ganaI_A` |
-| `NEWSAPI_KEY` | `d888b7199f80455abfd9b27e47cec5bb` |
-| `FINNHUB_API_KEY` | `d4ojf7pr01qtc1p01m60d4ojf7pr01qtc1p01m6g` |
-| `ALPHAVANTAGE_API_KEY` | `4V9I2E4N97HN7ZFV` |
-| `ALPACA_API_KEY` | `PKZJ7H3NMIIXLERTEILU4MLRMZ` |
-| `ALPACA_SECRET_KEY` | `3fcyzA6Q46sQt67wMfgXKovgF28LLc8fUkg8fRzDR6Tz` |
+| `POSTGRES_PASSWORD` | `your_postgres_password` |
+| `JWT_SECRET_KEY` | `your_jwt_secret_min_32_chars` |
+| `SECRET_KEY` | `your_app_secret_min_32_chars` |
+| `NEWSAPI_KEY` | `your_newsapi_key` |
+| `FINNHUB_API_KEY` | `your_finnhub_key` |
+| `ALPHAVANTAGE_API_KEY` | `your_alphavantage_key` |
+| `ALPACA_API_KEY` | `your_alpaca_key` |
+| `ALPACA_SECRET_KEY` | `your_alpaca_secret` |
 | `ALPACA_BASE_URL` | `https://paper-api.alpaca.markets` |
-| `POLYGON_API_KEY` | `lbAovcp5kn4vqPJ3H_1qcJrzYiwmUhye` |
+| `POLYGON_API_KEY` | `your_polygon_key` |
 
 ## 3. Deploy
 Once you have added the secrets above, simply push the changes to deploy:
@@ -47,4 +47,4 @@ git commit -m "Secure OAuth configuration via GitHub Secrets"
 git push origin main
 ```
 
-This ensures your secrets are never stored in the code history and are only present on the server where they are needed.
+This ensures your secrets are provided via GitHub Secrets and are only present on the server where they are needed. Do not paste real secret values into documentation.
