@@ -136,7 +136,7 @@ async def get_performance_metrics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to calculate performance metrics: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/pnl-breakdown", response_model=list[PnLBreakdownItem])
@@ -186,7 +186,7 @@ async def get_pnl_breakdown(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate P&L breakdown: {str(e)}"
-        )
+        ) from e
 
 
 # ============================================================================
@@ -269,7 +269,7 @@ async def get_risk_metrics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to calculate risk metrics: {str(e)}"
-        )
+        ) from e
 
 
 # ============================================================================
@@ -363,7 +363,7 @@ async def get_trade_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch trade history"
-        )
+        ) from e
 
 
 # ============================================================================

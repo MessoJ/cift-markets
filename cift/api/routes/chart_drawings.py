@@ -182,7 +182,7 @@ async def create_drawing(
 
     except Exception as e:
         logger.error(f"Failed to create drawing: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create drawing")
+        raise HTTPException(status_code=500, detail="Failed to create drawing") from e
 
 
 @router.put("/{drawing_id}", response_model=DrawingResponse)
@@ -258,7 +258,7 @@ async def update_drawing(
 
     except Exception as e:
         logger.error(f"Failed to update drawing: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update drawing")
+        raise HTTPException(status_code=500, detail="Failed to update drawing") from e
 
 
 @router.delete("/{drawing_id}")

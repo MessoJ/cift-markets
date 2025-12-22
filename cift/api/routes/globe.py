@@ -53,7 +53,7 @@ async def get_global_heatmap(
 
     except Exception as e:
         logger.error(f"Failed to get global heatmap: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/country/{country_code}")
@@ -82,10 +82,10 @@ async def get_country_detail(
         return country_data
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get country detail: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/exchanges")
@@ -201,7 +201,7 @@ async def get_globe_exchanges_legacy(
 
     except Exception as e:
         logger.error(f"Error fetching globe exchanges: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch exchange data")
+        raise HTTPException(status_code=500, detail="Failed to fetch exchange data") from e
 
 
 @router.get("/arcs")
@@ -319,7 +319,7 @@ async def get_news_arcs(
 
     except Exception as e:
         logger.error(f"Error fetching news arcs: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch arc data")
+        raise HTTPException(status_code=500, detail="Failed to fetch arc data") from e
 
 
 @router.get("/boundaries")
@@ -395,7 +395,7 @@ async def get_political_boundaries(
 
     except Exception as e:
         logger.error(f"Error fetching boundary data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch boundary data")
+        raise HTTPException(status_code=500, detail="Failed to fetch boundary data") from e
 
 
 @router.get("/search")
@@ -534,7 +534,7 @@ async def search_globe_data(
 
     except Exception as e:
         logger.error(f"Error searching globe data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to search globe data")
+        raise HTTPException(status_code=500, detail="Failed to search globe data") from e
 
 
 @router.get("/ships")
@@ -668,7 +668,7 @@ async def get_tracked_ships(
 
     except Exception as e:
         logger.error(f"Error fetching ships: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch ship data")
+        raise HTTPException(status_code=500, detail="Failed to fetch ship data") from e
 
 
 @router.get("/countries/{country_code}")
@@ -803,7 +803,7 @@ async def get_country_details(
         raise
     except Exception as e:
         logger.error(f"Error fetching country details for {country_code}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch country details")
+        raise HTTPException(status_code=500, detail="Failed to fetch country details") from e
 
 
 def get_flag_emoji(country_code: str) -> str:

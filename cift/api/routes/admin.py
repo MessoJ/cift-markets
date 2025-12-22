@@ -129,7 +129,7 @@ async def update_market_data(
 
     except Exception as e:
         logger.error(f"Market data update failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/market-data-status")
@@ -182,7 +182,7 @@ async def get_market_data_status(
 
     except Exception as e:
         logger.error(f"Failed to get market data status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/start-realtime-worker")
@@ -203,7 +203,7 @@ async def start_realtime_worker(
 
     except Exception as e:
         logger.error(f"Failed to start worker: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/stop-realtime-worker")
@@ -223,7 +223,7 @@ async def stop_realtime_worker(
 
     except Exception as e:
         logger.error(f"Failed to stop worker: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ============================================================================
@@ -265,7 +265,7 @@ async def connect_websocket(
 
     except Exception as e:
         logger.error(f"WebSocket connection failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/websocket/disconnect")
@@ -284,7 +284,7 @@ async def disconnect_websocket(
 
     except Exception as e:
         logger.error(f"WebSocket disconnection failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 class SubscribeRequest(BaseModel):
@@ -320,7 +320,7 @@ async def subscribe_symbols(
         raise
     except Exception as e:
         logger.error(f"Subscribe failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/websocket/unsubscribe")
@@ -343,7 +343,7 @@ async def unsubscribe_symbols(
 
     except Exception as e:
         logger.error(f"Unsubscribe failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/websocket/status")
@@ -367,7 +367,7 @@ async def get_websocket_status(
 
     except Exception as e:
         logger.error(f"Failed to get WebSocket status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/websocket/price/{symbol}")
@@ -406,7 +406,7 @@ async def get_realtime_price(
         raise
     except Exception as e:
         logger.error(f"Failed to get realtime price: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ============================================================================
