@@ -184,7 +184,7 @@ async def mark_notification_read(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to mark notification as read"
-        )
+        ) from e
 
 
 @router.put("/read-all", status_code=status.HTTP_204_NO_CONTENT)
@@ -220,4 +220,4 @@ async def mark_all_notifications_read(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to mark notifications as read"
-        )
+        ) from e
