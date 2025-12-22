@@ -425,9 +425,14 @@ async def check_all_connections() -> dict[str, str]:
         if not redis_manager._is_initialized:
             await redis_manager.initialize()
         redis_healthy = await redis_manager.health_check()
-        results["dragonfly"] = "healthy" if redis_healthy else "unhealthy"
+        # Backward-compatible keys: code may refer to Dragonfly, tests expect Redis.
+        status = "healthy" if redis_healthy else "unhealthy"
+        results["redis"] = status
+        results["dragonfly"] = status
     except Exception as e:
-        results["dragonfly"] = f"error: {str(e)}"
+        err = f"error: {str(e)}"
+        results["redis"] = err
+        results["dragonfly"] = err
 
     # ClickHouse (Phase 5-7)
     try:
