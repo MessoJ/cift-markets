@@ -198,7 +198,7 @@ async def generate_monthly_statement(
 
     except Exception as e:
         logger.error(f"Failed to generate monthly statement: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate/trade-confirmation/{order_id}")
@@ -224,7 +224,7 @@ async def generate_trade_confirmation(
 
     except Exception as e:
         logger.error(f"Failed to generate trade confirmation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate/tax/{tax_year}")
@@ -256,7 +256,7 @@ async def generate_tax_document(
 
     except Exception as e:
         logger.error(f"Failed to generate tax document: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate/{statement_type}")
