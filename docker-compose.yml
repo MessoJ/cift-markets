@@ -17,7 +17,7 @@ services:
       - QDB_SHARED_WORKER_COUNT=4
       - QDB_LINE_TCP_MAINTENANCE_JOB_INTERVAL=30000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9003/status"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/9003"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -129,7 +129,7 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -227,7 +227,7 @@ services:
       - mlflow-data:/mlflow
     command: mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --host 0.0.0.0 --port 5000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]
       interval: 30s
       timeout: 10s
       retries: 3
