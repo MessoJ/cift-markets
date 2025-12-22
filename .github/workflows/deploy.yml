@@ -121,6 +121,18 @@ jobs:
             # echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" > .env
             
             # Pull latest images
+            # Free up disk space: prune unused images, containers, builders and dangling volumes
+            echo "Cleaning up Docker disk usage to free space..."
+            sudo docker system prune -af || true
+            sudo docker volume prune -f || true
+            # Remove buildx builders to free builder state
+            if docker buildx ls >/dev/null 2>&1; then
+              for b in $(docker buildx ls --format '{{.Name}}' | awk '{print $1}'); do
+                docker buildx rm "$b" || true
+              done
+            fi
+
+            # Try pulling images again
             sudo docker compose pull api frontend
             
             # Restart services
