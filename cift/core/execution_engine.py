@@ -21,9 +21,7 @@ from loguru import logger
 
 from cift.core.database import db_manager
 from cift.core.nats_manager import get_nats_manager
-from cift.core.trading_queries import (
-    get_latest_price,
-)
+from cift.core.trading_queries import get_latest_price
 
 # ============================================================================
 # ORDER EXECUTION ENGINE

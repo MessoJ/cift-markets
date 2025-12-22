@@ -22,11 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from cift.inference.pipeline import (
-    InferencePipeline,
-    InferenceResult,
-    PipelineConfig,
-)
+from cift.inference.pipeline import InferencePipeline, InferenceResult, PipelineConfig
 from cift.ml.ensemble import build_ensemble
 
 # ============================================================================

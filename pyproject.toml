@@ -163,6 +163,12 @@ exclude = '''
 )/
 '''
 
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["cift"]
+src_paths = ["cift", "tests"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

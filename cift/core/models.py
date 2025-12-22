@@ -6,17 +6,7 @@ Production-grade database models with relationships, indexes, and validation.
 
 import uuid
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    String,
-    Text,
-    func,
-)
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, INET, UUID
 from sqlalchemy.orm import relationship
 
