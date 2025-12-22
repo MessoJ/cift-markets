@@ -81,11 +81,6 @@ jobs:
         ports:
           - 8812:8812
           - 9000:9000
-        options: >-
-          --health-cmd "wget -qO- http://localhost:9000 >/dev/null 2>&1 || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
 
     steps:
       - uses: actions/checkout@v4
@@ -100,6 +95,19 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -e ".[test]"
+
+      - name: Wait for QuestDB
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9000 >/dev/null; then
+              echo "QuestDB is ready"
+              exit 0
+            fi
+            echo "Waiting for QuestDB... ($i/60)"
+            sleep 2
+          done
+          echo "QuestDB did not become ready in time"
+          exit 1
 
       - name: Run tests with coverage
         env:
