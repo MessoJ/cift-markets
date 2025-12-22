@@ -50,6 +50,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -75,6 +76,17 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      questdb:
+        image: questdb/questdb:7.3.10
+        ports:
+          - 8812:8812
+          - 9000:9000
+        options: >-
+          --health-cmd "wget -qO- http://localhost:9000 >/dev/null 2>&1 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
     steps:
       - uses: actions/checkout@v4
 
@@ -98,8 +110,10 @@ jobs:
           POSTGRES_PASSWORD: test123
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          QUESTDB_HOST: localhost
+          QUESTDB_PG_PORT: 8812
         run: |
-          pytest tests/ -v --cov=cift --cov-report=xml --cov-report=term-missing
+          pytest tests/ -vv --tb=short --durations=0 --maxfail=1 --timeout=300 --timeout-method=thread --cov=cift --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
