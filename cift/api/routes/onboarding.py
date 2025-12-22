@@ -385,7 +385,7 @@ async def submit_application(
 
         except Exception as e:
             logger.error(f"Alpaca submission failed: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Brokerage account creation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Brokerage account creation failed: {str(e)}") from e
 
 
 @router.post("/documents/{document_type}")
@@ -531,7 +531,7 @@ async def verify_document(
 
     except Exception as e:
         logger.error(f"Document verification failed: {e}")
-        raise HTTPException(status_code=500, detail="Verification failed")
+        raise HTTPException(status_code=500, detail="Verification failed") from e
 
 
 @router.get("/documents/{document_id}/status")
@@ -593,7 +593,7 @@ async def verify_user_identity(
 
     except Exception as e:
         logger.error(f"Identity verification failed: {e}")
-        raise HTTPException(status_code=500, detail="Identity verification failed")
+        raise HTTPException(status_code=500, detail="Identity verification failed") from e
 
 
 @router.get("/verification-status")

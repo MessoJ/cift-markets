@@ -272,7 +272,7 @@ async def predict(
 
     except Exception as e:
         logger.error(f"Prediction error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.websocket("/predict/stream")
@@ -378,7 +378,7 @@ async def reload_models(
 
     except Exception as e:
         logger.error(f"Error reloading models: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/pipeline/start")
@@ -404,7 +404,7 @@ async def start_pipeline(
 
     except Exception as e:
         logger.error(f"Error starting pipeline: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/pipeline/stop")
@@ -421,7 +421,7 @@ async def stop_pipeline(
 
     except Exception as e:
         logger.error(f"Error stopping pipeline: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 __all__ = [

@@ -522,7 +522,7 @@ async def create_api_key(
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to generate secure key"
-                )
+                ) from e
 
             # Calculate expiry
             expires_at = None
@@ -554,7 +554,7 @@ async def create_api_key(
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Database error: {str(e)}"
-                )
+                ) from e
 
             # Log security event (if function exists)
             try:

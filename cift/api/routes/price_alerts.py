@@ -233,7 +233,7 @@ async def create_alert(
                 created_at=row['created_at']
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to create alert: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to create alert: {str(e)}") from e
 
 
 @router.patch("/{alert_id}", response_model=PriceAlertResponse)
