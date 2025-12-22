@@ -24,34 +24,14 @@ from cift.ml.ensemble import (
 )
 
 # Graph Neural Network
-from cift.ml.gnn import (
-    AssetNode,
-    CrossAssetGNN,
-    CrossAssetPrediction,
-    GNNTrainer,
-)
-from cift.ml.hawkes import (
-    HawkesEvent,
-    HawkesOrderFlowModel,
-    HawkesPrediction,
-    HawkesTrainer,
-)
+from cift.ml.gnn import AssetNode, CrossAssetGNN, CrossAssetPrediction, GNNTrainer
+from cift.ml.hawkes import HawkesEvent, HawkesOrderFlowModel, HawkesPrediction, HawkesTrainer
 
 # Hidden Markov Model
-from cift.ml.hmm import (
-    HMMTrainer,
-    MarketRegime,
-    MarketRegimeHMM,
-    RegimeFeatures,
-    RegimePrediction,
-)
+from cift.ml.hmm import HMMTrainer, MarketRegime, MarketRegimeHMM, RegimeFeatures, RegimePrediction
 
 # Transformer Model
-from cift.ml.transformer import (
-    OrderFlowTransformer,
-    TransformerPrediction,
-    TransformerTrainer,
-)
+from cift.ml.transformer import OrderFlowTransformer, TransformerPrediction, TransformerTrainer
 
 # XGBoost Alternative Data Fusion
 from cift.ml.xgboost_fusion import (

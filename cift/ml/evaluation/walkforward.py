@@ -10,11 +10,7 @@ import polars as pl
 from cift.backtest.engine import backtest_positions
 from cift.metrics.performance import deflated_sharpe_ratio, prob_sharpe_ratio
 from cift.ml.evaluation.splits import PurgedKFold, build_forward_return_events
-from cift.ml.features import (
-    frac_diff_ffd,
-    get_microstructure_features,
-    get_technical_features,
-)
+from cift.ml.features import frac_diff_ffd, get_microstructure_features, get_technical_features
 from cift.ml.labeling import (
     apply_meta_model_sizing,
     compute_sample_weights,

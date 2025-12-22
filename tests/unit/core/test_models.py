@@ -10,14 +10,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy import select
 
-from cift.core.models import (
-    Alert,
-    APIKey,
-    AuditLog,
-    Backtest,
-    TradingStrategy,
-    User,
-)
+from cift.core.models import Alert, APIKey, AuditLog, Backtest, TradingStrategy, User
 
 
 class TestUserModel:

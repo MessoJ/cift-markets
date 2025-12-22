@@ -8,12 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from cift.core.database import (
-    DatabaseManager,
-    QuestDBManager,
-    RedisManager,
-    check_all_connections,
-)
+from cift.core.database import DatabaseManager, QuestDBManager, RedisManager, check_all_connections
 
 
 class TestDatabaseManager:

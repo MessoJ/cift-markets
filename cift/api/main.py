@@ -20,10 +20,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from cift.core.config import settings
-from cift.core.database import (
-    check_all_connections,
-    initialize_all_connections,
-)
+from cift.core.database import check_all_connections, initialize_all_connections
 from cift.core.limiter import limiter
 from cift.core.logging import logger
 

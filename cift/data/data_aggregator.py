@@ -20,18 +20,9 @@ from dataclasses import dataclass
 import numpy as np
 from loguru import logger
 
-from cift.data.databento_connector import (
-    DatabentoConnector,
-    L3Order,
-    L3OrderBook,
-)
+from cift.data.databento_connector import DatabentoConnector, L3Order, L3OrderBook
 from cift.data.order_book_processor import OrderBookProcessor, OrderBookSnapshot
-from cift.data.polygon_l2_connector import (
-    AggregateBar,
-    L2Quote,
-    PolygonL2Connector,
-    Trade,
-)
+from cift.data.polygon_l2_connector import AggregateBar, L2Quote, PolygonL2Connector, Trade
 
 # ============================================================================
 # DATA STRUCTURES

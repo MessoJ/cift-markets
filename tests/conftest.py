@@ -11,11 +11,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cift.core.database import (
-    db_manager,
-    questdb_manager,
-    redis_manager,
-)
+from cift.core.database import db_manager, questdb_manager, redis_manager
 from cift.core.models import Base
 
 
