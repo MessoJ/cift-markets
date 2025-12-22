@@ -385,7 +385,7 @@ async def create_user(
         if not default_balance:
             # Fallback to minimal amount if config not found - avoid hardcoding large amounts
             default_balance = 0.00
-    except:
+    except Exception:
         default_balance = 0.00
 
     account_query = """

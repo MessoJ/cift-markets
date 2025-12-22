@@ -26,7 +26,7 @@ from loguru import logger
 
 # Try to import numba for JIT compilation
 try:
-    from numba import float64, int64, jit
+    from numba import jit
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False

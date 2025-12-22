@@ -68,8 +68,10 @@ def get_triple_barrier_labels(
             ret = (path[-1] - p0) / p0
             label = 0
             # Optional: Label based on sign if return is significant
-            if ret > min_ret: label = 1
-            elif ret < -min_ret: label = -1
+            if ret > min_ret:
+                label = 1
+            elif ret < -min_ret:
+                label = -1
 
         elif first_upper < first_lower:
             # PT hit first

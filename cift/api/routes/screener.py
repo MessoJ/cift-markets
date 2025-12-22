@@ -351,56 +351,6 @@ async def get_preset_screens():
         }
     ]
 
-
-@router.get("/sectors")
-async def get_sectors():
-    """Get list of available sectors from database"""
-    pg_pool = await get_postgres_pool()
-
-    try:
-        async with pg_pool.acquire() as conn:
-            rows = await conn.fetch("""
-                SELECT DISTINCT sector, COUNT(*) as count
-                FROM company_profiles
-                WHERE sector IS NOT NULL AND sector != ''
-                GROUP BY sector
-                ORDER BY count DESC
-            """)
-            return [{"name": row['sector'], "count": row['count']} for row in rows]
-    except Exception as e:
-        logger.error(f"Failed to get sectors: {e}")
-        return []
-
-
-@router.get("/industries")
-async def get_industries(sector: str = None):
-    """Get list of available industries, optionally filtered by sector"""
-    pg_pool = await get_postgres_pool()
-
-    try:
-        async with pg_pool.acquire() as conn:
-            if sector:
-                rows = await conn.fetch("""
-                    SELECT DISTINCT industry, COUNT(*) as count
-                    FROM company_profiles
-                    WHERE industry IS NOT NULL AND sector ILIKE $1
-                    GROUP BY industry
-                    ORDER BY count DESC
-                """, f"%{sector}%")
-            else:
-                rows = await conn.fetch("""
-                    SELECT DISTINCT industry, COUNT(*) as count
-                    FROM company_profiles
-                    WHERE industry IS NOT NULL AND industry != ''
-                    GROUP BY industry
-                    ORDER BY count DESC
-                """)
-            return [{"name": row['industry'], "count": row['count']} for row in rows]
-    except Exception as e:
-        logger.error(f"Failed to get industries: {e}")
-        return []
-
-
 @router.get("/saved")
 async def get_saved_screens(
     user_id: UUID = Depends(get_current_user_id),

@@ -676,7 +676,7 @@ async def main():
     # Close database connections
     try:
         await close_all_connections()
-    except:
+    except Exception:
         pass
 
 

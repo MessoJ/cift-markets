@@ -336,7 +336,7 @@ class KYCVerificationService:
                     validation_result["confidence"] -= 0.4
                 else:
                     validation_result["checks_passed"].append("valid_age")
-            except:
+            except Exception:
                 validation_result["checks_failed"].append("invalid_date_format")
                 validation_result["confidence"] -= 0.2
 

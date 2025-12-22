@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     microsoft_client_secret: str = ""
     google_client_id: str = ""
     google_client_secret: str = ""
-    
+
     # URLs
     frontend_url: str = "http://localhost:3000"
     api_base_url: str = "http://localhost:8000"

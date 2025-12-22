@@ -245,7 +245,7 @@ async def get_earnings(
                 date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                 quarter = (date_obj.month - 1) // 3 + 1
                 year = date_obj.year
-            except:
+            except (ValueError, TypeError):
                 quarter = None
                 year = None
 

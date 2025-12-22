@@ -13,20 +13,14 @@ logger = logging.getLogger(__name__)
 
 # PDF generation library - install with: pip install reportlab qrcode pillow
 try:
-    from reportlab.graphics import renderPDF
-    from reportlab.graphics.shapes import Circle, Drawing, Line, Rect
+    from reportlab.graphics.shapes import Drawing, Line
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
-    from reportlab.lib.pagesizes import A4, letter
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import inch, mm
-    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import inch
     from reportlab.platypus import (
-        Frame,
         Image,
-        KeepTogether,
-        PageBreak,
-        PageTemplate,
         Paragraph,
         SimpleDocTemplate,
         Spacer,

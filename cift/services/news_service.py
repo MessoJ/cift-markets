@@ -343,7 +343,7 @@ class NewsService:
                     time_str = item.get("time_published", "")
                     try:
                         published_at = datetime.strptime(time_str, "%Y%m%dT%H%M%S")
-                    except:
+                    except ValueError:
                         published_at = datetime.utcnow()
 
                     # Sentiment

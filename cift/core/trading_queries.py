@@ -711,7 +711,7 @@ async def get_query_performance_stats() -> dict[str, Any]:
 
 
 # Import asyncio for parallel queries
-import asyncio
+import asyncio  # noqa: E402
 
 # ============================================================================
 # ACTIVITY FEED QUERIES
@@ -1177,8 +1177,10 @@ async def get_performance_analytics(
                 total_return_pct = 0.0
 
             # Clamp extreme values
-            if total_return_pct > 100000: total_return_pct = 100000
-            if total_return_pct < -100: total_return_pct = -100
+            if total_return_pct > 100000:
+                total_return_pct = 100000
+            if total_return_pct < -100:
+                total_return_pct = -100
 
         except (IndexError, ValueError, TypeError):
             initial_value = 0.0

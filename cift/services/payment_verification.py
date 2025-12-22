@@ -5,7 +5,7 @@ No hardcoded responses - all verification states are tracked in database.
 """
 import secrets
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
@@ -604,7 +604,7 @@ class PaymentVerificationService:
         try:
             user_amount1 = Decimal(str(user_data.get('amount1', 0)))
             user_amount2 = Decimal(str(user_data.get('amount2', 0)))
-        except:
+        except (InvalidOperation, TypeError, ValueError):
             return False
 
         return (user_amount1 == expected_amount1 and user_amount2 == expected_amount2)
