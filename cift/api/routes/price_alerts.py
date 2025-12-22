@@ -315,7 +315,7 @@ async def update_alert(
                 updated_at=row['updated_at']
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to update alert: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to update alert: {str(e)}") from e
 
 
 @router.delete("/{alert_id}")

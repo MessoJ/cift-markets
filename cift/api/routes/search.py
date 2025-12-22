@@ -392,7 +392,7 @@ async def global_search(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Search failed"
-        )
+        ) from e
 
     # Sort results by relevance score
     results.sort(key=lambda x: x.relevance_score, reverse=True)

@@ -285,7 +285,7 @@ async def screen_stocks(
 
     except Exception as e:
         logger.error(f"Stock screening failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Screening failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Screening failed: {str(e)}") from e
 
 
 @router.get("/presets")
@@ -471,7 +471,7 @@ async def save_screen(
             )
     except Exception as e:
         logger.error(f"Failed to save screen: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save screen: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save screen: {str(e)}") from e
 
 
 @router.delete("/saved/{screen_id}")
@@ -564,7 +564,7 @@ async def advanced_stock_screen(
 
     except Exception as e:
         logger.error(f"Advanced screening failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/popular-screens")
@@ -578,7 +578,7 @@ async def get_popular_screens():
 
     except Exception as e:
         logger.error(f"Failed to get popular screens: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/fields")
@@ -605,7 +605,7 @@ async def get_screener_fields():
 
     except Exception as e:
         logger.error(f"Failed to get screener fields: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/saved/{screen_id}/run-advanced")
@@ -624,7 +624,7 @@ async def run_saved_screen_advanced(
 
     except Exception as e:
         logger.error(f"Failed to run saved screen: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/sectors")

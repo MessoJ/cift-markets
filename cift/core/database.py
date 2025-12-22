@@ -91,7 +91,7 @@ class DatabaseManager:
             raise DatabaseConnectionError(
                 "PostgreSQL connection timeout - database unavailable",
                 details={"error": "Connection timeout after 5 seconds"},
-            )
+            ) from None
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL: {e}")
             raise DatabaseConnectionError(

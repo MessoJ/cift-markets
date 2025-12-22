@@ -230,12 +230,12 @@ def decode_token(token: str) -> TokenPayload:
         )
         return TokenPayload(**payload)
 
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from e
 
     except jwt.PyJWTError as e:
         logger.warning(f"JWT decode error: {e}")
