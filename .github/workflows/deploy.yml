@@ -76,11 +76,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           USERNAME: ${{ github.actor }}
+          # OAuth Secrets (Renamed to avoid GITHUB_ prefix restriction)
+          GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+          GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          # App Secrets
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          # API Keys
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         with:
           host: ${{ secrets.AZURE_VM_IP }}
           username: ${{ secrets.AZURE_VM_USERNAME }}
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
-          envs: GITHUB_TOKEN,USERNAME
+          envs: GITHUB_TOKEN,USERNAME,GH_CLIENT_ID,GH_CLIENT_SECRET,FRONTEND_URL,API_BASE_URL,POSTGRES_PASSWORD,JWT_SECRET_KEY,SECRET_KEY,NEWSAPI_KEY,FINNHUB_API_KEY,ALPHAVANTAGE_API_KEY,ALPACA_API_KEY,ALPACA_SECRET_KEY,ALPACA_BASE_URL,POLYGON_API_KEY
           script: |
             # Ensure Docker client API >= 1.44 (older API may refuse to pull images)
             api_ver=$(docker version --format '{{.Client.APIVersion}}' 2>/dev/null || echo "0")
@@ -117,11 +134,25 @@ jobs:
             # Login to registry (using sudo to ensure socket access)
             echo $GITHUB_TOKEN | sudo docker login ghcr.io -u $USERNAME --password-stdin
             
-            # Create .env file from secrets
-            echo "GITHUB_CLIENT_ID=${{ secrets.GITHUB_CLIENT_ID }}" > .env
-            echo "GITHUB_CLIENT_SECRET=${{ secrets.GITHUB_CLIENT_SECRET }}" >> .env
-            echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" >> .env
-            echo "API_BASE_URL=${{ secrets.API_BASE_URL }}" >> .env
+            # Create .env file with secrets
+            echo "GITHUB_CLIENT_ID=$GH_CLIENT_ID" > .env
+            echo "GITHUB_CLIENT_SECRET=$GH_CLIENT_SECRET" >> .env
+            echo "FRONTEND_URL=$FRONTEND_URL" >> .env
+            echo "API_BASE_URL=$API_BASE_URL" >> .env
+            
+            # App Secrets
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> .env
+            echo "JWT_SECRET_KEY=$JWT_SECRET_KEY" >> .env
+            echo "SECRET_KEY=$SECRET_KEY" >> .env
+            
+            # API Keys
+            echo "NEWSAPI_KEY=$NEWSAPI_KEY" >> .env
+            echo "FINNHUB_API_KEY=$FINNHUB_API_KEY" >> .env
+            echo "ALPHAVANTAGE_API_KEY=$ALPHAVANTAGE_API_KEY" >> .env
+            echo "ALPACA_API_KEY=$ALPACA_API_KEY" >> .env
+            echo "ALPACA_SECRET_KEY=$ALPACA_SECRET_KEY" >> .env
+            echo "ALPACA_BASE_URL=$ALPACA_BASE_URL" >> .env
+            echo "POLYGON_API_KEY=$POLYGON_API_KEY" >> .env
             
             # Pull latest images
             # Free up disk space: prune unused images, containers, builders and dangling volumes
