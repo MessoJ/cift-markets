@@ -29,8 +29,8 @@ from cift.core.auth import (
     decode_token,
     get_current_active_user,
 )
-from cift.core.database import db_manager
 from cift.core.config import settings
+from cift.core.database import db_manager
 from cift.core.limiter import limiter
 
 # ============================================================================
@@ -118,10 +118,10 @@ async def get_or_create_oauth_user(email: str, username: str, full_name: str = N
     query = "SELECT * FROM users WHERE email = $1"
     async with db_manager.pool.acquire() as conn:
         user = await conn.fetchrow(query, email)
-    
+
     if user:
         return dict(user)
-    
+
     # Create new user
     # Handle username collisions
     base_username = username
@@ -132,9 +132,9 @@ async def get_or_create_oauth_user(email: str, username: str, full_name: str = N
         if not existing:
             break
         username = f"{base_username}_{secrets.token_hex(2)}"
-    
+
     password = generate_random_password()
-    
+
     # Create user using core logic
     try:
         return await create_user(email, username, password, full_name)
@@ -149,10 +149,10 @@ async def complete_oauth_login(user_data: dict):
     user_id = user_data["id"]
     access_token = create_access_token(user_id=user_id, scopes=["user"])
     refresh_token = create_refresh_token(user_id=user_id)
-    
+
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
     redirect_url = f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
-    
+
     return RedirectResponse(url=redirect_url)
 
 
@@ -224,7 +224,7 @@ async def github_callback(request: Request, code: str):
             username=user_data["login"],
             full_name=user_data.get("name")
         )
-        
+
         return await complete_oauth_login(user)
 
 @router.get("/microsoft/login")
@@ -289,7 +289,7 @@ async def microsoft_callback(request: Request, code: str):
             username=user_data.get("displayName", email.split("@")[0]),
             full_name=user_data.get("displayName")
         )
-        
+
         return await complete_oauth_login(user)
 
 @router.get("/google/login")
@@ -352,7 +352,7 @@ async def google_callback(request: Request, code: str):
             username=email.split("@")[0],
             full_name=user_data.get("name")
         )
-        
+
         return await complete_oauth_login(user)
 
 

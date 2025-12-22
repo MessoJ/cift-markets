@@ -4,6 +4,7 @@ Handles user verification, identity documents, and compliance.
 All data is fetched from database - NO MOCK DATA.
 """
 
+import json
 from datetime import datetime
 from uuid import UUID
 
@@ -558,7 +559,7 @@ async def get_document_verification_status(
         if doc['verification_details']:
             try:
                 verification_details = json.loads(doc['verification_details'])
-            except:
+            except (TypeError, ValueError):
                 pass
 
         return {
@@ -626,7 +627,7 @@ async def get_verification_status(
         if kyc_profile and kyc_profile['verification_details']:
             try:
                 verification_details = json.loads(kyc_profile['verification_details'])
-            except:
+            except (TypeError, ValueError):
                 pass
 
         return {

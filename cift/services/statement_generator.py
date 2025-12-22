@@ -14,11 +14,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 try:
-    from reportlab.graphics.charts.barcharts import VerticalBarChart
-    from reportlab.graphics.charts.lineplots import LinePlot
-    from reportlab.graphics.shapes import Drawing
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, letter
+    from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle

@@ -264,7 +264,7 @@ async def get_position_detail(
 
     return {
         "position": position,
-        "cost_basis_lots": [dict(l) for l in lots],
+        "cost_basis_lots": [dict(lot) for lot in lots],
         "entry_orders": [dict(o) for o in entry_orders],
         "pnl_timeline": [dict(row) for row in pnl_timeline],
         "risk_metrics": risk_metrics

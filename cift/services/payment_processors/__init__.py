@@ -2,7 +2,7 @@
 Payment Processors Package - RULES COMPLIANT
 Central module for all payment processor integrations
 """
-from typing import Any, Dict
+from typing import Any
 
 from cift.services.payment_processors.alpaca_processor import AlpacaProcessor
 from cift.services.payment_processors.base import PaymentProcessor, PaymentProcessorError

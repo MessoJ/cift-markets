@@ -550,7 +550,7 @@ class GeoNewsService:
                 })
 
         # Calculate averages
-        for country, metrics in country_metrics.items():
+        for _country, metrics in country_metrics.items():
             if metrics["count"] > 0:
                 metrics["sentiment"] = metrics["sentiment_sum"] / metrics["count"]
             else:

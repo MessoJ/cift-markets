@@ -5,6 +5,7 @@ Production-grade API with monitoring, tracing, and comprehensive middleware.
 """
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -274,8 +275,6 @@ metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
 # Mount static files for uploads
-import os
-
 upload_dir = "uploads"
 if not os.path.exists(upload_dir):
     os.makedirs(upload_dir, exist_ok=True)
@@ -287,7 +286,7 @@ app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
 # ============================================================================
 
 # Import route modules
-from cift.api.routes import (
+from cift.api.routes import (  # noqa: E402
     admin,
     alerts,
     analytics,
@@ -328,7 +327,7 @@ app.include_router(watchlists.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 
 # Chart-related routes
-from cift.api.routes import chart_drawings, chart_templates, price_alerts
+from cift.api.routes import chart_drawings, chart_templates, price_alerts  # noqa: E402
 
 app.include_router(chart_drawings.router, prefix="/api/v1")
 app.include_router(chart_templates.router, prefix="/api/v1")

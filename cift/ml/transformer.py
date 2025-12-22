@@ -801,7 +801,7 @@ class OrderFlowTransformer(nn.Module):
 
         # Self-attention within each timeframe
         encoded = []
-        for i, (x_emb, encoder, mask) in enumerate(zip(embedded, self.encoders, masks, strict=False)):
+        for _i, (x_emb, encoder, mask) in enumerate(zip(embedded, self.encoders, masks, strict=False)):
             enc = encoder(x_emb, mask)
             encoded.append(enc)
 

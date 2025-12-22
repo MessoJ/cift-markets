@@ -55,22 +55,6 @@ class TaskScheduler:
             description="Sync Account and Positions with Alpaca"
         )
 
-    async def sync_alpaca_data(self):
-        """Sync data with Alpaca"""
-        try:
-            from cift.services.alpaca_sync_service import alpaca_sync_service
-            await alpaca_sync_service.sync_all_accounts()
-        except Exception as e:
-            logger.error(f"Alpaca sync failed: {e}")
-
-    async def process_kyc_verifications(self):
-        """Process pending KYC verifications."""
-        try:
-            from cift.services.kyc_verification import process_pending_verifications
-            await process_pending_verifications()
-        except Exception as e:
-            logger.error(f"KYC verification processing failed: {e}")
-
         # Portfolio snapshots (daily at 6 PM ET)
         self.register_task(
             name="daily_portfolio_snapshots",
@@ -102,6 +86,22 @@ class TaskScheduler:
             interval_seconds=30,
             description="Monitor and process price alerts"
         )
+
+    async def sync_alpaca_data(self):
+        """Sync data with Alpaca"""
+        try:
+            from cift.services.alpaca_sync_service import alpaca_sync_service
+            await alpaca_sync_service.sync_all_accounts()
+        except Exception as e:
+            logger.error(f"Alpaca sync failed: {e}")
+
+    async def process_kyc_verifications(self):
+        """Process pending KYC verifications."""
+        try:
+            from cift.services.kyc_verification import process_pending_verifications
+            await process_pending_verifications()
+        except Exception as e:
+            logger.error(f"KYC verification processing failed: {e}")
 
     def register_task(
         self,
@@ -212,16 +212,6 @@ class TaskScheduler:
     # ========================================================================
     # TASK IMPLEMENTATIONS
     # ========================================================================
-
-    async def process_kyc_verifications(self):
-        """Process pending KYC verifications."""
-        try:
-            from cift.services.kyc_verification import process_pending_verifications
-            await process_pending_verifications()
-
-        except Exception as e:
-            logger.error(f"KYC verification processing failed: {e}")
-            raise
 
     async def update_polygon_market_data(self):
         """Update market data from Polygon.io (hourly)."""

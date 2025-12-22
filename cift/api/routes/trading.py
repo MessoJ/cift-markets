@@ -11,13 +11,14 @@ Performance optimizations:
 """
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from pydantic import BaseModel, Field, validator
 
+from cift.core.auth import User, get_current_active_user
+from cift.core.database import get_postgres_pool
 from cift.core.nats_manager import get_nats_manager
 from cift.core.trading_queries import (
     check_risk_limits,
@@ -29,12 +30,11 @@ from cift.core.trading_queries import (
     insert_order_fast,
 )
 
-# ============================================================================
+# =========================================================================
 # ROUTER
 # ============================================================================
 
 router = APIRouter(prefix="/trading", tags=["Trading"])
-
 
 # ============================================================================
 # MODELS
@@ -136,9 +136,6 @@ class RiskCheckResult(BaseModel):
 # ============================================================================
 # DEPENDENCY INJECTION
 # ============================================================================
-
-from cift.core.auth import User, get_current_active_user
-
 
 async def get_current_user_id(
     current_user: User = Depends(get_current_active_user)
@@ -610,7 +607,7 @@ async def get_positions(
     return positions
 
 
-@router.get("/positions/{symbol}", response_model=Optional[Position])
+@router.get("/positions/{symbol}", response_model=Position | None)
 async def get_position(
     symbol: str,
     user_id: UUID = Depends(get_current_user_id),

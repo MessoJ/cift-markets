@@ -5,7 +5,6 @@ Endpoints for saving/loading chart configurations (templates).
 """
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -294,7 +293,7 @@ async def delete_template(
         return {"message": "Template deleted successfully"}
 
 
-@router.get("/default/get", response_model=Optional[ChartTemplateResponse])
+@router.get("/default/get", response_model=ChartTemplateResponse | None)
 async def get_default_template(
     user_id: UUID = Depends(get_current_user_id)
 ):
