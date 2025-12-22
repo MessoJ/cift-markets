@@ -143,6 +143,12 @@ export default function OnboardingPage() {
           </p>
         </div>
 
+        {/* Mobile Step Title */}
+        <div class="sm:hidden text-center mb-4">
+           <span class="text-accent-500 font-bold text-xs uppercase tracking-wider">Step {currentStepIndex() + 1} of {STEPS.length}</span>
+           <h2 class="text-xl font-bold text-white mt-1">{STEPS[currentStepIndex()].label}</h2>
+        </div>
+
         {/* Progress Bar */}
         <div class="bg-terminal-900 border border-terminal-750 rounded-lg p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6">
           <div class="flex items-center justify-between mb-4">
@@ -222,9 +228,17 @@ export default function OnboardingPage() {
 
         {/* Error Banner */}
         <Show when={error()}>
-          <div class="bg-danger-500/10 border border-danger-500/20 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 flex items-center gap-2 sm:gap-3">
-            <AlertCircle size={16} class="sm:w-5 sm:h-5 text-danger-500 flex-shrink-0" />
-            <span class="text-xs sm:text-sm text-danger-500">{error()}</span>
+          <div class="bg-danger-500/10 border border-danger-500/20 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 flex items-center justify-between gap-2 sm:gap-3">
+            <div class="flex items-center gap-2 sm:gap-3">
+              <AlertCircle size={16} class="sm:w-5 sm:h-5 text-danger-500 flex-shrink-0" />
+              <span class="text-xs sm:text-sm text-danger-500">{error()}</span>
+            </div>
+            <button 
+              onClick={() => loadProfile()}
+              class="px-3 py-1.5 bg-danger-900/50 hover:bg-danger-900 text-danger-200 text-xs font-medium rounded border border-danger-800 transition-colors whitespace-nowrap"
+            >
+              Retry
+            </button>
           </div>
         </Show>
 

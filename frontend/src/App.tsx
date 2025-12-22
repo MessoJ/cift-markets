@@ -13,6 +13,7 @@ import KeyboardShortcutsProvider, { registerShortcuts } from '~/components/ui/Ke
 // Lazy load pages for code splitting
 const LoginPage = lazy(() => import('~/pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('~/pages/auth/RegisterPage'));
+const OAuthCallbackPage = lazy(() => import('~/pages/auth/OAuthCallbackPage'));
 const ForgotPasswordPage = lazy(() => import('~/pages/auth/ForgotPasswordPage'));
 const DashboardPage = lazy(() => import('~/pages/dashboard/DashboardPage'));
 const TradingPage = lazy(() => import('~/pages/trading/TradingPage'));
@@ -135,24 +136,30 @@ export default function App() {
             </PublicRoute>
           )}
         />
-        <Route
-          path="/auth/register"
-          component={() => (
-            <PublicRoute>
-              <RegisterPage />
-            </PublicRoute>
-          )}
-        />
-        <Route
-          path="/auth/forgot-password"
-          component={() => (
-            <PublicRoute>
-              <ForgotPasswordPage />
-            </PublicRoute>
-          )}
-        />
-      
-      {/* Public Verification Route (no auth required) */}
+      <Route
+        path="/auth/register"
+        component={() => (
+          <PublicRoute>
+            <RegisterPage />
+          </PublicRoute>
+        )}
+      />
+      <Route
+        path="/auth/callback"
+        component={() => (
+          <PublicRoute>
+            <OAuthCallbackPage />
+          </PublicRoute>
+        )}
+      />
+      <Route
+        path="/auth/forgot-password"
+        component={() => (
+          <PublicRoute>
+            <ForgotPasswordPage />
+          </PublicRoute>
+        )}
+      />      {/* Public Verification Route (no auth required) */}
       <Route
         path="/verify/:id"
         component={() => <VerifyTransactionPage />}

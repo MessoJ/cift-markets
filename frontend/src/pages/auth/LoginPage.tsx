@@ -33,6 +33,32 @@ export default function LoginPage() {
     }
   };
 
+  const handleOAuthLogin = async (provider: string) => {
+    try {
+      // Convert provider name to lowercase for API endpoint
+      const providerId = provider.toLowerCase();
+      
+      // Fetch the authorization URL from backend
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/${providerId}/login`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to initiate ${provider} login`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.url) {
+        // Redirect to the provider's login page
+        window.location.href = data.url;
+      } else {
+        throw new Error("No redirect URL received");
+      }
+    } catch (err: any) {
+      console.error("OAuth Error:", err);
+      setError(`${provider} login failed. Please check console for details.`);
+    }
+  };
+
   return (
     <div class="min-h-screen bg-black flex relative overflow-hidden font-sans text-white">
       {/* Background Grid */}
@@ -161,7 +187,10 @@ export default function LoginPage() {
           </div>
 
           <div class="grid grid-cols-2 gap-4">
-            <button class="flex items-center justify-center gap-2 bg-terminal-900 border border-terminal-800 hover:bg-terminal-800 text-white py-2.5 rounded-lg transition-colors text-sm font-medium">
+            <button 
+              onClick={() => handleOAuthLogin('Google')}
+              class="flex items-center justify-center gap-2 bg-terminal-900 border border-terminal-800 hover:bg-terminal-800 text-white py-2.5 rounded-lg transition-colors text-sm font-medium"
+            >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                 <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -170,12 +199,33 @@ export default function LoginPage() {
               </svg>
               Google
             </button>
-            <button class="flex items-center justify-center gap-2 bg-terminal-900 border border-terminal-800 hover:bg-terminal-800 text-white py-2.5 rounded-lg transition-colors text-sm font-medium">
+            <button 
+              onClick={() => handleOAuthLogin('Apple')}
+              class="flex items-center justify-center gap-2 bg-terminal-900 border border-terminal-800 hover:bg-terminal-800 text-white py-2.5 rounded-lg transition-colors text-sm font-medium"
+            >
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M13.0729 1.04175C13.2083 1.04175 13.3333 1.09383 13.4271 1.18758C13.5208 1.28133 13.5729 1.40633 13.5729 1.54175V1.54175C13.5729 1.67717 13.5208 1.80217 13.4271 1.89592C13.3333 1.98967 13.2083 2.04175 13.0729 2.04175H13.0729C12.9375 2.04175 12.8125 1.98967 12.7188 1.89592C12.625 1.80217 12.5729 1.67717 12.5729 1.54175V1.54175C12.5729 1.40633 12.625 1.28133 12.7188 1.18758C12.8125 1.09383 12.9375 1.04175 13.0729 1.04175ZM13.0729 1.04175C13.2083 1.04175 13.3333 1.09383 13.4271 1.18758C13.5208 1.28133 13.5729 1.40633 13.5729 1.54175V1.54175C13.5729 1.67717 13.5208 1.80217 13.4271 1.89592C13.3333 1.98967 13.2083 2.04175 13.0729 2.04175H13.0729C12.9375 2.04175 12.8125 1.98967 12.7188 1.89592C12.625 1.80217 12.5729 1.67717 12.5729 1.54175V1.54175C12.5729 1.40633 12.625 1.28133 12.7188 1.18758C12.8125 1.09383 12.9375 1.04175 13.0729 1.04175Z" />
                 <path d="M17.05 20.28c-.98.95-2.05 1.96-3.5 1.96-1.48 0-2.04-.9-3.85-.9-1.8 0-2.38.9-3.84.9-1.43 0-2.54-1.02-3.59-2.08-2.1-2.12-3.56-5.82-1.48-9.45 1.05-1.82 2.93-2.98 4.98-2.98 1.55 0 2.94 1.05 3.86 1.05.92 0 2.66-1.05 4.48-1.05 1.53 0 2.9.62 3.85 1.62-3.38 1.68-2.82 6.12.58 7.53-.75 1.49-1.8 3.38-3.5 5.3zM14.9 5.15c.82-1.02 1.38-2.45 1.22-3.88-1.18.05-2.6.78-3.45 1.8-.78.92-1.45 2.42-1.28 3.82 1.32.1 2.68-.72 3.5-1.74z" />
               </svg>
               Apple
+            </button>
+            <button 
+              onClick={() => handleOAuthLogin('GitHub')}
+              class="flex items-center justify-center gap-2 bg-terminal-900 border border-terminal-800 hover:bg-terminal-800 text-white py-2.5 rounded-lg transition-colors text-sm font-medium"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+              </svg>
+              GitHub
+            </button>
+            <button 
+              onClick={() => handleOAuthLogin('Microsoft')}
+              class="flex items-center justify-center gap-2 bg-terminal-900 border border-terminal-800 hover:bg-terminal-800 text-white py-2.5 rounded-lg transition-colors text-sm font-medium"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z"/>
+              </svg>
+              Microsoft
             </button>
           </div>
 
