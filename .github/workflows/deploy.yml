@@ -114,6 +114,7 @@ jobs:
           script: |
             set -e
             echo "Starting deployment script..."
+            pwd
             
             # Ensure Docker client API >= 1.44 (older API may refuse to pull images)
             api_ver=$(docker version --format '{{.Client.APIVersion}}' 2>/dev/null || echo "0")
@@ -143,6 +144,7 @@ jobs:
 
             # Navigate to app directory
             cd ~/cift-markets
+            echo "Current directory: $(pwd)"
             
             # Pull latest code
             git pull origin main
@@ -152,7 +154,16 @@ jobs:
             
             # Create .env file with secrets
             echo "Updating .env file..."
-            echo "GITHUB_CLIENT_ID=$GH_CLIENT_ID" > .env
+            if [ -z "$GH_CLIENT_ID" ]; then
+              echo "CRITICAL WARNING: GH_CLIENT_ID is empty!"
+            else
+              echo "GH_CLIENT_ID is set (length: ${#GH_CLIENT_ID})"
+            fi
+            
+            # Remove existing .env to ensure fresh write
+            rm -f .env
+            
+            echo "GITHUB_CLIENT_ID=$GH_CLIENT_ID" >> .env
             echo "GITHUB_CLIENT_SECRET=$GH_CLIENT_SECRET" >> .env
             echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .env
             echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> .env
@@ -180,6 +191,9 @@ jobs:
             echo "ALPACA_SECRET_KEY=$ALPACA_SECRET_KEY" >> .env
             echo "ALPACA_BASE_URL=$ALPACA_BASE_URL" >> .env
             echo "POLYGON_API_KEY=$POLYGON_API_KEY" >> .env
+            
+            echo "Finished writing .env file. Content preview:"
+            head -n 5 .env
             
             # Pull latest images
             # Free up disk space: prune unused images, containers, builders and dangling volumes
