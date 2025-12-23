@@ -51,7 +51,7 @@ COPY cift/__init__.py /build/cift/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir xgboost && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir . --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
 
 # ============================================================================
 # Stage 2: Runtime (Phase 5-7 with Rust core)
