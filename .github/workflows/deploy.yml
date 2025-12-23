@@ -112,6 +112,9 @@ jobs:
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           envs: GITHUB_TOKEN,USERNAME,GH_CLIENT_ID,GH_CLIENT_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,MICROSOFT_CLIENT_ID,MICROSOFT_CLIENT_SECRET,APPLE_CLIENT_ID,APPLE_CLIENT_SECRET,APPLE_TEAM_ID,APPLE_KEY_ID,APPLE_PRIVATE_KEY,FRONTEND_URL,API_BASE_URL,POSTGRES_PASSWORD,JWT_SECRET_KEY,SECRET_KEY,NEWSAPI_KEY,FINNHUB_API_KEY,ALPHAVANTAGE_API_KEY,ALPACA_API_KEY,ALPACA_SECRET_KEY,ALPACA_BASE_URL,POLYGON_API_KEY
           script: |
+            set -e
+            echo "Starting deployment script..."
+            
             # Ensure Docker client API >= 1.44 (older API may refuse to pull images)
             api_ver=$(docker version --format '{{.Client.APIVersion}}' 2>/dev/null || echo "0")
             if [ "$api_ver" = "0" ]; then
@@ -148,6 +151,7 @@ jobs:
             echo $GITHUB_TOKEN | sudo docker login ghcr.io -u $USERNAME --password-stdin
             
             # Create .env file with secrets
+            echo "Updating .env file..."
             echo "GITHUB_CLIENT_ID=$GH_CLIENT_ID" > .env
             echo "GITHUB_CLIENT_SECRET=$GH_CLIENT_SECRET" >> .env
             echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .env
