@@ -217,23 +217,23 @@ services:
     networks:
       - cift-network
 
-  # MLflow - ML experiment tracking
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.8.1
-    container_name: cift-mlflow
-    ports:
-      - "5000:5000"
-    volumes:
-      - mlflow-data:/mlflow
-    command: mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --host 0.0.0.0 --port 5000
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - cift-network
+  # MLflow - ML experiment tracking (Disabled for Azure cost savings - moved to Google Cloud)
+  # mlflow:
+  #   image: ghcr.io/mlflow/mlflow:v2.8.1
+  #   container_name: cift-mlflow
+  #   ports:
+  #     - "5000:5000"
+  #   volumes:
+  #     - mlflow-data:/mlflow
+  #   command: mlflow server --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --host 0.0.0.0 --port 5000
+  #   healthcheck:
+  #     test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/5000"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - cift-network
 
   # CIFT API - FastAPI application (Phase 1+)
   # Use Dockerfile.dev for fast builds (no Rust) or Dockerfile.prod for optimized production
