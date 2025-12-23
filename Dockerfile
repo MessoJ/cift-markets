@@ -28,6 +28,31 @@ RUN pip install --no-cache-dir maturin
 # Set working directory FIRST
 WORKDIR /build
 
+# Install Python dependencies FIRST to leverage caching
+# We install the heavy ML libraries here so they are cached unless this list changes
+# Removed +cpu constraints to allow GPU support as requested
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        "torch>=2.1.0" \
+        "torch-geometric>=2.4.0" \
+        "polars>=0.20.0" \
+        "pandas>=2.1.0" \
+        "numpy>=1.26.0" \
+        "numba>=0.58.0" \
+        "transformers>=4.35.0" \
+        "scikit-learn>=1.3.0" \
+        "xgboost>=2.0.0" \
+        "pomegranate>=1.0.0" \
+        "nats-py>=2.6.0" \
+        "redis>=5.0.0" \
+        "websockets>=12.0" \
+        "msgpack>=1.0.0" \
+        "asyncpg>=0.29.0" \
+        "sqlalchemy[asyncio]>=2.0.23" \
+        "greenlet>=3.0.0" \
+        "httpx>=0.25.0" \
+        "slowapi>=0.1.9"
+
 # Copy Rust source for PyO3 binding
 COPY rust_core/ /build/rust_core/
 
@@ -45,32 +70,8 @@ COPY pyproject.toml /build/
 COPY README.md /build/
 COPY cift/__init__.py /build/cift/
 
-# Install Python dependencies
-# Explicitly install CPU-only torch and torch-geometric to prevent GPU bloat
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir "torch==2.5.1+cpu" "torch-geometric>=2.4.0" --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir \
-        "torch==2.5.1+cpu" \
-        "polars>=0.20.0" \
-        "pandas>=2.1.0" \
-        "numpy>=1.26.0" \
-        "numba>=0.58.0" \
-        "transformers>=4.35.0" \
-        "scikit-learn>=1.3.0" \
-        "xgboost>=2.0.0" \
-        "pomegranate>=1.0.0" \
-        "nats-py>=2.6.0" \
-        "redis>=5.0.0" \
-        "websockets>=12.0" \
-        "msgpack>=1.0.0" \
-        "asyncpg>=0.29.0" \
-        "sqlalchemy[asyncio]>=2.0.23" \
-        "greenlet>=3.0.0" \
-        "httpx>=0.25.0" \
-        "slowapi>=0.1.9" \
-        --index-url https://download.pytorch.org/whl/cpu \
-        --extra-index-url https://pypi.org/simple && \
-    pip install --no-cache-dir --no-deps -e .
+# Install the project itself
+RUN pip install --no-cache-dir --no-deps -e .
 
 # ============================================================================
 # Stage 2: Runtime (Phase 5-7 with Rust core)
