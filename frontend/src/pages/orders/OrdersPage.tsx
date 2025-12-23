@@ -356,8 +356,8 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div class="flex-1 min-h-0 bg-terminal-900 border border-terminal-800 rounded-lg overflow-hidden shadow-sm">
+      {/* Orders Table - Desktop */}
+      <div class="hidden md:block flex-1 min-h-0 bg-terminal-900 border border-terminal-800 rounded-lg overflow-hidden shadow-sm">
         <Table
           data={filteredOrders()}
           columns={orderColumns}
@@ -387,6 +387,114 @@ export default function OrdersPage() {
             ${order.status === 'open' ? 'bg-accent-900/5 hover:bg-accent-900/10' : ''}
           `}
         />
+      </div>
+
+      {/* Orders List - Mobile */}
+      <div class="md:hidden flex-1 overflow-y-auto space-y-3 pb-20">
+        <Show when={!loading()} fallback={
+          <div class="flex justify-center py-8">
+            <RefreshCw class="w-6 h-6 text-primary-400 animate-spin" />
+          </div>
+        }>
+          <Show when={filteredOrders().length > 0} fallback={
+            <div class="flex flex-col items-center justify-center py-12 text-gray-500">
+              <p class="text-sm font-medium">No orders found</p>
+              <button 
+                onClick={() => navigate('/trading')}
+                class="mt-4 text-primary-400 hover:text-primary-300 text-xs font-medium"
+              >
+                Place your first trade &rarr;
+              </button>
+            </div>
+          }>
+            <For each={filteredOrders()}>
+              {(order) => (
+                <div 
+                  class="bg-terminal-900 border border-terminal-800 rounded-lg p-3 space-y-3 active:bg-terminal-800 transition-colors"
+                  onClick={() => navigate(`/order/${order.id}`)}
+                >
+                  {/* Header: Symbol, Side, Status */}
+                  <div class="flex justify-between items-start">
+                    <div class="flex items-center gap-2">
+                      <div class="font-bold text-white text-lg">{order.symbol}</div>
+                      <span class={`text-[10px] font-bold px-2 py-0.5 rounded-sm ${
+                        order.side === 'buy' 
+                          ? 'bg-success-900/20 text-success-400 border border-success-900/50' 
+                          : 'bg-danger-900/20 text-danger-400 border border-danger-900/50'
+                      }`}>
+                        {order.side.toUpperCase()}
+                      </span>
+                    </div>
+                    <span class={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      order.status === 'filled' ? 'bg-success-500/10 text-success-400 border border-success-500/20' :
+                      order.status === 'open' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/20' :
+                      order.status === 'cancelled' ? 'bg-gray-700/30 text-gray-400 border border-gray-600/30' :
+                      'bg-gray-800 text-gray-400'
+                    }`}>
+                      <Show when={order.status === 'open'}>
+                        <div class="w-1.5 h-1.5 rounded-full bg-accent-400 animate-ping" />
+                      </Show>
+                      {order.status.toUpperCase()}
+                    </span>
+                  </div>
+                  
+                  {/* Progress Bar for Fills */}
+                  <div class="w-full h-1 bg-terminal-800 rounded-full overflow-hidden">
+                    <div 
+                      class={`h-full ${order.side === 'buy' ? 'bg-success-500' : 'bg-danger-500'}`} 
+                      style={{ width: `${(order.filled_quantity / order.quantity) * 100}%` }}
+                    />
+                  </div>
+
+                  {/* Details Grid */}
+                  <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs">
+                    <div>
+                      <div class="text-gray-500 text-[10px] uppercase">Filled / Qty</div>
+                      <div class="font-mono text-gray-300 text-sm">
+                        <span class="text-white">{order.filled_quantity}</span>
+                        <span class="text-gray-500"> / {order.quantity}</span>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-gray-500 text-[10px] uppercase">Price</div>
+                      <div class="font-mono text-gray-300 text-sm">
+                        {order.limit_price ? formatCurrency(order.limit_price) : 'MKT'}
+                      </div>
+                    </div>
+                    <div>
+                      <div class="text-gray-500 text-[10px] uppercase">Type</div>
+                      <div class="font-mono text-gray-300">{order.order_type.toUpperCase()}</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-gray-500 text-[10px] uppercase">Value</div>
+                      <div class="font-mono text-gray-300">
+                        {formatCurrency((order.filled_quantity || 0) * (order.avg_fill_price || order.limit_price || 0))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer: Time & Actions */}
+                  <div class="flex justify-between items-center pt-2 border-t border-terminal-800">
+                    <div class="text-[10px] text-gray-500 font-mono">
+                      {new Date(order.created_at).toLocaleString()}
+                    </div>
+                    <Show when={order.status === 'open'}>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelOrder(order.id);
+                        }}
+                        class="px-3 py-1.5 bg-danger-900/20 text-danger-400 border border-danger-900/50 rounded text-xs font-medium hover:bg-danger-900/40 flex items-center gap-1"
+                      >
+                        <X class="w-3 h-3" /> Cancel
+                      </button>
+                    </Show>
+                  </div>
+                </div>
+              )}
+            </For>
+          </Show>
+        </Show>
       </div>
     </div>
   );

@@ -18,7 +18,7 @@ export function StatusBar() {
   });
 
   return (
-    <footer class="h-6 bg-terminal-950 border-t border-terminal-750 flex items-center justify-between px-3 text-[10px] font-mono text-gray-500 select-none">
+    <footer class="hidden md:flex h-6 bg-terminal-950 border-t border-terminal-750 items-center justify-between px-3 text-[10px] font-mono text-gray-500 select-none">
       {/* Left: System Status */}
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-1.5" title="WebSocket Connection">

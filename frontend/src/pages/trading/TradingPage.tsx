@@ -35,6 +35,7 @@ import CandlestickChart from '~/components/charts/CandlestickChart';
 
 // --- Types ---
 type Tab = 'positions' | 'open_orders' | 'order_history' | 'trade_history';
+type MobileTab = 'chart' | 'trade' | 'book' | 'positions';
 type TimeInForce = 'day' | 'gtc' | 'ioc' | 'fok';
 
 // --- Order Confirmation Modal ---
@@ -242,6 +243,7 @@ export default function TradingPage() {
   
   // UI State
   const [activeTab, setActiveTab] = createSignal<Tab>('positions');
+  const [mobileTab, setMobileTab] = createSignal<MobileTab>('chart');
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
   const [showRiskCalc, setShowRiskCalc] = createSignal(false);
   
@@ -524,13 +526,13 @@ export default function TradingPage() {
               <span class="font-bold text-accent-400 font-mono">{formatCurrency(portfolio()!.buying_power)}</span>
             </div>
           </Show>
-          <div class="text-right">
+          <div class="text-right hidden sm:block">
             <span class="block text-[10px] text-gray-500 uppercase">Day P&L</span>
             <span class={`font-bold font-mono ${positions().reduce((a,b) => a + (b.day_pnl || 0), 0) >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
               {formatCurrency(positions().reduce((a,b) => a + (b.day_pnl || 0), 0))}
             </span>
           </div>
-          <div class="text-right">
+          <div class="text-right hidden sm:block">
             <span class="block text-[10px] text-gray-500 uppercase">Open</span>
             <span class="font-bold text-white font-mono">{openOrders().length}</span>
           </div>
@@ -544,11 +546,39 @@ export default function TradingPage() {
         </div>
       </header>
 
+      {/* Mobile Tab Bar */}
+      <div class="lg:hidden flex border-b border-terminal-800 bg-terminal-900">
+        <button 
+          onClick={() => setMobileTab('chart')}
+          class={`flex-1 py-3 text-xs font-bold uppercase border-b-2 transition-colors ${mobileTab() === 'chart' ? 'border-accent-500 text-white' : 'border-transparent text-gray-500'}`}
+        >
+          Chart
+        </button>
+        <button 
+          onClick={() => setMobileTab('trade')}
+          class={`flex-1 py-3 text-xs font-bold uppercase border-b-2 transition-colors ${mobileTab() === 'trade' ? 'border-accent-500 text-white' : 'border-transparent text-gray-500'}`}
+        >
+          Trade
+        </button>
+        <button 
+          onClick={() => setMobileTab('book')}
+          class={`flex-1 py-3 text-xs font-bold uppercase border-b-2 transition-colors ${mobileTab() === 'book' ? 'border-accent-500 text-white' : 'border-transparent text-gray-500'}`}
+        >
+          Book
+        </button>
+        <button 
+          onClick={() => setMobileTab('positions')}
+          class={`flex-1 py-3 text-xs font-bold uppercase border-b-2 transition-colors ${mobileTab() === 'positions' ? 'border-accent-500 text-white' : 'border-transparent text-gray-500'}`}
+        >
+          Pos
+        </button>
+      </div>
+
       {/* 2. Main Workspace Grid */}
-      <div class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
+      <div class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden pb-20 lg:pb-0">
         
         {/* LEFT PANEL: Market Depth (20%) */}
-        <div class="w-full lg:w-72 flex flex-col border-r-0 lg:border-r border-b lg:border-b-0 border-terminal-800 bg-terminal-900 shrink-0 h-[400px] lg:h-auto">
+        <div class={`w-full lg:w-72 flex-col border-r-0 lg:border-r border-b lg:border-b-0 border-terminal-800 bg-terminal-900 shrink-0 h-[400px] lg:h-auto ${mobileTab() === 'book' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Order Book */}
           <div class="flex-1 flex flex-col min-h-0 border-b border-terminal-800">
             <OrderBook 
@@ -567,10 +597,10 @@ export default function TradingPage() {
         </div>
 
         {/* CENTER PANEL: Chart & Management (60%) */}
-        <div class="flex-1 flex flex-col min-w-0 bg-terminal-950 min-h-[500px] lg:min-h-0">
+        <div class={`flex-1 flex-col min-w-0 bg-terminal-950 min-h-[500px] lg:min-h-0 ${mobileTab() === 'chart' || mobileTab() === 'positions' ? 'flex' : 'hidden lg:flex'}`}>
           
           {/* Chart Area - REAL CHART, not placeholder! */}
-          <div class="flex-1 border-b border-terminal-800 relative bg-terminal-950 flex flex-col min-h-[300px]">
+          <div class={`flex-1 border-b border-terminal-800 relative bg-terminal-950 flex-col min-h-[300px] ${mobileTab() === 'positions' ? 'hidden lg:flex' : 'flex'}`}>
             {/* Timeframe Selector */}
             <div class="absolute top-2 left-2 z-10 flex gap-1 bg-terminal-900/80 backdrop-blur rounded p-1">
               <For each={['1m', '5m', '15m', '1h', '4h', '1d']}>
@@ -603,7 +633,7 @@ export default function TradingPage() {
           </div>
 
           {/* Bottom Panel: Positions & Orders - SCROLLABLE! */}
-          <div class="h-64 min-h-[200px] max-h-[300px] flex flex-col bg-terminal-900 shrink-0 resize-y overflow-hidden">
+          <div class={`h-64 min-h-[200px] max-h-[300px] lg:flex flex-col bg-terminal-900 shrink-0 resize-y overflow-hidden ${mobileTab() === 'positions' ? 'flex h-full max-h-none' : 'hidden'}`}>
             {/* Tabs */}
             <div class="flex border-b border-terminal-800 bg-terminal-850 shrink-0">
               <button 
@@ -793,7 +823,7 @@ export default function TradingPage() {
         </div>
 
         {/* RIGHT PANEL: Order Entry & Watchlist (20%) */}
-        <div class="w-full lg:w-80 flex flex-col border-l-0 lg:border-l border-t lg:border-t-0 border-terminal-800 bg-terminal-900 shrink-0 overflow-hidden h-[600px] lg:h-auto">
+        <div class={`w-full lg:w-80 flex-col border-l-0 lg:border-l border-t lg:border-t-0 border-terminal-800 bg-terminal-900 shrink-0 overflow-hidden h-[600px] lg:h-auto ${mobileTab() === 'trade' ? 'flex' : 'hidden lg:flex'}`}>
           
           {/* Order Entry Form - Scrollable */}
           <div class="flex-1 overflow-auto p-4">

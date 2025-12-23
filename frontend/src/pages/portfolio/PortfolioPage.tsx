@@ -651,15 +651,65 @@ export default function PortfolioPage() {
               {/* Scrollable table container */}
               <div class="flex-1 overflow-y-auto overflow-x-auto min-h-0">
                 <Show when={positions().length > 0} fallback={<NoPositionsState onTrade={() => navigate('/trading')} />}>
-                  <Table
-                    data={positions()}
-                    columns={positionColumns}
-                    loading={loading()}
-                    emptyMessage="No positions found"
-                    onRowClick={(pos) => navigate(`/trading?symbol=${pos.symbol}`)}
-                    compact
-                    hoverable
-                  />
+                  {/* Desktop Table View */}
+                  <div class="hidden md:block h-full">
+                    <Table
+                      data={positions()}
+                      columns={positionColumns}
+                      loading={loading()}
+                      emptyMessage="No positions found"
+                      onRowClick={(pos) => navigate(`/trading?symbol=${pos.symbol}`)}
+                      compact
+                      hoverable
+                    />
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div class="md:hidden space-y-2 p-2">
+                    <For each={positions()}>
+                      {(pos) => (
+                        <div 
+                          class="bg-terminal-950 border border-terminal-800 rounded p-3 flex flex-col gap-2 active:bg-terminal-800 transition-colors"
+                          onClick={() => navigate(`/trading?symbol=${pos.symbol}`)}
+                        >
+                          <div class="flex justify-between items-start">
+                            <div class="flex items-center gap-2">
+                              <div class="w-8 h-8 rounded bg-terminal-800 flex items-center justify-center text-xs font-bold text-gray-400">
+                                {pos.symbol.substring(0, 2)}
+                              </div>
+                              <div>
+                                <div class="font-bold text-white">{pos.symbol}</div>
+                                <div class={`text-[10px] font-mono ${pos.side === 'long' ? 'text-success-400' : 'text-danger-400'}`}>
+                                  {pos.side.toUpperCase()}
+                                </div>
+                              </div>
+                            </div>
+                            <div class="text-right">
+                              <div class="font-mono text-white font-bold">{formatCurrency(pos.current_price)}</div>
+                              <div class="text-[10px] text-gray-500">Avg: {formatCurrency(pos.avg_cost)}</div>
+                            </div>
+                          </div>
+                          
+                          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-terminal-800">
+                            <div>
+                              <div class="text-[9px] text-gray-500 uppercase">Size</div>
+                              <div class="text-xs font-mono text-gray-300">{pos.quantity}</div>
+                            </div>
+                            <div>
+                              <div class="text-[9px] text-gray-500 uppercase">Value</div>
+                              <div class="text-xs font-mono text-gray-300">{formatCurrency(pos.market_value)}</div>
+                            </div>
+                            <div class="text-right">
+                              <div class="text-[9px] text-gray-500 uppercase">P&L</div>
+                              <div class={`text-xs font-mono font-bold ${pos.unrealized_pnl >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                                {pos.unrealized_pnl >= 0 ? '+' : ''}{formatCurrency(pos.unrealized_pnl)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
                 </Show>
               </div>
               {/* Table footer with summary */}

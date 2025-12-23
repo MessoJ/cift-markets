@@ -13,6 +13,7 @@ import { JSX, createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { StatusBar } from './StatusBar';
+import { MobileNav } from './MobileNav';
 
 interface MainLayoutProps {
   children: JSX.Element;
@@ -63,12 +64,15 @@ export function MainLayout(props: MainLayoutProps) {
         <Header onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen())} />
 
         {/* Page Content - Dense, Professional, Mobile Responsive */}
-        <main class="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-terminal-750">
+        <main class="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 pb-20 md:pb-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-terminal-750">
           {props.children}
         </main>
 
-        {/* Status Bar - Fixed at bottom */}
+        {/* Status Bar - Fixed at bottom (Hidden on mobile) */}
         <StatusBar />
+        
+        {/* Mobile Bottom Navigation */}
+        <MobileNav onMenuClick={() => setMobileMenuOpen(true)} />
       </div>
     </div>
   );
