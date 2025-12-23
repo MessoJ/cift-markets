@@ -48,8 +48,9 @@ COPY cift/__init__.py /build/cift/
 # Install Python dependencies
 # Explicitly install CPU-only torch and torch-geometric to prevent GPU bloat
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir "torch>=2.1.0" "torch-geometric>=2.4.0" --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir "torch==2.5.1+cpu" "torch-geometric>=2.4.0" --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir \
+        "torch==2.5.1+cpu" \
         "polars>=0.20.0" \
         "pandas>=2.1.0" \
         "numpy>=1.26.0" \
@@ -67,6 +68,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "greenlet>=3.0.0" \
         "httpx>=0.25.0" \
         "slowapi>=0.1.9" \
+        --index-url https://download.pytorch.org/whl/cpu \
         --extra-index-url https://pypi.org/simple && \
     pip install --no-cache-dir --no-deps -e .
 
