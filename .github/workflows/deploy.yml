@@ -82,6 +82,16 @@ jobs:
           # OAuth Secrets (Renamed to avoid GITHUB_ prefix restriction)
           GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
           GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+          MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
+          APPLE_CLIENT_SECRET: ${{ secrets.APPLE_CLIENT_SECRET }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
+          
           FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           # App Secrets
@@ -100,7 +110,7 @@ jobs:
           host: ${{ secrets.AZURE_VM_IP }}
           username: ${{ secrets.AZURE_VM_USERNAME }}
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
-          envs: GITHUB_TOKEN,USERNAME,GH_CLIENT_ID,GH_CLIENT_SECRET,FRONTEND_URL,API_BASE_URL,POSTGRES_PASSWORD,JWT_SECRET_KEY,SECRET_KEY,NEWSAPI_KEY,FINNHUB_API_KEY,ALPHAVANTAGE_API_KEY,ALPACA_API_KEY,ALPACA_SECRET_KEY,ALPACA_BASE_URL,POLYGON_API_KEY
+          envs: GITHUB_TOKEN,USERNAME,GH_CLIENT_ID,GH_CLIENT_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,MICROSOFT_CLIENT_ID,MICROSOFT_CLIENT_SECRET,APPLE_CLIENT_ID,APPLE_CLIENT_SECRET,APPLE_TEAM_ID,APPLE_KEY_ID,APPLE_PRIVATE_KEY,FRONTEND_URL,API_BASE_URL,POSTGRES_PASSWORD,JWT_SECRET_KEY,SECRET_KEY,NEWSAPI_KEY,FINNHUB_API_KEY,ALPHAVANTAGE_API_KEY,ALPACA_API_KEY,ALPACA_SECRET_KEY,ALPACA_BASE_URL,POLYGON_API_KEY
           script: |
             # Ensure Docker client API >= 1.44 (older API may refuse to pull images)
             api_ver=$(docker version --format '{{.Client.APIVersion}}' 2>/dev/null || echo "0")
@@ -140,6 +150,16 @@ jobs:
             # Create .env file with secrets
             echo "GITHUB_CLIENT_ID=$GH_CLIENT_ID" > .env
             echo "GITHUB_CLIENT_SECRET=$GH_CLIENT_SECRET" >> .env
+            echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .env
+            echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> .env
+            echo "MICROSOFT_CLIENT_ID=$MICROSOFT_CLIENT_ID" >> .env
+            echo "MICROSOFT_CLIENT_SECRET=$MICROSOFT_CLIENT_SECRET" >> .env
+            echo "APPLE_CLIENT_ID=$APPLE_CLIENT_ID" >> .env
+            echo "APPLE_CLIENT_SECRET=$APPLE_CLIENT_SECRET" >> .env
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> .env
+            echo "APPLE_KEY_ID=$APPLE_KEY_ID" >> .env
+            echo "APPLE_PRIVATE_KEY=$APPLE_PRIVATE_KEY" >> .env
+            
             echo "FRONTEND_URL=$FRONTEND_URL" >> .env
             echo "API_BASE_URL=$API_BASE_URL" >> .env
             
