@@ -717,15 +717,65 @@ export default function WatchlistsPage() {
               </div>
             </div>
           }>
-            <Table
-              data={filteredSymbols()}
-              columns={symbolColumns}
-              loading={loading()}
-              emptyMessage="No symbols in this watchlist. Add symbols above."
-              onRowClick={(item) => navigate(`/symbol/${item.symbol}`)}
-              compact
-              hoverable
-            />
+            {/* Desktop Table */}
+            <div class="hidden md:block h-full">
+              <Table
+                data={filteredSymbols()}
+                columns={symbolColumns}
+                loading={loading()}
+                emptyMessage="No symbols in this watchlist. Add symbols above."
+                onRowClick={(item) => navigate(`/symbol/${item.symbol}`)}
+                compact
+                hoverable
+              />
+            </div>
+
+            {/* Mobile List View */}
+            <div class="md:hidden h-full overflow-y-auto bg-terminal-950">
+              <Show when={filteredSymbols().length > 0} fallback={
+                <div class="text-center py-12 text-gray-500 text-sm font-mono">
+                  No symbols in this watchlist.
+                </div>
+              }>
+                <div class="divide-y divide-terminal-800">
+                  <For each={filteredSymbols()}>
+                    {(item) => (
+                      <button
+                        onClick={() => navigate(`/symbol/${item.symbol}`)}
+                        class="w-full bg-terminal-900 p-4 hover:bg-terminal-800 transition-colors text-left"
+                      >
+                        <div class="flex items-center justify-between mb-2">
+                          <div class="flex flex-col items-start">
+                            <span class="text-base font-mono font-bold text-white">{item.symbol}</span>
+                            <span class="text-[10px] text-gray-500 uppercase truncate max-w-[150px]">{item.name}</span>
+                          </div>
+                          <div class="flex flex-col items-end">
+                            <span class="text-base font-mono font-bold text-white">{formatCurrency(item.price || 0)}</span>
+                            <span class={`text-xs font-mono font-bold ${(item.change || 0) >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                              {(item.change_pct || 0) >= 0 ? '+' : ''}{formatPercent(item.change_pct || 0)}
+                            </span>
+                          </div>
+                        </div>
+                        <div class="flex items-center justify-between gap-4">
+                          <div class="flex items-center gap-3 text-[10px] text-gray-500 font-mono">
+                            <span>VOL: {formatLargeNumber(item.volume || 0)}</span>
+                            <span class="w-1 h-1 rounded-full bg-terminal-700"></span>
+                            <span>MCAP: {formatLargeNumber(item.market_cap || 0)}</span>
+                          </div>
+                          <div class="w-24 h-8 opacity-80">
+                            <Sparkline 
+                              data={getSparklineData(item)} 
+                              height={32} 
+                              color={(item.change || 0) >= 0 ? '#22c55e' : '#ef4444'} 
+                            />
+                          </div>
+                        </div>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
           </Show>
         </div>
       </Show>

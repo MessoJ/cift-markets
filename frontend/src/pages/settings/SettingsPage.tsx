@@ -156,13 +156,13 @@ export default function SettingsPage() {
         </div>
       </Show>
 
-      <div class="flex flex-1 overflow-hidden">
-        {/* Sidebar Navigation */}
-        <div class="w-64 border-r border-terminal-800 bg-terminal-900/50 flex flex-col">
-          <nav class="p-2 space-y-1">
+      <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+        {/* Sidebar Navigation (Desktop) / Top Bar (Mobile) */}
+        <div class="w-full md:w-64 border-b md:border-b-0 md:border-r border-terminal-800 bg-terminal-900/50 flex flex-row md:flex-col overflow-x-auto md:overflow-visible shrink-0">
+          <nav class="p-2 flex md:flex-col gap-1 min-w-max md:min-w-0">
             <button
               onClick={() => setActiveTab('security')}
-              class={`w-full flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors ${
+              class={`flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors whitespace-nowrap ${
                 activeTab() === 'security' ? 'bg-terminal-800 text-accent-400' : 'text-gray-400 hover:bg-terminal-800/50 hover:text-gray-200'
               }`}
             >
@@ -171,7 +171,7 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('notifications')}
-              class={`w-full flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors ${
+              class={`flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors whitespace-nowrap ${
                 activeTab() === 'notifications' ? 'bg-terminal-800 text-accent-400' : 'text-gray-400 hover:bg-terminal-800/50 hover:text-gray-200'
               }`}
             >
@@ -180,7 +180,7 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('api')}
-              class={`w-full flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors ${
+              class={`flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors whitespace-nowrap ${
                 activeTab() === 'api' ? 'bg-terminal-800 text-accent-400' : 'text-gray-400 hover:bg-terminal-800/50 hover:text-gray-200'
               }`}
             >
@@ -189,7 +189,7 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('preferences')}
-              class={`w-full flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors ${
+              class={`flex items-center gap-3 px-4 py-3 text-sm font-mono rounded-md transition-colors whitespace-nowrap ${
                 activeTab() === 'preferences' ? 'bg-terminal-800 text-accent-400' : 'text-gray-400 hover:bg-terminal-800/50 hover:text-gray-200'
               }`}
             >
@@ -200,7 +200,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Content Area */}
-        <div class="flex-1 overflow-y-auto p-8">
+        <div class="flex-1 overflow-y-auto p-4 md:p-8">
           
           {/* SECURITY TAB */}
           <Show when={activeTab() === 'security'}>

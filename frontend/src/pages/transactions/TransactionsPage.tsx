@@ -526,8 +526,8 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div class="flex-1 overflow-hidden relative">
+        {/* Table - Desktop */}
+        <div class="hidden md:block flex-1 overflow-hidden relative">
           <Table
             data={transactions()}
             columns={columns}
@@ -537,6 +537,63 @@ export default function TransactionsPage() {
             hoverable
             onRowClick={(txn) => setSelectedTransaction(txn)}
           />
+        </div>
+
+        {/* List - Mobile */}
+        <div class="md:hidden flex-1 overflow-y-auto p-2 space-y-2 bg-terminal-950">
+          <Show when={!loading()} fallback={
+            <div class="flex justify-center py-8">
+              <div class="animate-spin w-6 h-6 border-2 border-accent-500 border-t-transparent rounded-full"></div>
+            </div>
+          }>
+            <Show when={transactions().length > 0} fallback={
+              <div class="text-center py-12 text-gray-500 text-sm">No transactions found</div>
+            }>
+              <For each={transactions()}>
+                {(txn) => (
+                  <div 
+                    class="bg-terminal-900 border border-terminal-800 rounded-lg p-3 active:bg-terminal-800 transition-colors"
+                    onClick={() => setSelectedTransaction(txn)}
+                  >
+                    <div class="flex justify-between items-start mb-2">
+                      <div>
+                        <div class="font-bold text-white text-sm mb-0.5">{txn.symbol || txn.description || 'Transaction'}</div>
+                        <div class="text-[10px] text-gray-500 font-mono flex items-center gap-2">
+                          <span>{new Date(txn.date).toLocaleDateString()}</span>
+                          <span class="w-1 h-1 rounded-full bg-terminal-700"></span>
+                          <span>{new Date(txn.date).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                      <div class="text-right">
+                        <div class={`font-mono font-bold text-sm ${txn.amount >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                          {txn.amount >= 0 ? '+' : ''}{formatCurrency(txn.amount)}
+                        </div>
+                        <div class="text-[10px] font-mono text-gray-500">
+                          Bal: {formatCurrency(txn.balance_after)}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="flex justify-between items-center text-xs border-t border-terminal-800 pt-2">
+                      <span class={`px-2 py-0.5 rounded-sm font-mono uppercase text-[10px] font-bold ${
+                        txn.type === 'trade' ? 'bg-accent-900/20 text-accent-400 border border-accent-900/30' :
+                        txn.type === 'deposit' ? 'bg-success-900/20 text-success-400 border border-success-900/30' :
+                        txn.type === 'withdrawal' ? 'bg-danger-900/20 text-danger-400 border border-danger-900/30' :
+                        'bg-terminal-800 text-gray-400 border border-terminal-700'
+                      }`}>
+                        {txn.type}
+                      </span>
+                      <Show when={txn.quantity}>
+                        <span class="font-mono text-gray-400 text-[10px]">
+                          <span class="text-white">{txn.quantity}</span> @ {formatCurrency(txn.price)}
+                        </span>
+                      </Show>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
+          </Show>
         </div>
 
         {/* Pagination Footer */}

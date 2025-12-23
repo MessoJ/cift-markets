@@ -285,7 +285,9 @@ export default function DashboardPage() {
     <div class="flex flex-col gap-2 min-h-0 bg-terminal-950 md:h-full">
       {/* 1. Market Ticker */}
       <Show when={tickerData().length > 0}>
-        <MarketTicker items={tickerData()} speed={30} />
+        <div class="hidden md:block">
+          <MarketTicker items={tickerData()} speed={30} />
+        </div>
       </Show>
 
       {/* 2. Top Section: Portfolio & Quick Trade */}
@@ -415,15 +417,48 @@ export default function DashboardPage() {
             <div class="flex-1 overflow-auto min-h-0">
               <Show when={!loading()} fallback={<div class="p-8"><LoadingState /></div>}>
                 <Show when={positions().length > 0} fallback={<NoPositionsState onTrade={() => navigate('/trading')} />}>
-                  <Table
-                    data={positions()}
-                    columns={positionColumns}
-                    loading={loading()}
-                    emptyMessage="No positions"
-                    onRowClick={(pos) => navigate(`/trading?symbol=${pos.symbol}`)}
-                    compact
-                    hoverable
-                  />
+                  {/* Desktop Table View */}
+                  <div class="hidden md:block h-full">
+                    <Table
+                      data={positions()}
+                      columns={positionColumns}
+                      loading={loading()}
+                      emptyMessage="No positions"
+                      onRowClick={(pos) => navigate(`/trading?symbol=${pos.symbol}`)}
+                      compact
+                      hoverable
+                    />
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div class="md:hidden space-y-2 p-2">
+                    <For each={positions()}>
+                      {(pos) => (
+                        <div 
+                          class="bg-terminal-950 border border-terminal-800 rounded p-3 flex justify-between items-center active:bg-terminal-800 transition-colors"
+                          onClick={() => navigate(`/trading?symbol=${pos.symbol}`)}
+                        >
+                          <div>
+                            <div class="flex items-center gap-2 mb-1">
+                              <span class="font-bold text-white">{pos.symbol}</span>
+                              <span class={`text-[10px] px-1.5 rounded ${pos.side === 'long' ? 'bg-success-500/20 text-success-400' : 'bg-danger-500/20 text-danger-400'}`}>
+                                {pos.side.toUpperCase()}
+                              </span>
+                            </div>
+                            <div class="text-xs text-gray-500 font-mono">
+                              {pos.quantity} @ {formatCurrency(pos.avg_cost)}
+                            </div>
+                          </div>
+                          <div class="text-right">
+                            <div class="font-mono text-white font-bold">{formatCurrency(pos.current_price)}</div>
+                            <div class={`text-xs font-mono ${pos.unrealized_pnl >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                              {pos.unrealized_pnl >= 0 ? '+' : ''}{formatCurrency(pos.unrealized_pnl)}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
                 </Show>
               </Show>
             </div>

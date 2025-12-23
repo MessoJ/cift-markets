@@ -103,6 +103,7 @@ export default function NewsPage() {
   const [selectedCategory, setSelectedCategory] = createSignal<string>('all');
   const [viewMode, setViewMode] = createSignal<'feed' | 'grid'>('feed');
   const [lastUpdate, setLastUpdate] = createSignal<Date>(new Date());
+  const [showMobileSidebar, setShowMobileSidebar] = createSignal(false);
   
   // Data State
   const [articles, setArticles] = createSignal<NewsArticle[]>([]);
@@ -382,6 +383,15 @@ export default function NewsPage() {
             >
               <RefreshCw class={`w-4 h-4 ${refreshing() ? 'animate-spin' : ''}`} />
             </button>
+
+            {/* Mobile Sidebar Toggle */}
+            <button
+              onClick={() => setShowMobileSidebar(!showMobileSidebar())}
+              class="lg:hidden p-2.5 bg-terminal-850 hover:bg-terminal-800 border border-terminal-700 text-gray-400 hover:text-white rounded-lg transition-all"
+              title="Market Data"
+            >
+              <BarChart3 class="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -610,9 +620,31 @@ export default function NewsPage() {
           </Show>
         </div>
 
+        {/* Mobile Sidebar Backdrop */}
+        <Show when={showMobileSidebar()}>
+          <div 
+            class="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+            onClick={() => setShowMobileSidebar(false)}
+          />
+        </Show>
+
         {/* ===== RIGHT SIDEBAR ===== */}
-        <div class="w-80 border-l border-terminal-800 bg-terminal-950/50 overflow-y-auto min-h-0 hidden lg:flex flex-col">
-          <div class="p-4 space-y-6 flex-1">
+        <div class={`
+          fixed inset-y-0 right-0 z-50 w-80 bg-terminal-950 border-l border-terminal-800 transform transition-transform duration-300 ease-in-out lg:static lg:transform-none lg:flex flex-col
+          ${showMobileSidebar() ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+        `}>
+          {/* Mobile Header */}
+          <div class="lg:hidden p-4 border-b border-terminal-800 flex items-center justify-between">
+            <h3 class="font-bold text-white">Market Data</h3>
+            <button 
+              onClick={() => setShowMobileSidebar(false)}
+              class="text-gray-400 hover:text-white"
+            >
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+
+          <div class="p-4 space-y-6 flex-1 overflow-y-auto">
             
             {/* Interactive Globe Widget */}
             <Suspense fallback={

@@ -208,6 +208,9 @@ export default {
   plugins: [
     function ({ addUtilities }) {
       addUtilities({
+        '.pb-safe': {
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        },
         '.tabular-nums': {
           fontVariantNumeric: 'tabular-nums',
         },

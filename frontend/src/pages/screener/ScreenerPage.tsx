@@ -459,11 +459,17 @@ export default function ScreenerPage() {
         </div>
       </div>
 
-      <div class="flex-1 flex overflow-hidden">
+      <div class="flex-1 flex overflow-hidden relative">
         {/* Filter Panel (Collapsible) */}
         <Show when={showFilters()}>
-          <div class="w-64 flex-shrink-0 bg-terminal-900 border-r border-terminal-750 overflow-y-auto">
+          <div class="w-64 flex-shrink-0 bg-terminal-900 border-r border-terminal-750 overflow-y-auto absolute inset-y-0 left-0 z-30 md:static shadow-xl md:shadow-none">
             <div class="p-4 space-y-4">
+              <div class="flex justify-between items-center md:hidden mb-2">
+                <h3 class="font-bold text-white">Filters</h3>
+                <button onClick={() => setShowFilters(false)} class="text-gray-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
               {/* Price */}
               <div>
                 <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">
@@ -757,158 +763,206 @@ export default function ScreenerPage() {
 
               {/* Results Table */}
               <Show when={results().length > 0 && !loading()}>
-                <table class="w-full">
-                  <thead class="sticky top-0 z-20">
-                    <tr class="bg-terminal-850 border-b border-terminal-750">
-                      <SortHeader column="symbol" label="Symbol" />
-                      <SortHeader column="name" label="Company" />
-                      
-                      <Show when={activeTab() === 'overview'}>
-                        <SortHeader column="price" label="Price" align="right" />
-                        <SortHeader column="change_pct" label="Change" align="right" />
-                        <SortHeader column="volume" label="Volume" align="right" />
-                        <SortHeader column="market_cap" label="Market Cap" align="right" />
-                        <SortHeader column="pe_ratio" label="P/E" align="right" />
-                        <SortHeader column="sector" label="Sector" />
-                      </Show>
+                {/* Desktop Table */}
+                <div class="hidden md:block">
+                  <table class="w-full">
+                    <thead class="sticky top-0 z-20">
+                      <tr class="bg-terminal-850 border-b border-terminal-750">
+                        <SortHeader column="symbol" label="Symbol" />
+                        <SortHeader column="name" label="Company" />
+                        
+                        <Show when={activeTab() === 'overview'}>
+                          <SortHeader column="price" label="Price" align="right" />
+                          <SortHeader column="change_pct" label="Change" align="right" />
+                          <SortHeader column="volume" label="Volume" align="right" />
+                          <SortHeader column="market_cap" label="Market Cap" align="right" />
+                          <SortHeader column="pe_ratio" label="P/E" align="right" />
+                          <SortHeader column="sector" label="Sector" />
+                        </Show>
 
-                      <Show when={activeTab() === 'valuation'}>
-                        <SortHeader column="market_cap" label="Market Cap" align="right" />
-                        <SortHeader column="pe_ratio" label="P/E" align="right" />
-                        <SortHeader column="forward_pe" label="Fwd P/E" align="right" />
-                        <SortHeader column="dividend_yield" label="Div Yield" align="right" />
-                        <SortHeader column="price" label="Price" align="right" />
-                      </Show>
+                        <Show when={activeTab() === 'valuation'}>
+                          <SortHeader column="market_cap" label="Market Cap" align="right" />
+                          <SortHeader column="pe_ratio" label="P/E" align="right" />
+                          <SortHeader column="forward_pe" label="Fwd P/E" align="right" />
+                          <SortHeader column="dividend_yield" label="Div Yield" align="right" />
+                          <SortHeader column="price" label="Price" align="right" />
+                        </Show>
 
-                      <Show when={activeTab() === 'performance'}>
-                        <SortHeader column="change_pct" label="Change %" align="right" />
-                        <SortHeader column="beta" label="Beta" align="right" />
-                        <SortHeader column="week52_high" label="52W High" align="right" />
-                        <SortHeader column="week52_low" label="52W Low" align="right" />
-                        <SortHeader column="avg_volume" label="Avg Vol" align="right" />
-                      </Show>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-terminal-800">
-                    <For each={results()}>
-                      {(result) => (
-                        <tr class="hover:bg-terminal-850/50 transition-colors group">
-                          <td class="px-3 py-3">
-                            <div class="flex items-center gap-2">
-                              <div class={`w-1.5 h-1.5 rounded-full ${
-                                result.change_pct >= 0 ? 'bg-success-500' : 'bg-danger-500'
-                              }`} />
-                              <button
-                                onClick={() => navigate(`/charts?symbol=${result.symbol}`)}
-                                class="text-sm font-bold text-white hover:text-accent-400 transition-colors cursor-pointer hover:underline"
-                              >
-                                {result.symbol}
-                              </button>
-                            </div>
-                          </td>
-                          <td class="px-3 py-3">
-                            <span class="text-xs text-gray-400 max-w-[180px] truncate block">
-                              {result.name}
-                            </span>
-                          </td>
-
-                          <Show when={activeTab() === 'overview'}>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-sm text-white font-mono tabular-nums">
-                                ${result.price?.toFixed(2) || '0.00'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class={`text-xs font-mono font-bold tabular-nums ${
-                                result.change_pct >= 0 ? 'text-success-500' : 'text-danger-500'
-                              }`}>
-                                {result.change_pct >= 0 ? '+' : ''}{result.change_pct?.toFixed(2) || '0.00'}%
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {formatVol(result.volume)}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {formatMarketCap(result.market_cap * 1000000)}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.pe_ratio?.toFixed(1) || '-'}
-                              </span>
+                        <Show when={activeTab() === 'performance'}>
+                          <SortHeader column="change_pct" label="Change %" align="right" />
+                          <SortHeader column="beta" label="Beta" align="right" />
+                          <SortHeader column="week52_high" label="52W High" align="right" />
+                          <SortHeader column="week52_low" label="52W Low" align="right" />
+                          <SortHeader column="avg_volume" label="Avg Vol" align="right" />
+                        </Show>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-terminal-800">
+                      <For each={results()}>
+                        {(result) => (
+                          <tr class="hover:bg-terminal-850/50 transition-colors group">
+                            <td class="px-3 py-3">
+                              <div class="flex items-center gap-2">
+                                <div class={`w-1.5 h-1.5 rounded-full ${
+                                  result.change_pct >= 0 ? 'bg-success-500' : 'bg-danger-500'
+                                }`} />
+                                <button
+                                  onClick={() => navigate(`/charts?symbol=${result.symbol}`)}
+                                  class="text-sm font-bold text-white hover:text-accent-400 transition-colors cursor-pointer hover:underline"
+                                >
+                                  {result.symbol}
+                                </button>
+                              </div>
                             </td>
                             <td class="px-3 py-3">
-                              <span class="text-[10px] px-2 py-0.5 bg-terminal-800 text-gray-400 rounded">
-                                {result.sector}
+                              <span class="text-xs text-gray-400 max-w-[180px] truncate block">
+                                {result.name}
                               </span>
                             </td>
-                          </Show>
 
-                          <Show when={activeTab() === 'valuation'}>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {formatMarketCap(result.market_cap * 1000000)}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.pe_ratio?.toFixed(2) || '-'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.forward_pe?.toFixed(2) || '-'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.dividend_yield ? `${result.dividend_yield.toFixed(2)}%` : '-'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-sm text-white font-mono tabular-nums">
-                                ${result.price?.toFixed(2) || '0.00'}
-                              </span>
-                            </td>
-                          </Show>
+                            <Show when={activeTab() === 'overview'}>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-sm text-white font-mono tabular-nums">
+                                  ${result.price?.toFixed(2) || '0.00'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono font-bold tabular-nums ${
+                                  result.change_pct >= 0 ? 'text-success-500' : 'text-danger-500'
+                                }`}>
+                                  {result.change_pct >= 0 ? '+' : ''}{result.change_pct?.toFixed(2) || '0.00'}%
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {formatVol(result.volume)}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {formatMarketCap(result.market_cap * 1000000)}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.pe_ratio?.toFixed(1) || '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3">
+                                <span class="text-[10px] px-2 py-0.5 bg-terminal-800 text-gray-400 rounded">
+                                  {result.sector}
+                                </span>
+                              </td>
+                            </Show>
 
-                          <Show when={activeTab() === 'performance'}>
-                            <td class="px-3 py-3 text-right">
-                              <span class={`text-xs font-mono font-bold tabular-nums ${
-                                result.change_pct >= 0 ? 'text-success-500' : 'text-danger-500'
+                            <Show when={activeTab() === 'valuation'}>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {formatMarketCap(result.market_cap * 1000000)}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.pe_ratio?.toFixed(2) || '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.forward_pe?.toFixed(2) || '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.dividend_yield ? `${result.dividend_yield.toFixed(2)}%` : '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-sm text-white font-mono tabular-nums">
+                                  ${result.price?.toFixed(2) || '0.00'}
+                                </span>
+                              </td>
+                            </Show>
+
+                            <Show when={activeTab() === 'performance'}>
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono font-bold tabular-nums ${
+                                  result.change_pct >= 0 ? 'text-success-500' : 'text-danger-500'
+                                }`}>
+                                  {result.change_pct >= 0 ? '+' : ''}{result.change_pct?.toFixed(2) || '0.00'}%
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.beta?.toFixed(2) || '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.week52_high ? `$${result.week52_high.toFixed(2)}` : '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {result.week52_low ? `$${result.week52_low.toFixed(2)}` : '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-xs text-gray-400 font-mono tabular-nums">
+                                  {formatVol(result.avg_volume || 0)}
+                                </span>
+                              </td>
+                            </Show>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card List */}
+                <div class="md:hidden space-y-2 p-2">
+                  <For each={results()}>
+                    {(result) => (
+                      <div 
+                        class="bg-terminal-900 border border-terminal-800 rounded-lg p-3 active:bg-terminal-800 transition-colors"
+                        onClick={() => navigate(`/charts?symbol=${result.symbol}`)}
+                      >
+                        <div class="flex justify-between items-start mb-2">
+                          <div>
+                            <div class="flex items-center gap-2">
+                              <span class="font-bold text-white text-lg">{result.symbol}</span>
+                              <div class={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                result.change_pct >= 0 ? 'bg-success-900/20 text-success-400' : 'bg-danger-900/20 text-danger-400'
                               }`}>
                                 {result.change_pct >= 0 ? '+' : ''}{result.change_pct?.toFixed(2) || '0.00'}%
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.beta?.toFixed(2) || '-'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.week52_high ? `$${result.week52_high.toFixed(2)}` : '-'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {result.week52_low ? `$${result.week52_low.toFixed(2)}` : '-'}
-                              </span>
-                            </td>
-                            <td class="px-3 py-3 text-right">
-                              <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                {formatVol(result.avg_volume || 0)}
-                              </span>
-                            </td>
-                          </Show>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
+                              </div>
+                            </div>
+                            <div class="text-xs text-gray-500 truncate max-w-[200px]">{result.name}</div>
+                          </div>
+                          <div class="text-right">
+                            <div class="font-mono font-bold text-white text-lg">${result.price?.toFixed(2) || '0.00'}</div>
+                            <div class="text-[10px] text-gray-500 font-mono">Vol: {formatVol(result.volume)}</div>
+                          </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-3 gap-2 pt-2 border-t border-terminal-800 text-xs">
+                          <div>
+                            <div class="text-[10px] text-gray-500 uppercase">Mkt Cap</div>
+                            <div class="font-mono text-gray-300">{formatMarketCap(result.market_cap * 1000000)}</div>
+                          </div>
+                          <div class="text-center">
+                            <div class="text-[10px] text-gray-500 uppercase">P/E</div>
+                            <div class="font-mono text-gray-300">{result.pe_ratio?.toFixed(2) || '-'}</div>
+                          </div>
+                          <div class="text-right">
+                            <div class="text-[10px] text-gray-500 uppercase">Sector</div>
+                            <div class="font-mono text-gray-300 truncate">{result.sector}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
               </Show>
             </div>
 

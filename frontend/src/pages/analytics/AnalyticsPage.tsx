@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
       <Show when={!loading()} fallback={<div class="h-96 flex items-center justify-center text-gray-500">Loading analytics...</div>}>
         
         {/* KPI Grid */}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
           <MetricCard 
             label="Total Return" 
             value={formatPercent(analytics()?.total_return || 0)}
@@ -237,14 +237,14 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Main Chart Section */}
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Equity/Drawdown Chart (Takes up 2/3) */}
-          <div class="lg:col-span-2 bg-terminal-900 border border-terminal-800 rounded-xl p-5">
-            <div class="flex justify-between items-center mb-6">
-              <div class="flex gap-2 bg-terminal-800 p-1 rounded-lg">
+          <div class="lg:col-span-2 bg-terminal-900 border border-terminal-800 rounded-xl p-3 md:p-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 md:mb-6 gap-2">
+              <div class="flex gap-2 bg-terminal-800 p-1 rounded-lg w-full sm:w-auto">
                 <button 
                   onClick={() => setChartMode('equity')}
-                  class={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  class={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                     chartMode() === 'equity' 
                       ? 'bg-terminal-700 text-white shadow-sm' 
                       : 'text-gray-400 hover:text-gray-300'
@@ -254,7 +254,7 @@ export default function AnalyticsPage() {
                 </button>
                 <button 
                   onClick={() => setChartMode('drawdown')}
-                  class={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  class={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                     chartMode() === 'drawdown' 
                       ? 'bg-terminal-700 text-white shadow-sm' 
                       : 'text-gray-400 hover:text-gray-300'
@@ -265,15 +265,15 @@ export default function AnalyticsPage() {
               </div>
               <div class="flex items-center gap-2 text-xs text-gray-400">
                 <span class="w-2 h-2 rounded-full bg-primary-500"></span> Portfolio
-                <span class="w-2 h-2 rounded-full bg-gray-600 ml-2"></span> Benchmark (SPY)
+                <span class="w-2 h-2 rounded-full bg-gray-600 ml-2"></span> SPY
               </div>
             </div>
             
-            <div class="h-[350px]">
+            <div class="h-[250px] md:h-[350px]">
               <Show when={chartMode() === 'equity'}>
                 <EquityCurve 
                   data={equityData()} 
-                  height={350}
+                  height={window.innerWidth < 768 ? 250 : 350}
                   showBenchmark={true}
                   showGrid={true}
                 />
@@ -281,18 +281,16 @@ export default function AnalyticsPage() {
               <Show when={chartMode() === 'drawdown'}>
                 <EquityCurve 
                   data={drawdownData()} 
-                  height={350}
+                  height={window.innerWidth < 768 ? 250 : 350}
                   showBenchmark={false}
                   showGrid={true}
-                  // We reuse EquityCurve but pass drawdown data
-                  // Ideally we'd have a specific DrawdownChart component for area fill
                 />
               </Show>
             </div>
           </div>
 
           {/* Asset Allocation (Takes up 1/3) */}
-          <div class="bg-terminal-900 border border-terminal-800 rounded-xl p-5 flex flex-col">
+          <div class="bg-terminal-900 border border-terminal-800 rounded-xl p-3 md:p-5 flex flex-col">
             <h3 class="text-sm font-bold text-gray-300 mb-4 flex items-center gap-2">
               <PieChart class="w-4 h-4 text-accent-400" />
               Asset Allocation
@@ -321,14 +319,16 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Monthly Returns & Risk Stats */}
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 pb-20 md:pb-0">
           {/* Monthly Returns Heatmap (2/3) */}
-          <div class="lg:col-span-2 bg-terminal-900 border border-terminal-800 rounded-xl p-5">
+          <div class="lg:col-span-2 bg-terminal-900 border border-terminal-800 rounded-xl p-3 md:p-5 overflow-x-auto">
             <h3 class="text-sm font-bold text-gray-300 mb-4 flex items-center gap-2">
               <Calendar class="w-4 h-4 text-accent-400" />
               Monthly Returns
             </h3>
-            <MonthlyReturnsHeatmap data={monthlyReturns()} />
+            <div class="min-w-[500px]">
+              <MonthlyReturnsHeatmap data={monthlyReturns()} />
+            </div>
           </div>
 
           {/* Risk Statistics (1/3) */}
