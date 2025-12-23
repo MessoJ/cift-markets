@@ -154,14 +154,12 @@ jobs:
             
             # Create .env file with secrets
             echo "Updating .env file..."
-            if [ -z "$GH_CLIENT_ID" ]; then
-              echo "CRITICAL WARNING: GH_CLIENT_ID is empty!"
-            else
-              echo "GH_CLIENT_ID is set (length: ${#GH_CLIENT_ID})"
-            fi
             
-            # Remove existing .env to ensure fresh write
-            rm -f .env
+            # Explicitly remove .env if it exists
+            if [ -f .env ]; then
+                echo "Removing existing .env file..."
+                rm -f .env
+            fi
             
             echo "GITHUB_CLIENT_ID=$GH_CLIENT_ID" >> .env
             echo "GITHUB_CLIENT_SECRET=$GH_CLIENT_SECRET" >> .env
