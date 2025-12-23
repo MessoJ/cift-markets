@@ -26,7 +26,8 @@ def get_flag_emoji(country_code: str) -> str:
 async def get_asset_locations(
     timeframe: str = Query("24h", regex="^(1h|24h|7d|30d)$"),
     asset_type: str | None = Query(
-        None, regex="^(central_bank|commodity_market|government|tech_hq|energy|all)$"
+        None,
+        regex="^(central_bank|commodity_market|government|tech_hq|energy|all)$"
     ),
     status: str | None = Query(None, regex="^(operational|unknown|issue|all)$"),
     min_importance: int = Query(0, ge=0, le=100),
@@ -79,7 +80,7 @@ async def get_asset_locations(
                     0
                 ) as avg_sentiment,
                 MAX(a.published_at) as last_article_at,
-                ARRAY_AGG(DISTINCT a.category) FILTER (WHERE a.category IS NOT NULL) as categories,
+                ARRAY_AGG(DISTINCT a.categories->>0) FILTER (WHERE a.categories IS NOT NULL) as categories,
                 json_agg(
                     json_build_object(
                         'id', a.id,
@@ -87,7 +88,7 @@ async def get_asset_locations(
                         'summary', a.summary,
                         'published_at', a.published_at,
                         'sentiment', a.sentiment,
-                        'category', a.category
+                        'category', a.categories->>0
                     ) ORDER BY a.published_at DESC
                 ) FILTER (WHERE a.id IS NOT NULL) as latest_articles
             FROM asset_news_mentions anm
@@ -140,43 +141,43 @@ async def get_asset_locations(
         status_summary = {"operational": 0, "unknown": 0, "issue": 0}
 
         for row in rows:
-            flag = get_flag_emoji(row["country_code"])
+            flag = get_flag_emoji(row['country_code'])
 
             # Limit latest articles to top 5
-            latest = row["latest_articles"][:5] if row["latest_articles"] else []
+            latest = row['latest_articles'][:5] if row['latest_articles'] else []
 
             # Determine current status if not set
-            current_status = row["current_status"]
-            if current_status == "unknown" and row["news_count"] > 0:
+            current_status = row['current_status']
+            if current_status == 'unknown' and row['news_count'] > 0:
                 # Auto-determine status from sentiment
-                if row["sentiment_score"] > 0.3:
-                    current_status = "operational"
-                elif row["sentiment_score"] < -0.3:
-                    current_status = "issue"
+                if row['sentiment_score'] > 0.3:
+                    current_status = 'operational'
+                elif row['sentiment_score'] < -0.3:
+                    current_status = 'issue'
 
             status_summary[current_status] = status_summary.get(current_status, 0) + 1
 
             asset_data = {
-                "id": str(row["id"]),
-                "code": row["code"],
-                "name": row["name"],
-                "asset_type": row["asset_type"],
-                "country": row["country"],
-                "country_code": row["country_code"],
-                "city": row["city"],
+                "id": str(row['id']),
+                "code": row['code'],
+                "name": row['name'],
+                "asset_type": row['asset_type'],
+                "country": row['country'],
+                "country_code": row['country_code'],
+                "city": row['city'],
                 "flag": flag,
-                "lat": float(row["lat"]),
-                "lng": float(row["lng"]),
-                "timezone": row["timezone"],
-                "description": row["description"],
-                "importance_score": row["importance_score"],
-                "website": row["website"],
-                "icon_url": row["icon_url"],
+                "lat": float(row['lat']),
+                "lng": float(row['lng']),
+                "timezone": row['timezone'],
+                "description": row['description'],
+                "importance_score": row['importance_score'],
+                "website": row['website'],
+                "icon_url": row['icon_url'],
                 "current_status": current_status,
-                "sentiment_score": float(row["sentiment_score"]),
-                "news_count": row["news_count"],
-                "last_news_at": row["last_news_at"].isoformat() if row["last_news_at"] else None,
-                "categories": row["categories"] or [],
+                "sentiment_score": float(row['sentiment_score']),
+                "news_count": row['news_count'],
+                "last_news_at": row['last_news_at'].isoformat() if row['last_news_at'] else None,
+                "categories": row['categories'] or [],
                 "latest_articles": latest,
             }
 
@@ -274,33 +275,31 @@ async def get_asset_detail(
         if not row:
             raise HTTPException(status_code=404, detail="Asset not found")
 
-        flag = get_flag_emoji(row["country_code"])
+        flag = get_flag_emoji(row['country_code'])
 
         return {
-            "id": str(row["id"]),
-            "code": row["code"],
-            "name": row["name"],
-            "asset_type": row["asset_type"],
-            "country": row["country"],
-            "country_code": row["country_code"],
-            "city": row["city"],
+            "id": str(row['id']),
+            "code": row['code'],
+            "name": row['name'],
+            "asset_type": row['asset_type'],
+            "country": row['country'],
+            "country_code": row['country_code'],
+            "city": row['city'],
             "flag": flag,
-            "lat": float(row["lat"]),
-            "lng": float(row["lng"]),
-            "timezone": row["timezone"],
-            "description": row["description"],
-            "importance_score": row["importance_score"],
-            "website": row["website"],
-            "icon_url": row["icon_url"],
-            "current_status": row["current_status"],
-            "sentiment_score": float(row["sentiment_score"]) if row["sentiment_score"] else 0.0,
-            "news_count": row["news_count"] or 0,
-            "last_news_at": row["last_news_at"].isoformat() if row["last_news_at"] else None,
-            "status_checked_at": (
-                row["status_checked_at"].isoformat() if row["status_checked_at"] else None
-            ),
-            "status_reason": row["status_reason"],
-            "articles": row["articles"] or [],
+            "lat": float(row['lat']),
+            "lng": float(row['lng']),
+            "timezone": row['timezone'],
+            "description": row['description'],
+            "importance_score": row['importance_score'],
+            "website": row['website'],
+            "icon_url": row['icon_url'],
+            "current_status": row['current_status'],
+            "sentiment_score": float(row['sentiment_score']) if row['sentiment_score'] else 0.0,
+            "news_count": row['news_count'] or 0,
+            "last_news_at": row['last_news_at'].isoformat() if row['last_news_at'] else None,
+            "status_checked_at": row['status_checked_at'].isoformat() if row['status_checked_at'] else None,
+            "status_reason": row['status_reason'],
+            "articles": row['articles'] or [],
             "timeframe": timeframe,
         }
 
@@ -336,11 +335,11 @@ async def get_asset_types_summary(
         return {
             "types": [
                 {
-                    "asset_type": row["asset_type"],
-                    "total_count": row["total_count"],
-                    "avg_importance": float(row["avg_importance"]),
-                    "min_importance": row["min_importance"],
-                    "max_importance": row["max_importance"],
+                    "asset_type": row['asset_type'],
+                    "total_count": row['total_count'],
+                    "avg_importance": float(row['avg_importance']),
+                    "min_importance": row['min_importance'],
+                    "max_importance": row['max_importance'],
                 }
                 for row in rows
             ]

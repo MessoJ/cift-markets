@@ -229,8 +229,8 @@ async def news_stream_generator(
                 if symbols:
                     rows = await conn.fetch(
                         """
-                        SELECT id, title, source_name, source_url, category,
-                               sentiment_score, published_at
+                        SELECT id, title, source, url, categories,
+                               sentiment, published_at
                         FROM news_articles
                         WHERE published_at > $1
                         AND (symbols && $2 OR $2 IS NULL)
@@ -243,8 +243,8 @@ async def news_stream_generator(
                 else:
                     rows = await conn.fetch(
                         """
-                        SELECT id, title, source_name, source_url, category,
-                               sentiment_score, published_at
+                        SELECT id, title, source, url, categories,
+                               sentiment, published_at
                         FROM news_articles
                         WHERE published_at > $1
                         ORDER BY published_at DESC
@@ -256,15 +256,17 @@ async def news_stream_generator(
                 if rows:
                     last_check = datetime.utcnow()
                     for row in rows:
+                        # Handle categories (JSONB list) - take first or "News"
+                        cats = json.loads(row["categories"]) if isinstance(row["categories"], str) else row["categories"]
+                        category = cats[0] if cats and len(cats) > 0 else "News"
+                        
                         article = {
                             "id": str(row["id"]),
                             "title": row["title"],
-                            "source": row["source_name"],
-                            "url": row["source_url"],
-                            "category": row["category"],
-                            "sentiment": (
-                                float(row["sentiment_score"]) if row["sentiment_score"] else None
-                            ),
+                            "source": row["source"],
+                            "url": row["url"],
+                            "category": category,
+                            "sentiment": 0.5, # Default neutral as sentiment is string in DB
                             "published_at": row["published_at"].isoformat(),
                         }
                         yield f"event: news\ndata: {json.dumps(article)}\n\n"
