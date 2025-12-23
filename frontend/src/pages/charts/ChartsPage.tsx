@@ -697,7 +697,7 @@ export default function ChartsPage() {
       />
 
       {/* Main Content Area with Sidebar */}
-      <div class="flex-1 flex flex-col xl:flex-row gap-0 overflow-hidden">
+      <div class="flex-1 flex flex-col xl:flex-row gap-0 overflow-y-auto xl:overflow-hidden">
         <Show 
           when={viewMode() === 'single'}
           fallback={
@@ -714,9 +714,9 @@ export default function ChartsPage() {
         >
           {/* Single Chart View */}
           {/* Chart Area - Main + Indicator Panels */}
-          <div class="flex-1 flex flex-col overflow-hidden">
+          <div class="flex-1 flex flex-col min-h-[60vh] xl:min-h-0">
             {/* Main Candlestick Chart */}
-            <div class="flex-1 chart-area relative">
+            <div class="h-[50vh] xl:h-auto xl:flex-1 chart-area relative">
           <CandlestickChart
             symbol={symbol()}
             timeframe={timeframe()}
