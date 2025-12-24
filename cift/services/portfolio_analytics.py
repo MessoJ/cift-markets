@@ -67,7 +67,7 @@ class PortfolioAnalyticsService:
             # Get account information
             account = await conn.fetchrow(
                 """
-                SELECT cash_balance, equity, buying_power, updated_at
+                SELECT cash, equity, buying_power, updated_at
                 FROM accounts
                 WHERE id = $1 AND user_id = $2
             """,
@@ -98,7 +98,7 @@ class PortfolioAnalyticsService:
             total_realized_pnl = sum(Decimal(str(p["realized_pnl"] or 0)) for p in positions)
             total_day_pnl = sum(Decimal(str(p["day_pnl"] or 0)) for p in positions)
 
-            cash = Decimal(str(account["cash_balance"] or 0))
+            cash = Decimal(str(account["cash"] or 0))
             equity = Decimal(str(account["equity"] or 0))
             total_value = cash + total_positions_value
 

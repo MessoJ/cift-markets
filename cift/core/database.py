@@ -135,6 +135,39 @@ class DatabaseManager:
             logger.info("PostgreSQL connection pools closed")
             self._is_initialized = False
 
+    async def fetch(self, query: str, *args):
+        """Fetch all results from a query using the asyncpg pool."""
+        if not self._is_initialized:
+            await self.initialize()
+        
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(query, *args)
+
+    async def fetchrow(self, query: str, *args):
+        """Fetch a single row from a query using the asyncpg pool."""
+        if not self._is_initialized:
+            await self.initialize()
+        
+        async with self.pool.acquire() as conn:
+            return await conn.fetchrow(query, *args)
+
+    async def fetchval(self, query: str, *args):
+        """Fetch a single value from a query using the asyncpg pool."""
+        if not self._is_initialized:
+            await self.initialize()
+        
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, *args)
+
+    async def execute(self, query: str, *args):
+        """Execute a query using the asyncpg pool."""
+        if not self._is_initialized:
+            await self.initialize()
+        
+        async with self.pool.acquire() as conn:
+            return await conn.execute(query, *args)
+
+
 
 # ============================================================================
 # QUESTDB CONNECTION (asyncpg)

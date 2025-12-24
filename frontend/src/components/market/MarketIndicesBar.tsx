@@ -24,8 +24,9 @@ export function MarketIndicesBar() {
     try {
       setLoading(true);
       
-      // Get major market indices from database - RULES COMPLIANT
-      const symbols = ['SPX', 'NDX', 'DJI']; // S&P 500, Nasdaq 100, Dow Jones
+      // Use ETF symbols that track major indices (SPY=S&P500, QQQ=Nasdaq, DIA=Dow)
+      // These are available in our market_data_cache from Polygon/Finnhub
+      const symbols = ['SPY', 'QQQ', 'DIA'];
       const quotes = await apiClient.getQuotes(symbols);
       
       // Map to display format
@@ -51,7 +52,7 @@ export function MarketIndicesBar() {
   createEffect(() => {
     refreshInterval = window.setInterval(async () => {
       try {
-        const symbols = ['SPX', 'NDX', 'DJI'];
+        const symbols = ['SPY', 'QQQ', 'DIA'];
         const quotes = await apiClient.getQuotes(symbols);
         const indexData: IndexData[] = quotes.map(quote => ({
           symbol: quote.symbol,
@@ -73,9 +74,9 @@ export function MarketIndicesBar() {
 
   function getIndexLabel(symbol: string): string {
     const labels: Record<string, string> = {
-      'SPX': 'SPX',
-      'NDX': 'NDX', 
-      'DJI': 'DJI'
+      'SPY': 'S&P 500',
+      'QQQ': 'NASDAQ',
+      'DIA': 'DOW'
     };
     return labels[symbol] || symbol;
   }

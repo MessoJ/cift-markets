@@ -54,7 +54,7 @@ export default function OrdersPage() {
   createEffect(() => {
     // Initial fetch with sync to ensure we have latest broker data
     fetchOrders(true);
-    const interval = setInterval(() => fetchOrders(false), 5000); // Poll every 5s
+    const interval = setInterval(() => fetchOrders(false), 30000); // Poll every 30s to avoid 429s
     onCleanup(() => clearInterval(interval));
   });
 

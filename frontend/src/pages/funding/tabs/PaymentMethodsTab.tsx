@@ -26,7 +26,7 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
   const [deletingId, setDeletingId] = createSignal<string | null>(null);
   
   // Add Method State
-  const [addType, setAddType] = createSignal<'bank_account' | 'debit_card' | 'crypto_wallet'>('bank_account');
+  const [addType, setAddType] = createSignal<'bank_account' | 'debit_card' | 'crypto_wallet' | 'mpesa' | 'paypal'>('bank_account');
   const [formData, setFormData] = createSignal<any>({});
   const [adding, setAdding] = createSignal(false);
   const [addError, setAddError] = createSignal<string | null>(null);
@@ -198,7 +198,8 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
       >
         <div class="flex flex-col md:flex-row h-[500px] md:h-auto">
           {/* Sidebar */}
-          <div class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-terminal-700 bg-terminal-900/50 p-4 space-y-2">
+          <div class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-terminal-700 bg-terminal-900/50 p-4 space-y-2 overflow-y-auto">
+            <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-bold">Payment Methods</div>
             <button 
               onClick={() => setAddType('bank_account')}
               class={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all ${addType() === 'bank_account' ? 'bg-accent-600 text-white shadow-lg shadow-accent-900/20' : 'text-gray-400 hover:bg-terminal-800 hover:text-white'}`}
@@ -220,6 +221,34 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
               <Bitcoin size={18} />
               <span class="text-sm font-bold">Crypto Wallet</span>
             </button>
+            
+            <div class="border-t border-terminal-700 my-3"></div>
+            <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-bold">Regional / Mobile</div>
+            
+            <button 
+              onClick={() => setAddType('mpesa')}
+              class={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all ${addType() === 'mpesa' ? 'bg-green-600 text-white shadow-lg shadow-green-900/20' : 'text-gray-400 hover:bg-terminal-800 hover:text-white'}`}
+            >
+              <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+              <div>
+                <span class="text-sm font-bold">M-Pesa</span>
+                <div class="text-[10px] opacity-70">Kenya / East Africa</div>
+              </div>
+            </button>
+            <button 
+              onClick={() => setAddType('paypal')}
+              class={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all ${addType() === 'paypal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-400 hover:bg-terminal-800 hover:text-white'}`}
+            >
+              <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 3.72a.771.771 0 0 1 .76-.65h6.654c2.18 0 3.904.548 5.125 1.628 1.286 1.14 1.892 2.713 1.801 4.675-.04.877-.23 1.727-.563 2.526-.341.819-.788 1.544-1.328 2.155-.504.57-1.065 1.04-1.667 1.396-.533.315-1.189.585-1.952.803-.764.218-1.594.326-2.466.326H9.116a.77.77 0 0 0-.76.65l-.98 5.88a.641.641 0 0 1-.633.54l-.667-.312z"/>
+              </svg>
+              <div>
+                <span class="text-sm font-bold">PayPal</span>
+                <div class="text-[10px] opacity-70">Global</div>
+              </div>
+            </button>
           </div>
 
           {/* Form Area */}
@@ -237,97 +266,78 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
                 />
               </div>
 
-              {/* Bank Fields */}
+              {/* Bank Fields - Using Plaid Link for Secure Connection */}
               <Show when={addType() === 'bank_account'}>
-                <div>
-                  <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Bank Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. Chase, Bank of America"
-                    class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700"
-                    onInput={(e) => updateField('bank_name', e.currentTarget.value)}
-                  />
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Routing Number</label>
-                    <input 
-                      type="text" 
-                      required
-                      maxLength={9}
-                      placeholder="9 digits"
-                      class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
-                      onInput={(e) => updateField('routing_number', e.currentTarget.value)}
-                    />
+                <div class="p-4 bg-accent-900/10 border border-accent-500/30 rounded-lg">
+                  <div class="flex items-center gap-2 mb-3">
+                    <ShieldCheck size={16} class="text-accent-400" />
+                    <span class="text-xs text-accent-400 font-bold">SECURE BANK CONNECTION</span>
                   </div>
-                  <div>
-                    <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Account Number</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="Account Number"
-                      class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
-                      onInput={(e) => updateField('account_number', e.currentTarget.value)}
-                    />
+                  <p class="text-xs text-gray-400 mb-4">
+                    Connect your bank securely via Plaid. Your login credentials are never shared with us.
+                    Supports instant verification for most banks.
+                  </p>
+                  
+                  <button
+                    type="button"
+                    class="w-full py-3 px-4 bg-terminal-800 hover:bg-terminal-700 border border-terminal-600 rounded-lg flex items-center justify-center gap-3 transition-all"
+                    onClick={() => {
+                      // This would trigger Plaid Link initialization
+                      alert('Plaid Link integration: Call /api/v1/funding/plaid/link-token to get link token, then open Plaid Link modal');
+                    }}
+                  >
+                    <Building2 size={20} class="text-accent-400" />
+                    <span class="text-sm font-bold text-white">Connect Bank with Plaid</span>
+                  </button>
+                  
+                  <div class="mt-3 text-[10px] text-gray-500 flex items-center gap-1">
+                    <Lock size={10} />
+                    Powered by Plaid • Bank-level Security • Instant Verification
                   </div>
                 </div>
-                <div>
-                  <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Account Type</label>
-                  <div class="relative">
-                    <select 
-                      class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all appearance-none cursor-pointer"
-                      onChange={(e) => updateField('account_type', e.currentTarget.value)}
-                    >
-                      <option value="checking">Checking</option>
-                      <option value="savings">Savings</option>
-                    </select>
-                    <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                      <MoreVertical size={14} class="rotate-90" />
-                    </div>
-                  </div>
+                
+                {/* Supported Banks */}
+                <div class="flex flex-wrap gap-2 mt-4">
+                  {['Chase', 'Bank of America', 'Wells Fargo', 'Citi', 'Capital One', '+ 12,000 more'].map(bank => (
+                    <span class="px-2 py-1 bg-terminal-800 border border-terminal-700 rounded text-[10px] text-gray-400">{bank}</span>
+                  ))}
                 </div>
               </Show>
 
-              {/* Card Fields */}
+              {/* Card Fields - Using Stripe Elements for PCI Compliance */}
               <Show when={addType() === 'debit_card'}>
-                <div>
-                  <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Card Number</label>
-                  <div class="relative">
-                    <input 
-                      type="text" 
-                      required
-                      maxLength={19}
-                      placeholder="0000 0000 0000 0000"
-                      class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 pl-10 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
-                      onInput={(e) => updateField('card_number', e.currentTarget.value)}
-                    />
-                    <CreditCard size={16} class="absolute left-3 top-3 text-gray-500" />
+                <div class="p-4 bg-accent-900/10 border border-accent-500/30 rounded-lg">
+                  <div class="flex items-center gap-2 mb-3">
+                    <ShieldCheck size={16} class="text-accent-400" />
+                    <span class="text-xs text-accent-400 font-bold">SECURE CARD ENTRY</span>
+                  </div>
+                  <p class="text-xs text-gray-400 mb-4">
+                    Card data is collected securely via Stripe. Your card number never touches our servers.
+                    Browser autofill is fully supported.
+                  </p>
+                  
+                  {/* Stripe Elements Container */}
+                  <div id="card-element" class="bg-terminal-950 border border-terminal-700 rounded-lg p-4 min-h-[44px]">
+                    {/* Stripe Elements will be mounted here */}
+                    <div class="text-xs text-gray-500 animate-pulse">
+                      Loading secure card form...
+                    </div>
+                  </div>
+                  
+                  <div class="mt-3 text-[10px] text-gray-500 flex items-center gap-1">
+                    <Lock size={10} />
+                    Powered by Stripe • PCI-DSS Level 1 Compliant • 3D Secure Ready
                   </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Expiry Date</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="MM/YY"
-                      maxLength={5}
-                      class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
-                      onInput={(e) => updateField('expiry', e.currentTarget.value)}
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">CVV</label>
-                    <input 
-                      type="text" 
-                      required
-                      maxLength={4}
-                      placeholder="123"
-                      class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
-                      onInput={(e) => updateField('cvv', e.currentTarget.value)}
-                    />
-                  </div>
+                
+                {/* Note about Stripe initialization */}
+                <div class="p-3 bg-terminal-800 rounded-lg border border-terminal-700">
+                  <p class="text-xs text-gray-400">
+                    <strong class="text-white">To enable card payments:</strong><br/>
+                    1. Add Stripe publishable key to your environment<br/>
+                    2. Initialize Stripe Elements on page load<br/>
+                    3. Card autofill will work automatically with browser settings
+                  </p>
                 </div>
               </Show>
 
@@ -358,6 +368,91 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
                     class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
                     onInput={(e) => updateField('crypto_address', e.currentTarget.value)}
                   />
+                </div>
+              </Show>
+
+              {/* M-Pesa Fields */}
+              <Show when={addType() === 'mpesa'}>
+                <div class="p-4 bg-green-900/10 border border-green-500/30 rounded-lg">
+                  <div class="flex items-center gap-2 mb-3">
+                    <ShieldCheck size={16} class="text-green-400" />
+                    <span class="text-xs text-green-400 font-bold">M-PESA MOBILE MONEY</span>
+                  </div>
+                  <p class="text-xs text-gray-400 mb-4">
+                    Link your M-Pesa account for instant deposits via STK Push. Withdrawals sent directly to your M-Pesa.
+                  </p>
+                </div>
+                
+                <div>
+                  <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">Phone Number</label>
+                  <div class="flex gap-2">
+                    <select 
+                      class="w-24 bg-terminal-950 border border-terminal-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none transition-all"
+                      onChange={(e) => updateField('country_code', e.currentTarget.value)}
+                    >
+                      <option value="+254">🇰🇪 +254</option>
+                      <option value="+255">🇹🇿 +255</option>
+                      <option value="+256">🇺🇬 +256</option>
+                      <option value="+250">🇷🇼 +250</option>
+                    </select>
+                    <input 
+                      type="tel" 
+                      required
+                      placeholder="7XXXXXXXX"
+                      class="flex-1 bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none transition-all placeholder-terminal-700 font-mono"
+                      onInput={(e) => updateField('phone_number', e.currentTarget.value)}
+                    />
+                  </div>
+                  <p class="text-[10px] text-gray-500 mt-1">Enter without leading 0 (e.g., 712345678)</p>
+                </div>
+                
+                <div class="p-3 bg-terminal-800 rounded-lg border border-terminal-700">
+                  <h5 class="text-xs font-bold text-white mb-2">How M-Pesa works:</h5>
+                  <ol class="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                    <li>Enter deposit amount in the app</li>
+                    <li>Receive STK Push on your phone</li>
+                    <li>Enter M-Pesa PIN to confirm</li>
+                    <li>Funds credited instantly</li>
+                  </ol>
+                </div>
+              </Show>
+
+              {/* PayPal Fields */}
+              <Show when={addType() === 'paypal'}>
+                <div class="p-4 bg-blue-900/10 border border-blue-500/30 rounded-lg">
+                  <div class="flex items-center gap-2 mb-3">
+                    <ShieldCheck size={16} class="text-blue-400" />
+                    <span class="text-xs text-blue-400 font-bold">PAYPAL SECURE LINK</span>
+                  </div>
+                  <p class="text-xs text-gray-400 mb-4">
+                    Connect your PayPal account for global payments. Supports credit cards linked to your PayPal.
+                  </p>
+                </div>
+                
+                <div>
+                  <label class="block text-xs font-mono text-gray-500 uppercase mb-1.5 font-bold">PayPal Email</label>
+                  <input 
+                    type="email" 
+                    required
+                    placeholder="your@email.com"
+                    class="w-full bg-terminal-950 border border-terminal-700 rounded-lg px-4 py-2.5 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all placeholder-terminal-700"
+                    onInput={(e) => updateField('paypal_email', e.currentTarget.value)}
+                  />
+                </div>
+                
+                <div class="p-3 bg-terminal-800 rounded-lg border border-terminal-700">
+                  <h5 class="text-xs font-bold text-white mb-2">How PayPal deposits work:</h5>
+                  <ol class="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                    <li>Enter deposit amount in the app</li>
+                    <li>Redirected to PayPal for approval</li>
+                    <li>Log in and confirm payment</li>
+                    <li>Funds credited after capture</li>
+                  </ol>
+                </div>
+                
+                <div class="flex items-center gap-2 p-3 bg-amber-900/10 border border-amber-500/30 rounded-lg">
+                  <AlertCircle size={14} class="text-amber-400 shrink-0" />
+                  <p class="text-xs text-amber-400">PayPal charges fees. Check rates before depositing.</p>
                 </div>
               </Show>
 

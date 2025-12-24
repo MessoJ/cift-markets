@@ -636,12 +636,12 @@ export function EnhancedFinancialGlobe(props: EnhancedFinancialGlobeProps) {
     const textureLoader = new THREE.TextureLoader();
     textureLoader.crossOrigin = 'anonymous';
 
-    // Higher-fidelity earth textures for a more realistic globe
-    const earthDayUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57730/world.topo.bathy.200412.3x5400x2700.jpg';
-    const earthBumpUrl = 'https://threejs.org/examples/textures/earthbump1k.jpg';
-    const earthSpecUrl = 'https://threejs.org/examples/textures/earthspec1k.jpg';
-    const earthNightUrl = 'https://threejs.org/examples/textures/earthlights1k.jpg';
-    const earthCloudUrl = 'https://threejs.org/examples/textures/earthcloudmaptrans.jpg';
+    // Higher-fidelity earth textures for a more realistic globe (using reliable sources)
+    const earthDayUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg';
+    const earthBumpUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_normal_2048.jpg';
+    const earthSpecUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg';
+    const earthNightUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_lights_2048.png';
+    const earthCloudUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_1024.png';
 
     const earthMap = textureLoader.load(earthDayUrl, () => renderer.render(scene, camera));
     const earthBump = textureLoader.load(earthBumpUrl);

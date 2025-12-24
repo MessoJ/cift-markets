@@ -92,9 +92,13 @@ async def get_alerts(
             user_id::text,
             symbol,
             alert_type,
-            target_value,
-            current_value,
-            status,
+            condition_value as target_value,
+            NULL as current_value,
+            CASE 
+                WHEN triggered_at IS NOT NULL THEN 'triggered'
+                WHEN is_active THEN 'active'
+                ELSE 'cancelled'
+            END as status,
             notification_methods,
             created_at,
             triggered_at,
@@ -106,9 +110,14 @@ async def get_alerts(
     param_count = 2
 
     if status:
-        query += f" AND status = ${param_count}"
-        params.append(status)
-        param_count += 1
+        if status == 'active':
+            query += " AND is_active = true AND triggered_at IS NULL"
+        elif status == 'triggered':
+            query += " AND triggered_at IS NOT NULL"
+        elif status == 'cancelled':
+            query += " AND is_active = false"
+        # If status is something else, we might ignore or handle it. 
+        # For now, let's assume these are the main statuses.
 
     if symbol:
         query += f" AND symbol = ${param_count}"
@@ -128,7 +137,7 @@ async def get_alerts(
                 symbol=row["symbol"],
                 alert_type=row["alert_type"],
                 target_value=row["target_value"],
-                current_value=row["current_value"],
+                current_value=None, # row["current_value"] is NULL
                 status=row["status"],
                 notification_methods=row["notification_methods"] or [],
                 created_at=row["created_at"],
@@ -356,35 +365,39 @@ async def get_notifications(
     query += f" ORDER BY created_at DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
     params.extend([limit, offset])
 
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
 
-        notifications = [
-            Notification(
-                id=row["id"],
-                user_id=row["user_id"],
-                notification_type=row["notification_type"],
-                title=row["title"],
-                message=row["message"],
-                is_read=row["is_read"],
-                created_at=row["created_at"],
-                read_at=row["read_at"],
-                metadata=row["metadata"],
+            notifications = [
+                Notification(
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    notification_type=row["notification_type"],
+                    title=row["title"],
+                    message=row["message"],
+                    is_read=row["is_read"],
+                    created_at=row["created_at"],
+                    read_at=row["read_at"],
+                    metadata=row["metadata"],
+                )
+                for row in rows
+            ]
+
+            # Get unread count
+            unread_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false",
+                user_id,
             )
-            for row in rows
-        ]
 
-        # Get unread count
-        unread_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false",
-            user_id,
-        )
-
-        return {
-            "notifications": notifications,
-            "unread_count": unread_count,
-            "total": len(notifications),
-        }
+            return {
+                "notifications": notifications,
+                "unread_count": unread_count,
+                "total": len(notifications),
+            }
+    except Exception as e:
+        logger.error(f"Failed to fetch notifications: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/notifications/{notification_id}/read")

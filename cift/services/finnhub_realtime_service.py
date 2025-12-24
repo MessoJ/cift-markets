@@ -100,12 +100,15 @@ class FinnhubRealtimeService:
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
+                    current_price = data.get("c", 0)
                     return {
                         "symbol": symbol,
-                        "price": data.get("c", 0),  # Current price
+                        "price": current_price,  # Current price
                         "open": data.get("o", 0),
                         "high": data.get("h", 0),
                         "low": data.get("l", 0),
+                        "close": current_price,  # Same as current price for real-time
+                        "volume": 0,  # Finnhub doesn't provide volume in quote endpoint
                         "prev_close": data.get("pc", 0),
                         "change": data.get("d", 0),
                         "change_percent": data.get("dp", 0),
@@ -143,6 +146,92 @@ class FinnhubRealtimeService:
         except Exception as e:
             logger.error(f"Finnhub news failed: {e}")
             return []
+
+    async def get_company_profile(self, symbol: str) -> dict | None:
+        """Get company profile (Fundamental Data)."""
+        if not self._available:
+            return None
+        await self.initialize()
+        url = f"{self.REST_URL}/stock/profile2"
+        params = {"symbol": symbol, "token": self.api_key}
+        try:
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+        except Exception as e:
+            logger.error(f"Finnhub profile failed: {e}")
+            return None
+
+    async def get_financials(self, symbol: str) -> dict | None:
+        """Get basic financials."""
+        if not self._available:
+            return None
+        await self.initialize()
+        url = f"{self.REST_URL}/stock/metric"
+        params = {"symbol": symbol, "metric": "all", "token": self.api_key}
+        try:
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+        except Exception as e:
+            logger.error(f"Finnhub financials failed: {e}")
+            return None
+
+    async def get_candles(self, symbol: str, resolution: str, from_ts: int, to_ts: int) -> dict | None:
+        """Get stock candles (Historical Data)."""
+        if not self._available:
+            return None
+        await self.initialize()
+        url = f"{self.REST_URL}/stock/candle"
+        params = {
+            "symbol": symbol,
+            "resolution": resolution, # 1, 5, 15, 30, 60, D, W, M
+            "from": from_ts,
+            "to": to_ts,
+            "token": self.api_key
+        }
+        try:
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+        except Exception as e:
+            logger.error(f"Finnhub candles failed: {e}")
+            return None
+
+    async def get_financials_reported(self, symbol: str, freq: str = "quarterly") -> dict | None:
+        """Get reported financial statements (Income, Balance Sheet, Cash Flow)."""
+        if not self._available:
+            return None
+        await self.initialize()
+        url = f"{self.REST_URL}/stock/financials-reported"
+        params = {"symbol": symbol, "freq": freq, "token": self.api_key}
+        try:
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+        except Exception as e:
+            logger.error(f"Finnhub reported financials failed: {e}")
+            return None
+
+    async def get_earnings_estimates(self, symbol: str) -> dict | None:
+        """Get earnings estimates."""
+        if not self._available:
+            return None
+        await self.initialize()
+        url = f"{self.REST_URL}/stock/eps-estimate"
+        params = {"symbol": symbol, "token": self.api_key}
+        try:
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+        except Exception as e:
+            logger.error(f"Finnhub estimates failed: {e}")
+            return None
 
     # ========================================================================
     # WEBSOCKET STREAMING

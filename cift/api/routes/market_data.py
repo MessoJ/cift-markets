@@ -21,6 +21,7 @@ from cift.core.auth import User, get_current_active_user
 from cift.core.data_processing import calculate_technical_indicators, load_ohlcv_data
 from cift.core.database import db_manager
 from cift.core.trading_queries import get_ohlcv_last_n_bars
+from cift.services.market_data_service import market_data_service
 
 # ============================================================================
 # ROUTER
@@ -619,6 +620,42 @@ async def get_market_ticker(
             TickerItem(symbol=s, price=0.0, change=0.0, changePercent=0.0, volume=0)
             for s in symbol_list
         ]
+
+
+@router.get("/profile/{symbol}")
+async def get_company_profile(symbol: str):
+    """Get company profile (Fundamental Data)."""
+    profile = await market_data_service.get_company_profile(symbol)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
+@router.get("/financials/{symbol}")
+async def get_financials(symbol: str):
+    """Get company financials."""
+    financials = await market_data_service.get_financials(symbol)
+    if not financials:
+        raise HTTPException(status_code=404, detail="Financials not found")
+    return financials
+
+
+@router.get("/financials/reported/{symbol}")
+async def get_financials_reported(symbol: str):
+    """Get reported financial statements."""
+    data = await market_data_service.get_financials_reported(symbol)
+    if not data:
+        raise HTTPException(status_code=404, detail="Reported financials not found")
+    return data
+
+
+@router.get("/estimates/{symbol}")
+async def get_earnings_estimates(symbol: str):
+    """Get earnings estimates."""
+    data = await market_data_service.get_earnings_estimates(symbol)
+    if not data:
+        raise HTTPException(status_code=404, detail="Estimates not found")
+    return data
 
 
 class MarketMover(BaseModel):

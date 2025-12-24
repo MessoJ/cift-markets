@@ -149,9 +149,12 @@ class Settings(BaseSettings):
     finnhub_api_key: str = ""
     finnhub_base_url: str = "https://finnhub.io/api/v1"
 
+    # Alpaca Broker API (Omnibus account model)
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
-    alpaca_base_url: str = "https://paper-api.alpaca.markets"
+    alpaca_base_url: str = "https://broker-api.alpaca.markets"  # Broker API endpoint
+    alpaca_use_broker_api: bool = True  # Use Broker API (not Trading API)
+    alpaca_sweep_account_id: str = ""  # The main CIFT sweep account ID
 
     @property
     def is_alpaca_configured(self) -> bool:

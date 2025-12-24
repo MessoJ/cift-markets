@@ -117,13 +117,25 @@ async def get_news(
         rows = await conn.fetch(query, *params)
 
         articles = []
+        import json
         for row in rows:
             # Filter out known CORS-blocked domains
             image_url = row["image_url"]
-            if image_url and any(
-                domain in image_url for domain in ["cryptoslate.com", "medium.com"]
+            if image_url and (
+                any(domain in image_url for domain in ["cryptoslate.com", "medium.com"])
+                or image_url.startswith("|")
             ):
                 image_url = None
+
+            # Parse symbols if string
+            symbols = row["symbols"]
+            if isinstance(symbols, str):
+                try:
+                    symbols = json.loads(symbols)
+                except:
+                    symbols = []
+            elif symbols is None:
+                symbols = []
 
             articles.append(
                 {
@@ -135,7 +147,7 @@ async def get_news(
                     "published_at": row["published_at"],
                     "category": row["category"] or "general",
                     "sentiment": row["sentiment"],
-                    "symbols": row["symbols"] or [],
+                    "symbols": symbols,
                     "image_url": image_url,
                 }
             )
@@ -266,49 +278,59 @@ async def get_market_movers(
         LIMIT $2
     """
 
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(query, data_start, limit)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(query, data_start, limit)
+    except Exception as e:
+        logger.error(f"Failed to fetch market movers from QuestDB: {e}")
+        # Try a simpler query to check if table exists
+        try:
+            async with pool.acquire() as conn:
+                await conn.fetch("SELECT * FROM ticks LIMIT 1")
+        except Exception as e2:
+            logger.error(f"QuestDB table check failed: {e2}")
+        return []
 
-        movers = []
-        pg_pool = await get_postgres_pool()
+    movers = []
+    pg_pool = await get_postgres_pool()
 
-        for row in rows:
-            symbol = row["symbol"]
-            current_price = float(row["current_price"])
-            open_price = float(row["open_price"])
-            change = current_price - open_price
-            change_percent = float(row["change_percent"])
+    for row in rows:
+        symbol = row["symbol"]
+        current_price = float(row["current_price"])
+        open_price = float(row["open_price"])
+        change = current_price - open_price
+        change_percent = float(row["change_percent"])
 
-            # Get company name from postgres
-            async with pg_pool.acquire() as pg_conn:
-                name_row = await pg_conn.fetchrow(
-                    "SELECT name, market_cap FROM symbols WHERE symbol = $1",
-                    symbol,
-                )
-                name = name_row["name"] if name_row else symbol
-                market_cap = (
-                    float(name_row["market_cap"]) if (name_row and name_row["market_cap"]) else None
-                )
-
-            movers.append(
-                MarketMover(
-                    symbol=symbol,
-                    name=name,
-                    price=current_price,
-                    change=change,
-                    change_percent=change_percent,
-                    volume=int(row["total_volume"]),
-                    market_cap=market_cap,
-                )
+        # Get company name from postgres
+        async with pg_pool.acquire() as pg_conn:
+            name_row = await pg_conn.fetchrow(
+                "SELECT name, market_cap FROM symbols WHERE symbol = $1",
+                symbol,
+            )
+            name = name_row["name"] if name_row else symbol
+            market_cap = (
+                float(name_row["market_cap"]) if (name_row and name_row["market_cap"]) else None
             )
 
-        # If no data, log warning and return empty
-        if not movers:
-            logger.warning(
-                f"No tick data found for {mover_type}. Run 'python scripts/populate_today.py' to generate data."
+        movers.append(
+            MarketMover(
+                symbol=symbol,
+                name=name,
+                price=current_price,
+                change=change,
+                change_percent=change_percent,
+                volume=int(row["total_volume"]),
+                market_cap=market_cap,
             )
+        )
 
-        return movers
+    # If no data, log warning and return empty
+    if not movers:
+        logger.warning(
+            f"No tick data found for {mover_type}. Run 'python scripts/populate_today.py' to generate data."
+        )
+
+    return movers
 
 
 @router.get("/market-summary")
@@ -435,6 +457,35 @@ async def get_economic_calendar(
             )
             for row in rows
         ]
+
+
+@router.post("/economic-calendar/refresh")
+async def refresh_economic_calendar(
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """
+    Refresh economic calendar with real data from FMP API.
+    
+    Fetches upcoming economic events and updates the database.
+    Requires FMP_API_KEY to be configured.
+    """
+    from cift.services.fmp_economic_calendar import populate_economic_calendar_from_api, fmp_calendar_service
+    
+    if not fmp_calendar_service.is_available:
+        raise HTTPException(
+            status_code=503,
+            detail="Economic calendar API not configured. Set FMP_API_KEY in environment."
+        )
+    
+    try:
+        success = await populate_economic_calendar_from_api()
+        if success:
+            return {"message": "Economic calendar refreshed successfully", "status": "ok"}
+        else:
+            return {"message": "No events found or API error", "status": "warning"}
+    except Exception as e:
+        logger.error(f"Failed to refresh economic calendar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/earnings-calendar")

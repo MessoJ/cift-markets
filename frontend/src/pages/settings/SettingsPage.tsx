@@ -91,11 +91,33 @@ export default function SettingsPage() {
   });
 
   const handleCreateKey = async () => {
+    const name = newKeyName().trim();
+    if (!name) {
+      setNotification({ type: 'error', message: 'API Key name is required' });
+      return;
+    }
+
+    if (name.length > 50) {
+      setNotification({ type: 'error', message: 'API Key name must be less than 50 characters' });
+      return;
+    }
+
+    // Validate IP addresses if provided
+    const ips = newKeyIps() ? newKeyIps().split(',').map(ip => ip.trim()) : [];
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    
+    for (const ip of ips) {
+      if (ip && !ipRegex.test(ip)) {
+        setNotification({ type: 'error', message: `Invalid IP address: ${ip}` });
+        return;
+      }
+    }
+
     try {
       const response = await apiClient.createApiKey({
-        name: newKeyName(),
+        name: name,
         permissions: Object.keys(newKeyPermissions()).filter(k => newKeyPermissions()[k as keyof typeof newKeyPermissions]),
-        ip_whitelist: newKeyIps() ? newKeyIps().split(',').map(ip => ip.trim()) : undefined
+        ip_whitelist: ips.length > 0 ? ips : undefined
       });
       setCreatedKeySecret(response.secret);
       fetchApiKeys();

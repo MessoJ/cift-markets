@@ -7,6 +7,7 @@
 
 import { createSignal, createEffect, For, Show, onMount } from 'solid-js';
 import { Bell, BellOff, Plus, Trash2, TrendingUp, TrendingDown } from 'lucide-solid';
+import { authStore } from '~/stores/auth.store';
 
 export interface PriceAlert {
   id: string;
@@ -41,6 +42,7 @@ export default function AlertManager(props: AlertManagerProps) {
    * Load alerts from API
    */
   const loadAlerts = async () => {
+    if (!authStore.isAuthenticated) return;
     setLoading(true);
     try {
       const response = await fetch(`/api/v1/price-alerts?symbol=${props.symbol}&active_only=false`, {

@@ -13,7 +13,7 @@ Performance optimizations:
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
 from pydantic import BaseModel, Field, validator
 
@@ -40,15 +40,14 @@ router = APIRouter(prefix="/trading", tags=["Trading"])
 # MODELS
 # ============================================================================
 
-
 class OrderRequest(BaseModel):
     """Order submission request."""
-
     symbol: str = Field(..., description="Trading symbol", min_length=1, max_length=10)
     side: str = Field(..., description="Order side (buy/sell)")
-    order_type: str = Field(..., description="Order type (market/limit)")
+    order_type: str = Field(..., description="Order type (market/limit/stop/stop_limit)")
     quantity: float = Field(..., gt=0, description="Order quantity")
-    price: float | None = Field(None, gt=0, description="Limit price (required for limit orders)")
+    price: float | None = Field(None, gt=0, description="Limit price (required for limit/stop_limit orders)")
+    stop_price: float | None = Field(None, gt=0, description="Stop price (required for stop/stop_limit orders)")
     time_in_force: str = Field("day", description="Time in force (day/gtc/ioc/fok)")
 
     @validator("side")
@@ -59,8 +58,8 @@ class OrderRequest(BaseModel):
 
     @validator("order_type")
     def validate_order_type(cls, v):
-        if v.lower() not in ["market", "limit"]:
-            raise ValueError("Order type must be 'market' or 'limit'")
+        if v.lower() not in ["market", "limit", "stop", "stop_limit"]:
+            raise ValueError("Order type must be 'market', 'limit', 'stop', or 'stop_limit'")
         return v.lower()
 
     @validator("time_in_force")
@@ -69,22 +68,30 @@ class OrderRequest(BaseModel):
             raise ValueError("Invalid time_in_force")
         return v.lower()
 
-    @validator("price")
+    @validator("price", always=True)
     def validate_limit_price(cls, v, values):
-        if values.get("order_type") == "limit" and v is None:
-            raise ValueError("Price required for limit orders")
+        order_type = values.get("order_type")
+        if order_type in ["limit", "stop_limit"] and v is None:
+            raise ValueError(f"Price required for {order_type} orders")
+        return v
+
+    @validator("stop_price", always=True)
+    def validate_stop_price(cls, v, values):
+        order_type = values.get("order_type")
+        if order_type in ["stop", "stop_limit"] and v is None:
+            raise ValueError(f"Stop price required for {order_type} orders")
         return v
 
 
 class OrderResponse(BaseModel):
     """Order submission response."""
-
     order_id: UUID
     symbol: str
     side: str
     order_type: str
     quantity: float
     price: float | None
+    stop_price: float | None = None
     status: str
     created_at: datetime
     message: str = "Order submitted successfully"
@@ -92,7 +99,6 @@ class OrderResponse(BaseModel):
 
 class Position(BaseModel):
     """Position information."""
-
     id: UUID
     symbol: str
     quantity: float
@@ -113,7 +119,6 @@ class Position(BaseModel):
 
 class PortfolioSummary(BaseModel):
     """Portfolio summary."""
-
     total_value: float
     cash: float
     positions_value: float
@@ -130,7 +135,6 @@ class PortfolioSummary(BaseModel):
 
 class RiskCheckResult(BaseModel):
     """Risk check result."""
-
     passed: bool
     has_buying_power: bool
     within_position_limit: bool
@@ -143,8 +147,9 @@ class RiskCheckResult(BaseModel):
 # DEPENDENCY INJECTION
 # ============================================================================
 
-
-async def get_current_user_id(current_user: User = Depends(get_current_active_user)) -> UUID:
+async def get_current_user_id(
+    current_user: User = Depends(get_current_active_user)
+) -> UUID:
     """
     Get current authenticated user ID.
 
@@ -157,10 +162,10 @@ async def get_current_user_id(current_user: User = Depends(get_current_active_us
 # ORDER ENDPOINTS
 # ============================================================================
 
-
 @router.post("/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def submit_order(
     order: OrderRequest,
+    request: Request,
     user_id: UUID = Depends(get_current_user_id),
 ):
     """
@@ -176,6 +181,28 @@ async def submit_order(
     """
     logger.info(f"Order request: {order.dict()} for user {user_id}")
 
+    try:
+        raw_body = (await request.body()).decode("utf-8", errors="replace")
+        logger.info(
+            "Order raw body (truncated): "
+            + (raw_body[:4000] + ("…" if len(raw_body) > 4000 else ""))
+        )
+    except Exception as e:
+        logger.warning(f"Failed to read order raw body: {e}")
+
+    # Runtime guardrails (defense-in-depth): never allow limit orders without a limit price
+    if order.order_type in ["limit", "stop_limit"] and order.price is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Price required for {order.order_type} orders",
+        )
+
+    if order.order_type in ["stop", "stop_limit"] and order.stop_price is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Stop price required for {order.order_type} orders",
+        )
+
     # Get current price for market orders OR if limit price not provided
     from cift.core.trading_queries import get_latest_price
 
@@ -185,7 +212,7 @@ async def submit_order(
         if not current_price:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No market data available for {order.symbol}",
+                detail=f"No market data available for {order.symbol}"
             )
 
         execution_price = current_price
@@ -198,7 +225,8 @@ async def submit_order(
     # Ensure we have a valid price for risk calculation
     if execution_price is None or execution_price <= 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid price for order"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid price for order"
         )
 
     # Check risk limits (critical hot path - ~3ms)
@@ -219,13 +247,18 @@ async def submit_order(
         if not risk_check["within_leverage_limit"]:
             failed_checks.append("Exceeds leverage limit")
 
+        logger.warning(
+            f"Order rejected for user {user_id}: {failed_checks} | "
+            f"metrics={risk_check['metrics']}"
+        )
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "message": "Order failed risk checks",
                 "failed_checks": failed_checks,
                 "risk_metrics": risk_check["metrics"],
-            },
+            }
         )
 
     # Insert order to database (fast path - ~2ms)
@@ -236,6 +269,7 @@ async def submit_order(
         "order_type": order.order_type,
         "quantity": order.quantity,
         "price": order.price,
+        "stop_price": order.stop_price,
     }
 
     order_id = await insert_order_fast(order_data)
@@ -259,7 +293,6 @@ async def submit_order(
     # Submit to execution engine (handles both simulation and Alpaca execution)
     try:
         from cift.core.execution_engine import execution_engine
-
         await execution_engine.submit_order(order_message)
     except Exception as e:
         logger.error(f"Failed to submit to execution engine: {e}")
@@ -312,36 +345,33 @@ async def get_orders(
 
                 # Get account_id
                 account_id = await db_manager.fetchval(
-                    "SELECT id FROM accounts WHERE user_id = $1 LIMIT 1", user_id
+                    "SELECT id FROM accounts WHERE user_id = $1 LIMIT 1",
+                    user_id
                 )
 
                 if account_id:
                     # Fetch all orders (open and closed)
-                    broker_orders = await alpaca._request(
-                        "GET", "/v2/orders", params={"status": "all", "limit": 50}
-                    )
+                    broker_orders = await alpaca._request("GET", "/v2/orders", params={"status": "all", "limit": 50})
 
                     if broker_orders:
-                        logger.info(
-                            f"Syncing {len(broker_orders)} orders from Alpaca for user {user_id}"
-                        )
+                        logger.info(f"Syncing {len(broker_orders)} orders from Alpaca for user {user_id}")
 
                         # Upsert into local DB
                         for bo in broker_orders:
                             # Map status
-                            alpaca_status = bo["status"]
-                            if alpaca_status in ["new", "pending_new"]:
-                                db_status = "pending"
-                            elif alpaca_status == "canceled":
-                                db_status = "cancelled"
-                            elif alpaca_status == "partially_filled":
-                                db_status = "partial"
+                            alpaca_status = bo['status']
+                            if alpaca_status in ['new', 'pending_new']:
+                                db_status = 'pending'
+                            elif alpaca_status == 'canceled':
+                                db_status = 'cancelled'
+                            elif alpaca_status == 'partially_filled':
+                                db_status = 'partial'
                             else:
                                 db_status = alpaca_status
 
                             # Calculate remaining quantity
-                            qty = float(bo["qty"])
-                            filled_qty = float(bo["filled_qty"])
+                            qty = float(bo['qty'])
+                            filled_qty = float(bo['filled_qty'])
                             remaining_qty = qty - filled_qty
 
                             upsert_query = """
@@ -364,19 +394,19 @@ async def get_orders(
 
                             await db_manager.execute(
                                 upsert_query,
-                                bo["id"],
+                                bo['id'],
                                 user_id,
                                 account_id,
-                                bo["symbol"],
-                                bo["side"],
-                                bo["type"],
+                                bo['symbol'],
+                                bo['side'],
+                                bo['type'],
                                 qty,
-                                float(bo["limit_price"]) if bo["limit_price"] else None,
+                                float(bo['limit_price']) if bo['limit_price'] else None,
                                 db_status,
                                 filled_qty,
                                 remaining_qty,
-                                float(bo["filled_avg_price"]) if bo["filled_avg_price"] else None,
-                                datetime.fromisoformat(bo["created_at"].replace("Z", "+00:00")),
+                                float(bo['filled_avg_price']) if bo['filled_avg_price'] else None,
+                                datetime.fromisoformat(bo['created_at'].replace('Z', '+00:00'))
                             )
                 else:
                     logger.warning(f"No account found for user {user_id}, skipping order sync")
@@ -389,7 +419,7 @@ async def get_orders(
 
     # Fetch from local DB
     # If status is 'open', use optimized query
-    if status == "open":
+    if status == 'open':
         orders = await get_open_orders(user_id, symbol)
         return orders
 
@@ -404,7 +434,7 @@ async def get_orders(
         query += " AND symbol = $2"
         params.append(symbol)
 
-    if status and status != "all":
+    if status and status != 'all':
         query += f" AND status = ${len(params) + 1}"
         params.append(status)
 
@@ -412,6 +442,29 @@ async def get_orders(
 
     rows = await db_manager.fetch(query, *params)
     return [dict(row) for row in rows]
+
+
+@router.get("/orders/{order_id}")
+async def get_order_by_id(
+    order_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """
+    Get a single order by ID.
+    
+    Returns:
+        Order details including fills if available.
+    """
+    async with db_manager.pool.acquire() as conn:
+        order_row = await conn.fetchrow(
+            "SELECT * FROM orders WHERE id = $1 AND user_id = $2",
+            order_id, user_id
+        )
+        
+        if not order_row:
+            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+        
+        return dict(order_row)
 
 
 @router.delete("/orders/{order_id}")
@@ -429,7 +482,6 @@ async def cancel_order(
     # Try to cancel on Alpaca first if configured
     try:
         from cift.integrations.alpaca import AlpacaClient
-
         alpaca = AlpacaClient()
         if alpaca.is_configured:
             await alpaca.initialize()
@@ -450,19 +502,26 @@ async def cancel_order(
 
     if not cancelled:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found or not cancelable"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found or not cancelable"
         )
 
     # Publish cancellation to NATS
     try:
         nats = await get_nats_manager()
-        await nats.publish("orders.cancelled", {"order_id": str(order_id), "user_id": str(user_id)})
+        await nats.publish(
+            "orders.cancelled",
+            {"order_id": str(order_id), "user_id": str(user_id)}
+        )
     except Exception as e:
         logger.warning(f"Failed to publish cancellation to NATS: {e}")
 
     logger.info(f"Order cancelled: {order_id} by user {user_id}")
 
-    return {"message": "Order cancelled successfully", "order_id": str(order_id)}
+    return {
+        "message": "Order cancelled successfully",
+        "order_id": str(order_id)
+    }
 
 
 @router.patch("/orders/{order_id}")
@@ -487,7 +546,7 @@ async def modify_order(
     if not quantity and not price:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Must provide at least one field to update (quantity or price)",
+            detail="Must provide at least one field to update (quantity or price)"
         )
 
     # Build updates dict
@@ -495,28 +554,35 @@ async def modify_order(
     if quantity is not None:
         if quantity <= 0:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity must be greater than 0"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Quantity must be greater than 0"
             )
-        updates["quantity"] = quantity
+        updates['quantity'] = quantity
 
     if price is not None:
         if price <= 0:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Price must be greater than 0"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Price must be greater than 0"
             )
-        updates["price"] = price
+        updates['price'] = price
 
     # Update order
     updated = await update_order_fast(order_id, updates)
 
     if not updated:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found or not modifiable"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found or not modifiable"
         )
 
     logger.info(f"Order modified: {order_id} by user {user_id}, updates: {updates}")
 
-    return {"message": "Order modified successfully", "order_id": str(order_id), "updates": updates}
+    return {
+        "message": "Order modified successfully",
+        "order_id": str(order_id),
+        "updates": updates
+    }
 
 
 @router.post("/orders/cancel-all")
@@ -541,22 +607,19 @@ async def cancel_all_orders(
 
     cancelled_count = await cancel_all_orders_fast(user_id, symbol)
 
-    logger.info(
-        f"Cancelled {cancelled_count} orders for user {user_id}"
-        + (f" (symbol: {symbol})" if symbol else " (all symbols)")
-    )
+    logger.info(f"Cancelled {cancelled_count} orders for user {user_id}" +
+                (f" (symbol: {symbol})" if symbol else " (all symbols)"))
 
     return {
         "message": f"Cancelled {cancelled_count} order(s)",
         "cancelled_count": cancelled_count,
-        "symbol": symbol,
+        "symbol": symbol
     }
 
 
 # ============================================================================
 # POSITION ENDPOINTS
 # ============================================================================
-
 
 @router.get("/positions", response_model=list[Position])
 async def get_positions(
@@ -571,39 +634,37 @@ async def get_positions(
 
     positions = []
     for pos in positions_data:
-        quantity = float(pos["quantity"] or 0)
-        avg_cost = float(pos["avg_cost"] or 0)
-        current_price = float(pos["current_price"] or 0)
-        unrealized_pnl = float(pos["unrealized_pnl"] or 0)
-        realized_pnl = float(pos["realized_pnl"] or 0)
+        quantity = float(pos['quantity'] or 0)
+        avg_cost = float(pos['avg_cost'] or 0)
+        current_price = float(pos['current_price'] or 0)
+        unrealized_pnl = float(pos['unrealized_pnl'] or 0)
+        realized_pnl = float(pos['realized_pnl'] or 0)
 
         total_cost = avg_cost * abs(quantity)
         market_value = current_price * abs(quantity)
         total_pnl = unrealized_pnl + realized_pnl
         pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0
         unrealized_pnl_pct = (unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
-        side = "long" if quantity > 0 else "short"
+        side = 'long' if quantity > 0 else 'short'
 
-        positions.append(
-            Position(
-                id=pos["id"],
-                symbol=pos["symbol"],
-                quantity=quantity,
-                side=side,
-                avg_cost=avg_cost,
-                total_cost=total_cost,
-                current_price=current_price,
-                market_value=market_value,
-                unrealized_pnl=unrealized_pnl,
-                unrealized_pnl_pct=unrealized_pnl_pct,
-                realized_pnl=realized_pnl,
-                total_pnl=total_pnl,
-                pnl_percent=pnl_percent,
-                day_pnl=0.0,  # TODO: Calculate from historical data
-                day_pnl_pct=0.0,
-                updated_at=pos["updated_at"],
-            )
-        )
+        positions.append(Position(
+            id=pos['id'],
+            symbol=pos['symbol'],
+            quantity=quantity,
+            side=side,
+            avg_cost=avg_cost,
+            total_cost=total_cost,
+            current_price=current_price,
+            market_value=market_value,
+            unrealized_pnl=unrealized_pnl,
+            unrealized_pnl_pct=unrealized_pnl_pct,
+            realized_pnl=realized_pnl,
+            total_pnl=total_pnl,
+            pnl_percent=pnl_percent,
+            day_pnl=0.0,  # TODO: Calculate from historical data
+            day_pnl_pct=0.0,
+            updated_at=pos['updated_at'],
+        ))
 
     return positions
 
@@ -628,29 +689,28 @@ async def get_position(
             FROM positions
             WHERE user_id = $1 AND symbol = $2 AND quantity != 0
             """,
-            user_id,
-            symbol.upper(),
+            user_id, symbol.upper()
         )
 
     if not row:
         return None
 
-    quantity = float(row["quantity"] or 0)
-    avg_cost = float(row["avg_cost"] or 0)
-    current_price = float(row["current_price"] or 0)
-    unrealized_pnl = float(row["unrealized_pnl"] or 0)
-    realized_pnl = float(row["realized_pnl"] or 0)
+    quantity = float(row['quantity'] or 0)
+    avg_cost = float(row['avg_cost'] or 0)
+    current_price = float(row['current_price'] or 0)
+    unrealized_pnl = float(row['unrealized_pnl'] or 0)
+    realized_pnl = float(row['realized_pnl'] or 0)
 
     total_cost = avg_cost * abs(quantity)
     market_value = current_price * abs(quantity)
     total_pnl = unrealized_pnl + realized_pnl
     pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0
     unrealized_pnl_pct = (unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
-    side = "long" if quantity > 0 else "short"
+    side = 'long' if quantity > 0 else 'short'
 
     return Position(
-        id=row["id"],
-        symbol=row["symbol"],
+        id=row['id'],
+        symbol=row['symbol'],
         quantity=quantity,
         side=side,
         avg_cost=avg_cost,
@@ -664,14 +724,13 @@ async def get_position(
         pnl_percent=pnl_percent,
         day_pnl=0.0,
         day_pnl_pct=0.0,
-        updated_at=row["updated_at"],
+        updated_at=row['updated_at'],
     )
 
 
 # ============================================================================
 # PORTFOLIO ENDPOINTS
 # ============================================================================
-
 
 @router.get("/portfolio", response_model=PortfolioSummary)
 async def get_portfolio(
@@ -697,8 +756,7 @@ async def get_portfolio(
                 account = await alpaca.get_account()
 
                 # Update local account
-                await db_manager.execute(
-                    """
+                await db_manager.execute("""
                     UPDATE accounts
                     SET cash_balance = $1,
                         buying_power = $2,
@@ -706,10 +764,10 @@ async def get_portfolio(
                         updated_at = NOW()
                     WHERE user_id = $4
                 """,
-                    float(account["cash"]),
-                    float(account["buying_power"]),
-                    float(account["equity"]),
-                    user_id,
+                float(account['cash']),
+                float(account['buying_power']),
+                float(account['equity']),
+                user_id
                 )
 
                 # 2. Sync Positions
@@ -722,8 +780,7 @@ async def get_portfolio(
                 # For simplicity in this "add key" phase, let's just upsert.
 
                 for pos in positions:
-                    await db_manager.execute(
-                        """
+                    await db_manager.execute("""
                         INSERT INTO positions (
                             id, account_id, symbol, quantity, avg_cost, current_price,
                             market_value, unrealized_pnl, unrealized_pnl_pct, updated_at
@@ -741,14 +798,14 @@ async def get_portfolio(
                             unrealized_pnl_pct = EXCLUDED.unrealized_pnl_pct,
                             updated_at = NOW()
                     """,
-                        pos["symbol"],
-                        float(pos["qty"]),
-                        float(pos["avg_entry_price"]),
-                        float(pos["current_price"]),
-                        float(pos["market_value"]),
-                        float(pos["unrealized_pl"]),
-                        float(pos["unrealized_plpc"]),
-                        user_id,
+                    pos['symbol'],
+                    float(pos['qty']),
+                    float(pos['avg_entry_price']),
+                    float(pos['current_price']),
+                    float(pos['market_value']),
+                    float(pos['unrealized_pl']),
+                    float(pos['unrealized_plpc']),
+                    user_id
                     )
 
                 await alpaca.close()
@@ -769,13 +826,14 @@ async def get_portfolio(
     buying_power = float(buying_power) if buying_power else 0.0
 
     # Calculate aggregated P&L
-    unrealized_pnl = sum(float(pos["unrealized_pnl"] or 0) for pos in positions)
-    realized_pnl = sum(float(pos["realized_pnl"] or 0) for pos in positions)
+    unrealized_pnl = sum(float(pos['unrealized_pnl'] or 0) for pos in positions)
+    realized_pnl = sum(float(pos['realized_pnl'] or 0) for pos in positions)
     total_pnl = unrealized_pnl + realized_pnl
 
     # Calculate positions value
     positions_value = sum(
-        float(pos["quantity"] or 0) * float(pos["current_price"] or 0) for pos in positions
+        float(pos['quantity'] or 0) * float(pos['current_price'] or 0)
+        for pos in positions
     )
 
     # Calculate cash (total value - positions value)
@@ -802,7 +860,6 @@ async def get_portfolio(
 # RISK ENDPOINTS
 # ============================================================================
 
-
 @router.post("/risk/check", response_model=RiskCheckResult)
 async def check_order_risk(
     order: OrderRequest,
@@ -820,7 +877,8 @@ async def check_order_risk(
         price = await get_latest_price(order.symbol)
         if not price:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="No market data available"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No market data available"
             )
     else:
         price = order.price
@@ -859,7 +917,6 @@ async def get_maximum_order_size(
 # ============================================================================
 # ACCOUNT ENDPOINTS
 # ============================================================================
-
 
 @router.get("/account/buying-power")
 async def get_account_buying_power(
@@ -903,15 +960,19 @@ async def get_account_summary(
 
     # Calculate equity and margin
     positions_value = sum(
-        float(pos["current_price"] or 0) * abs(float(pos["quantity"] or 0)) for pos in positions
+        float(pos['current_price'] or 0) * abs(float(pos['quantity'] or 0))
+        for pos in positions
     )
-    unrealized_pnl = sum(float(pos["unrealized_pnl"] or 0) for pos in positions)
-    realized_pnl = sum(float(pos["realized_pnl"] or 0) for pos in positions)
+    unrealized_pnl = sum(float(pos['unrealized_pnl'] or 0) for pos in positions)
+    realized_pnl = sum(float(pos['realized_pnl'] or 0) for pos in positions)
 
     # Get cash balance
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT cash_balance FROM users WHERE id = $1", user_id)
-        cash_balance = float(row["cash_balance"]) if row and row["cash_balance"] else 0.0
+        row = await conn.fetchrow(
+            "SELECT cash_balance FROM users WHERE id = $1",
+            user_id
+        )
+        cash_balance = float(row['cash_balance']) if row and row['cash_balance'] else 0.0
 
     # Calculate margin used (simplified: positions_value - cash used)
     equity = total_value
@@ -937,7 +998,6 @@ async def get_account_summary(
 # ============================================================================
 # ACTIVITY FEED
 # ============================================================================
-
 
 @router.get("/activity")
 async def get_activity_feed(
@@ -971,4 +1031,8 @@ async def get_activity_feed(
 
     activities = await get_recent_activity(user_id, limit, activity_types)
 
-    return {"activities": activities, "count": len(activities), "limit": limit}
+    return {
+        "activities": activities,
+        "count": len(activities),
+        "limit": limit
+    }

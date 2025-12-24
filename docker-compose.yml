@@ -320,6 +320,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    volumes:
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend/dist:/usr/share/nginx/html:ro
     restart: unless-stopped
     networks:
       - cift-network

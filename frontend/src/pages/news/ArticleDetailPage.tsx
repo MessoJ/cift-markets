@@ -88,7 +88,7 @@ export default function ArticleDetailPage() {
                 <span class="px-3 py-1 rounded text-sm font-semibold capitalize bg-terminal-850 text-gray-400">
                   {article()!.category}
                 </span>
-                <Show when={article()!.symbols && article()!.symbols.length > 0}>
+                <Show when={article()!.symbols && Array.isArray(article()!.symbols) && article()!.symbols.length > 0}>
                   <div class="flex items-center gap-1 ml-2">
                     <Tag size={14} class="text-gray-500" />
                     {article()!.symbols.slice(0, 5).map((symbol) => (

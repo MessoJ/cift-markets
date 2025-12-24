@@ -51,6 +51,38 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    // Validation
+    if (!username() || !email() || !password() || !confirmPassword() || !fullName()) {
+      setError('All fields are required');
+      return;
+    }
+
+    if (username().length < 3) {
+      setError('Username must be at least 3 characters long');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email())) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    if (password().length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    // Password complexity check
+    const hasUpperCase = /[A-Z]/.test(password());
+    const hasLowerCase = /[a-z]/.test(password());
+    const hasNumbers = /\d/.test(password());
+    
+    if (!(hasUpperCase && hasLowerCase && hasNumbers)) {
+       setError('Password must contain uppercase, lowercase, and numbers');
+       return;
+    }
+
     if (password() !== confirmPassword()) {
       setError('Passwords do not match');
       return;

@@ -36,8 +36,14 @@ export interface UseMarketDataWebSocketOptions {
   reconnectDecay?: number;
 }
 
+const getWebSocketUrl = () => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  return `${protocol}//${host}/api/v1/market-data/ws/stream`;
+};
+
 const DEFAULT_OPTIONS: Required<UseMarketDataWebSocketOptions> = {
-  url: 'ws://localhost:8000/api/v1/market-data/ws/stream',
+  url: getWebSocketUrl(),
   autoConnect: true,
   reconnectDelay: 1000,
   maxReconnectDelay: 30000,
