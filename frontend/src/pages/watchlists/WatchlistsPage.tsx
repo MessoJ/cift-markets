@@ -169,9 +169,21 @@ export default function WatchlistsPage() {
   });
 
   const createList = async () => {
-    if (!newListName().trim()) return;
+    const name = newListName().trim();
+    if (!name) return;
+    
+    if (name.length < 3) {
+      alert('Watchlist name must be at least 3 characters long');
+      return;
+    }
+    
+    if (name.length > 50) {
+      alert('Watchlist name must be less than 50 characters');
+      return;
+    }
+
     try {
-      await apiClient.createWatchlist({ name: newListName() });
+      await apiClient.createWatchlist({ name });
       setNewListName('');
       setShowNewList(false);
       await fetchWatchlists();
@@ -181,9 +193,22 @@ export default function WatchlistsPage() {
   };
 
   const addSymbol = async () => {
-    if (!newSymbol().trim() || !activeList()) return;
+    const symbol = newSymbol().trim().toUpperCase();
+    if (!symbol || !activeList()) return;
+
+    if (!/^[A-Z0-9]{1,10}$/.test(symbol)) {
+      alert('Invalid symbol format. Use alphanumeric characters only (max 10).');
+      return;
+    }
+
+    // Check for duplicates
+    if (symbols().some(s => s.symbol === symbol)) {
+      alert(`${symbol} is already in this watchlist`);
+      return;
+    }
+
     try {
-      await apiClient.addSymbolToWatchlist(activeList()!, newSymbol().toUpperCase());
+      await apiClient.addSymbolToWatchlist(activeList()!, symbol);
       setNewSymbol('');
       await fetchSymbols();
     } catch (err: any) {

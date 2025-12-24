@@ -33,6 +33,8 @@ class AlpacaEndpoint(str, Enum):
 
     PAPER = "https://paper-api.alpaca.markets"
     LIVE = "https://api.alpaca.markets"
+    BROKER = "https://broker-api.alpaca.markets"  # Broker API for omnibus model
+    BROKER_SANDBOX = "https://broker-api.sandbox.alpaca.markets"  # Sandbox for testing
     DATA = "https://data.alpaca.markets"
     STREAM = "wss://stream.data.alpaca.markets"
 
@@ -56,11 +58,15 @@ class AlpacaClient:
     """
     Async Alpaca API client for market data and trading.
 
+    Supports both Trading API (individual accounts) and Broker API (omnibus model).
     High-performance async implementation with connection pooling.
     """
 
     def __init__(
-        self, api_key: str | None = None, secret_key: str | None = None, paper_trading: bool = True
+        self,
+        api_key: str | None = None,
+        secret_key: str | None = None,
+        use_broker_api: bool | None = None,
     ):
         """
         Initialize Alpaca client.
@@ -68,14 +74,18 @@ class AlpacaClient:
         Args:
             api_key: Alpaca API key (defaults to config)
             secret_key: Alpaca secret key (defaults to config)
-            paper_trading: Use paper trading endpoint
+            use_broker_api: Use Broker API (omnibus model) instead of Trading API
         """
         self.api_key = api_key or settings.alpaca_api_key
         self.secret_key = secret_key or settings.alpaca_secret_key
+        self.use_broker_api = use_broker_api if use_broker_api is not None else settings.alpaca_use_broker_api
 
-        # Don't raise error here, check in _request or is_configured
-
-        self.base_url = AlpacaEndpoint.PAPER if paper_trading else AlpacaEndpoint.LIVE
+        # Set base URL based on API type
+        if self.use_broker_api:
+            self.base_url = settings.alpaca_base_url or AlpacaEndpoint.BROKER
+        else:
+            self.base_url = AlpacaEndpoint.PAPER
+        
         self.data_url = AlpacaEndpoint.DATA
 
         self.session: aiohttp.ClientSession | None = None
@@ -105,7 +115,8 @@ class AlpacaClient:
         )
 
         self._initialized = True
-        logger.info("Alpaca client initialized")
+        api_type = "Broker API" if self.use_broker_api else "Trading API"
+        logger.info(f"Alpaca client initialized ({api_type})")
 
     async def close(self):
         """Close HTTP session."""
@@ -115,11 +126,21 @@ class AlpacaClient:
             logger.info("Alpaca client closed")
 
     def _get_headers(self) -> dict[str, str]:
-        """Get authentication headers."""
-        return {
-            "APCA-API-KEY-ID": self.api_key,
-            "APCA-API-SECRET-KEY": self.secret_key,
-        }
+        """Get authentication headers based on API type."""
+        if self.use_broker_api:
+            # Broker API uses HTTP Basic Auth
+            import base64
+            credentials = base64.b64encode(f"{self.api_key}:{self.secret_key}".encode()).decode()
+            return {
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/json",
+            }
+        else:
+            # Trading API uses custom headers
+            return {
+                "APCA-API-KEY-ID": self.api_key,
+                "APCA-API-SECRET-KEY": self.secret_key,
+            }
 
     async def _request(
         self,
@@ -248,7 +269,7 @@ class AlpacaClient:
         return await self._request("GET", endpoint, params=params, base_url=self.data_url)
 
     # ========================================================================
-    # TRADING
+    # TRADING (Works for both Trading API and Broker API)
     # ========================================================================
 
     async def submit_order(
@@ -261,9 +282,13 @@ class AlpacaClient:
         limit_price: float | None = None,
         stop_price: float | None = None,
         client_order_id: str | None = None,
+        account_id: str | None = None,  # For Broker API: specify trading account
     ) -> dict[str, Any]:
         """
         Submit order to Alpaca.
+
+        For Broker API (omnibus model): Uses the sweep/trading account to execute orders.
+        The account_id parameter specifies which trading account to use.
 
         Args:
             symbol: Stock symbol
@@ -274,78 +299,132 @@ class AlpacaClient:
             limit_price: Limit price (for limit orders)
             stop_price: Stop price (for stop orders)
             client_order_id: Client-assigned order ID
+            account_id: Trading account ID (Broker API only)
 
         Returns:
             Order data
         """
         data = {
             "symbol": symbol,
-            "qty": qty,
+            "qty": str(qty),  # Broker API expects string
             "side": side,
             "type": order_type,
             "time_in_force": time_in_force,
         }
 
         if limit_price:
-            data["limit_price"] = limit_price
+            data["limit_price"] = str(limit_price)
         if stop_price:
-            data["stop_price"] = stop_price
+            data["stop_price"] = str(stop_price)
         if client_order_id:
             data["client_order_id"] = client_order_id
 
-        endpoint = "/v2/orders"
+        # Broker API uses different endpoint structure
+        if self.use_broker_api:
+            # Use the configured sweep account or provided account_id
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            if not trading_account:
+                raise ValueError("Broker API requires a trading account ID (ALPACA_SWEEP_ACCOUNT_ID)")
+            endpoint = f"/v1/trading/accounts/{trading_account}/orders"
+        else:
+            endpoint = "/v2/orders"
+            
         return await self._request("POST", endpoint, json=data)
 
-    async def get_order(self, order_id: str) -> dict[str, Any]:
+    async def get_order(self, order_id: str, account_id: str | None = None) -> dict[str, Any]:
         """Get order by ID."""
-        endpoint = f"/v2/orders/{order_id}"
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/orders/{order_id}"
+        else:
+            endpoint = f"/v2/orders/{order_id}"
         return await self._request("GET", endpoint)
 
-    async def cancel_order(self, order_id: str) -> dict[str, Any]:
+    async def cancel_order(self, order_id: str, account_id: str | None = None) -> dict[str, Any]:
         """Cancel order by ID."""
-        endpoint = f"/v2/orders/{order_id}"
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/orders/{order_id}"
+        else:
+            endpoint = f"/v2/orders/{order_id}"
         return await self._request("DELETE", endpoint)
 
-    async def get_open_orders(self) -> list[dict[str, Any]]:
+    async def get_open_orders(self, account_id: str | None = None) -> list[dict[str, Any]]:
         """Get all open orders."""
-        endpoint = "/v2/orders"
         params = {"status": "open"}
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/orders"
+        else:
+            endpoint = "/v2/orders"
         return await self._request("GET", endpoint, params=params)
 
-    async def get_positions(self) -> list[dict[str, Any]]:
-        """Get all positions."""
-        endpoint = "/v2/positions"
+    async def get_positions(self, account_id: str | None = None) -> list[dict[str, Any]]:
+        """Get all positions in the trading account."""
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/positions"
+        else:
+            endpoint = "/v2/positions"
         return await self._request("GET", endpoint)
 
-    async def get_position(self, symbol: str) -> dict[str, Any]:
+    async def get_position(self, symbol: str, account_id: str | None = None) -> dict[str, Any]:
         """Get position for symbol."""
-        endpoint = f"/v2/positions/{symbol}"
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/positions/{symbol}"
+        else:
+            endpoint = f"/v2/positions/{symbol}"
         return await self._request("GET", endpoint)
 
-    async def close_position(self, symbol: str) -> dict[str, Any]:
+    async def close_position(self, symbol: str, account_id: str | None = None) -> dict[str, Any]:
         """Close position for symbol."""
-        endpoint = f"/v2/positions/{symbol}"
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/positions/{symbol}"
+        else:
+            endpoint = f"/v2/positions/{symbol}"
         return await self._request("DELETE", endpoint)
 
     # ========================================================================
     # ACCOUNT
     # ========================================================================
 
-    async def get_account(self) -> dict[str, Any]:
+    async def get_account(self, account_id: str | None = None) -> dict[str, Any]:
         """
         Get account information.
 
         Returns:
             Account data (cash, buying power, equity, etc.)
         """
-        endpoint = "/v2/account"
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/account"
+        else:
+            endpoint = "/v2/account"
+        return await self._request("GET", endpoint)
+
+    async def get_trading_accounts(self) -> list[dict[str, Any]]:
+        """
+        Get all trading accounts (Broker API only).
+        
+        Returns:
+            List of trading accounts under this broker
+        """
+        if not self.use_broker_api:
+            raise ValueError("get_trading_accounts is only available with Broker API")
+        endpoint = "/v1/accounts"
         return await self._request("GET", endpoint)
 
     async def get_account_activities(
-        self, activity_types: list[str] | None = None, date: datetime | None = None
+        self, activity_types: list[str] | None = None, date: datetime | None = None, account_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Get account activities (trades, transactions, etc.)."""
-        endpoint = "/v2/account/activities"
+        if self.use_broker_api:
+            trading_account = account_id or settings.alpaca_sweep_account_id
+            endpoint = f"/v1/trading/accounts/{trading_account}/account/activities"
+        else:
+            endpoint = "/v2/account/activities"
         params = {}
 
         if activity_types:

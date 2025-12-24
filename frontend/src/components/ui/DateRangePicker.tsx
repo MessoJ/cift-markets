@@ -112,15 +112,26 @@ export function DateRangePicker(props: DateRangePickerProps) {
   const presets = () => props.presets || defaultPresets;
   
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (!date) return '';
+    try {
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (e) {
+      return '';
+    }
   };
   
   const formatDateInput = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    if (!date) return '';
+    try {
+      if (typeof date.toISOString !== 'function') return '';
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return '';
+    }
   };
   
   createEffect(() => {

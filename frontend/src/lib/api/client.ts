@@ -745,10 +745,44 @@ export class CIFTApiClient {
 
   private handleError(error: AxiosError): ApiError {
     if (error.response) {
+      const data = error.response.data as any;
+      let message = 'An error occurred';
+
+      // Parse the detail field intelligently
+      if (data?.detail) {
+        if (typeof data.detail === 'string') {
+          // Simple string error
+          message = data.detail;
+        } else if (Array.isArray(data.detail)) {
+          // Pydantic validation errors: [{loc: [...], msg: "...", type: "..."}]
+          message = data.detail
+            .map((err: any) => {
+              const field = err.loc?.slice(-1)?.[0] || 'field';
+              return `${field}: ${err.msg}`;
+            })
+            .join('; ');
+        } else if (typeof data.detail === 'object') {
+          // Structured error object from our backend (e.g., risk check failure)
+          if (data.detail.message) {
+            message = data.detail.message;
+            if (data.detail.failed_checks?.length) {
+              message += ': ' + data.detail.failed_checks.join(', ');
+            }
+          } else {
+            // Fallback: stringify the object
+            message = JSON.stringify(data.detail);
+          }
+        }
+      } else if (data?.message) {
+        message = data.message;
+      } else {
+        message = error.message || 'Request failed';
+      }
+
       return {
-        message: (error.response.data as any)?.detail || error.message,
+        message,
         status: error.response.status,
-        detail: error.response.data,
+        detail: data,
       };
     } else if (error.request) {
       return {
@@ -817,19 +851,29 @@ export class CIFTApiClient {
     side: 'buy' | 'sell';
     order_type: 'market' | 'limit' | 'stop' | 'stop_limit';
     quantity: number;
-    limit_price?: number;
-    stop_price?: number;
+    price?: number;       // Limit price for limit/stop_limit orders
+    stop_price?: number;  // Stop price for stop/stop_limit orders
     time_in_force?: string;
   }): Promise<Order> {
-    // Map frontend fields to backend schema
-    const payload = {
+    // Build payload with all required fields
+    const payload: Record<string, any> = {
       symbol: order.symbol,
       side: order.side,
       order_type: order.order_type,
       quantity: order.quantity,
-      price: order.limit_price, // Backend expects 'price', not 'limit_price'
       time_in_force: order.time_in_force || 'day',
     };
+    
+    // Include price for limit and stop_limit orders
+    if (order.price !== undefined && order.price !== null) {
+      payload.price = order.price;
+    }
+    
+    // Include stop_price for stop and stop_limit orders
+    if (order.stop_price !== undefined && order.stop_price !== null) {
+      payload.stop_price = order.stop_price;
+    }
+    
     const { data } = await this.axiosInstance.post<Order>('/trading/orders', payload);
     return data;
   }
@@ -842,6 +886,17 @@ export class CIFTApiClient {
   }): Promise<Order[]> {
     const { data } = await this.axiosInstance.get<Order[]>('/trading/orders', { params });
     return data;
+  }
+
+  async getOrder(orderId: string): Promise<Order> {
+    const { data } = await this.axiosInstance.get<Order>(`/trading/orders/${orderId}`);
+    return data;
+  }
+
+  async getOrderFills(orderId: string): Promise<any[]> {
+    // Use the drilldowns endpoint which returns fills
+    const { data } = await this.axiosInstance.get<any>(`/drilldowns/orders/${orderId}`);
+    return data.fills || [];
   }
 
   async cancelOrder(orderId: string): Promise<Order> {
@@ -941,6 +996,46 @@ export class CIFTApiClient {
       params: { timeframe, limit },
     });
     return data;
+  }
+
+  async getCompanyProfile(symbol: string): Promise<any> {
+    try {
+      const { data } = await this.axiosInstance.get(`/market-data/profile/${symbol}`);
+      return data;
+    } catch (error) {
+      console.warn(`Failed to fetch profile for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  async getFinancials(symbol: string): Promise<any> {
+    try {
+      const { data } = await this.axiosInstance.get(`/market-data/financials/${symbol}`);
+      return data;
+    } catch (error) {
+      console.warn(`Failed to fetch financials for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  async getFinancialsReported(symbol: string): Promise<any> {
+    try {
+      const { data } = await this.axiosInstance.get(`/market-data/financials/reported/${symbol}`);
+      return data;
+    } catch (error) {
+      console.warn(`Failed to fetch reported financials for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  async getEstimates(symbol: string): Promise<any> {
+    try {
+      const { data } = await this.axiosInstance.get(`/market-data/estimates/${symbol}`);
+      return data;
+    } catch (error) {
+      console.warn(`Failed to fetch estimates for ${symbol}:`, error);
+      return null;
+    }
   }
 
   /**

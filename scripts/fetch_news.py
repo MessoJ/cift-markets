@@ -22,6 +22,7 @@ Free API Keys:
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -486,7 +487,7 @@ async def save_articles_to_db(articles: list[dict], pool: asyncpg.Pool):
                     article["published_at"],
                     article["category"],
                     article["sentiment"],
-                    article["symbols"],
+                    json.dumps(article["symbols"]),
                     article["image_url"]
                 )
 

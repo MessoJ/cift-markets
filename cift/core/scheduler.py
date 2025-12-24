@@ -36,15 +36,15 @@ class TaskScheduler:
             name="kyc_verification_processing",
             func=self.process_kyc_verifications,
             interval_seconds=30,
-            description="Process pending KYC document and identity verifications",
+            description="Process pending KYC document and identity verifications"
         )
 
-        # Market data update from Polygon (every hour)
+        # Market data update from Polygon/Finnhub (every 5 minutes for fresher quotes)
         self.register_task(
             name="polygon_market_data_update",
             func=self.update_polygon_market_data,
-            interval_seconds=3600,  # Every hour
-            description="Update market quotes and news from Polygon.io",
+            interval_seconds=300,  # Every 5 minutes for more real-time data
+            description="Update market quotes and news from Polygon.io/Finnhub"
         )
 
         # Alpaca Sync (every 1 minute)
@@ -52,7 +52,7 @@ class TaskScheduler:
             name="alpaca_sync",
             func=self.sync_alpaca_data,
             interval_seconds=60,
-            description="Sync Account and Positions with Alpaca",
+            description="Sync Account and Positions with Alpaca"
         )
 
         # Portfolio snapshots (daily at 6 PM ET)
@@ -60,7 +60,7 @@ class TaskScheduler:
             name="daily_portfolio_snapshots",
             func=self.generate_portfolio_snapshots,
             interval_seconds=3600,  # Check every hour
-            description="Generate end-of-day portfolio snapshots",
+            description="Generate end-of-day portfolio snapshots"
         )
 
         # Market data cleanup (daily at 2 AM ET)
@@ -68,7 +68,7 @@ class TaskScheduler:
             name="market_data_cleanup",
             func=self.cleanup_old_market_data,
             interval_seconds=86400,  # Daily
-            description="Clean up old market data and cache",
+            description="Clean up old market data and cache"
         )
 
         # Risk monitoring (every 5 minutes during market hours)
@@ -76,7 +76,7 @@ class TaskScheduler:
             name="risk_monitoring",
             func=self.monitor_risk_limits,
             interval_seconds=300,
-            description="Monitor portfolio risk limits and alerts",
+            description="Monitor portfolio risk limits and alerts"
         )
 
         # Price alerts monitoring (every 30 seconds)
@@ -84,14 +84,13 @@ class TaskScheduler:
             name="price_alerts_monitoring",
             func=self.monitor_price_alerts,
             interval_seconds=30,
-            description="Monitor and process price alerts",
+            description="Monitor and process price alerts"
         )
 
     async def sync_alpaca_data(self):
         """Sync data with Alpaca"""
         try:
             from cift.services.alpaca_sync_service import alpaca_sync_service
-
             await alpaca_sync_service.sync_all_accounts()
         except Exception as e:
             logger.error(f"Alpaca sync failed: {e}")
@@ -100,13 +99,17 @@ class TaskScheduler:
         """Process pending KYC verifications."""
         try:
             from cift.services.kyc_verification import process_pending_verifications
-
             await process_pending_verifications()
         except Exception as e:
             logger.error(f"KYC verification processing failed: {e}")
 
     def register_task(
-        self, name: str, func, interval_seconds: int, description: str = "", enabled: bool = True
+        self,
+        name: str,
+        func,
+        interval_seconds: int,
+        description: str = "",
+        enabled: bool = True
     ):
         """Register a periodic task."""
         self.tasks[name] = {
@@ -179,9 +182,7 @@ class TaskScheduler:
             # Update error status
             task_info["error_count"] += 1
             task_info["last_error"] = str(e)
-            task_info["next_run"] = start_time + timedelta(
-                seconds=min(task_info["interval_seconds"], 300)
-            )
+            task_info["next_run"] = start_time + timedelta(seconds=min(task_info["interval_seconds"], 300))
 
             logger.error(f"❌ Task '{task_name}' failed: {e}")
 
@@ -199,15 +200,13 @@ class TaskScheduler:
                     "interval_seconds": task["interval_seconds"],
                     "last_run": task["last_run"].isoformat() if task["last_run"] else None,
                     "next_run": task["next_run"].isoformat() if task["next_run"] else None,
-                    "next_run_in_seconds": (
-                        (task["next_run"] - now).total_seconds() if task["next_run"] else None
-                    ),
+                    "next_run_in_seconds": (task["next_run"] - now).total_seconds() if task["next_run"] else None,
                     "run_count": task["run_count"],
                     "error_count": task["error_count"],
                     "last_error": task["last_error"],
                 }
                 for name, task in self.tasks.items()
-            },
+            }
         }
 
     # ========================================================================
@@ -231,37 +230,23 @@ class TaskScheduler:
             await service.initialize()
 
             try:
-                # Update quotes for popular symbols (limited due to rate limits)
-                # Free tier: 5 req/min, so we update ~20 symbols per hour
+                # Update quotes for popular symbols
+                # TSLA must be in first batch since it's heavily traded
                 popular_symbols = [
-                    "AAPL",
-                    "MSFT",
-                    "GOOGL",
-                    "AMZN",
-                    "NVDA",
-                    "TSLA",
-                    "META",
-                    "SPY",
-                    "QQQ",
-                    "JPM",
-                    "V",
-                    "JNJ",
-                    "WMT",
-                    "PG",
-                    "XOM",
-                    "UNH",
-                    "HD",
-                    "MA",
-                    "COST",
-                    "DIA",
+                    "AAPL", "MSFT", "TSLA", "GOOGL", "AMZN",  # First priority batch
+                    "NVDA", "META", "SPY", "QQQ", "JPM",
+                    "V", "JNJ", "WMT", "PG", "XOM",
+                    "UNH", "HD", "MA", "COST", "DIA"
                 ]
 
-                quotes_updated = await service.update_market_cache(symbols=popular_symbols[:5])
+                # Update more symbols per run (Finnhub fallback has higher rate limits)
+                quotes_updated = await service.update_market_cache(symbols=popular_symbols[:10])
                 logger.info(f"Updated {quotes_updated} quotes from Polygon")
 
                 # Update news (less frequently - once per hour is fine)
                 news_stored = await service.fetch_and_store_news(
-                    symbols=["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"], limit=30
+                    symbols=["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"],
+                    limit=30
                 )
                 logger.info(f"Stored {news_stored} news articles from Polygon")
 
@@ -297,37 +282,30 @@ class TaskScheduler:
         pool = await get_postgres_pool()
         async with pool.acquire() as conn:
             # Get current portfolio state
-            positions = await conn.fetch(
-                """
+            positions = await conn.fetch("""
                 SELECT symbol, quantity, current_price, market_value, unrealized_pnl
                 FROM positions
                 WHERE account_id = $1 AND quantity != 0
-            """,
-                account_id,
-            )
+            """, account_id)
 
-            account_info = await conn.fetchrow(
-                """
+            account_info = await conn.fetchrow("""
                 SELECT cash_balance, equity, buying_power
                 FROM accounts
                 WHERE id = $1
-            """,
-                account_id,
-            )
+            """, account_id)
 
             if not account_info:
                 return
 
             # Calculate portfolio metrics
-            positions_value = sum(float(p["market_value"] or 0) for p in positions)
-            unrealized_pnl = sum(float(p["unrealized_pnl"] or 0) for p in positions)
+            positions_value = sum(float(p['market_value'] or 0) for p in positions)
+            unrealized_pnl = sum(float(p['unrealized_pnl'] or 0) for p in positions)
 
-            total_value = float(account_info["equity"] or 0)
-            cash = float(account_info["cash_balance"] or 0)
+            total_value = float(account_info['equity'] or 0)
+            cash = float(account_info['cash_balance'] or 0)
 
             # Create snapshot
-            await conn.execute(
-                """
+            await conn.execute("""
                 INSERT INTO portfolio_snapshots (
                     id, user_id, account_id, timestamp, snapshot_type,
                     total_value, cash, positions_value, equity,
@@ -339,14 +317,8 @@ class TaskScheduler:
                 )
                 ON CONFLICT (id) DO NOTHING
             """,
-                uuid4(),
-                user_id,
-                account_id,
-                datetime.utcnow(),
-                total_value,
-                cash,
-                positions_value,
-                unrealized_pnl,
+                uuid4(), user_id, account_id, datetime.utcnow(),
+                total_value, cash, positions_value, unrealized_pnl
             )
 
     async def cleanup_old_market_data(self):
@@ -357,12 +329,10 @@ class TaskScheduler:
             pool = await get_postgres_pool()
             async with pool.acquire() as conn:
                 # Clean up old market data cache (keep 30 days)
-                await conn.execute(
-                    """
+                await conn.execute("""
                     DELETE FROM market_data_cache
                     WHERE updated_at < NOW() - INTERVAL '30 days'
-                """
-                )
+                """)
 
                 # Clean up old OHLCV data (keep 2 years)
                 # Note: This would be done in QuestDB, not PostgreSQL
@@ -393,8 +363,7 @@ class TaskScheduler:
             pool = await get_postgres_pool()
             async with pool.acquire() as conn:
                 # Check accounts with high risk
-                high_risk_accounts = await conn.fetch(
-                    """
+                high_risk_accounts = await conn.fetch("""
                     SELECT
                         a.id, a.user_id, a.equity, a.buying_power,
                         SUM(ABS(p.market_value)) as total_exposure
@@ -403,18 +372,13 @@ class TaskScheduler:
                     WHERE a.is_active = true
                     GROUP BY a.id, a.user_id, a.equity, a.buying_power
                     HAVING SUM(ABS(p.market_value)) > a.equity * 0.8  -- 80% exposure threshold
-                """
-                )
+                """)
 
                 for account in high_risk_accounts:
-                    exposure_ratio = float(account["total_exposure"] or 0) / float(
-                        account["equity"] or 1
-                    )
+                    exposure_ratio = float(account['total_exposure'] or 0) / float(account['equity'] or 1)
 
                     if exposure_ratio > 0.9:  # 90% threshold
-                        logger.warning(
-                            f"High risk account {account['id']}: {exposure_ratio:.1%} exposure"
-                        )
+                        logger.warning(f"High risk account {account['id']}: {exposure_ratio:.1%} exposure")
 
                         # TODO: Send alert notification
                         # await send_risk_alert(account['user_id'], exposure_ratio)
@@ -434,7 +398,6 @@ class TaskScheduler:
             if not alert_service.monitoring:
                 # Start monitoring in background task
                 import asyncio
-
                 asyncio.create_task(alert_service.start_monitoring())
                 logger.info("Started price alerts monitoring service")
 

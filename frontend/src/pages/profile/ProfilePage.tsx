@@ -84,11 +84,30 @@ export default function ProfilePage() {
   const saveProfile = async () => {
     if (!user()) return;
     
+    const name = fullName().trim();
+    const phone = phoneNumber().trim();
+
+    if (!name) {
+      setNotification({ type: 'error', message: 'Full name cannot be empty' });
+      return;
+    }
+
+    if (name.length < 2) {
+      setNotification({ type: 'error', message: 'Full name must be at least 2 characters' });
+      return;
+    }
+
+    // Basic phone validation (optional, but if provided must be valid)
+    if (phone && !/^[\d\+\-\(\)\s]{7,20}$/.test(phone)) {
+      setNotification({ type: 'error', message: 'Invalid phone number format' });
+      return;
+    }
+
     try {
       setSaving(true);
       await apiClient.updateSettings({
-        full_name: fullName().trim() || undefined,
-        phone_number: phoneNumber().trim() || undefined
+        full_name: name || undefined,
+        phone_number: phone || undefined
       });
       
       // Refresh user data

@@ -173,12 +173,46 @@ export default function DashboardPage() {
 
   const handleRefresh = () => fetchDashboardData(false);
 
-  // Quick Trade Handler
+  // Quick Trade State for Execution
+  const [tradeLoading, setTradeLoading] = createSignal(false);
+  const [tradeError, setTradeError] = createSignal('');
+  const [tradeSuccess, setTradeSuccess] = createSignal('');
+
+  // Quick Trade Handler - Execute order directly
   const handleQuickTrade = async (e: Event) => {
     e.preventDefault();
-    if (!tradeSymbol()) return;
-    // Navigate to trading page with pre-filled values
-    navigate(`/trading?symbol=${tradeSymbol()}&side=${tradeSide()}&qty=${tradeQty()}`);
+    if (!tradeSymbol() || tradeLoading()) return;
+    
+    setTradeLoading(true);
+    setTradeError('');
+    setTradeSuccess('');
+    
+    try {
+      const order = await apiClient.submitOrder({
+        symbol: tradeSymbol(),
+        side: tradeSide(),
+        order_type: 'market',
+        quantity: tradeQty(),
+        time_in_force: 'day',
+      });
+      
+      console.log(`✅ Quick ${tradeSide()} order placed:`, order);
+      setTradeSuccess(`✓ ${tradeSide().toUpperCase()} ${tradeQty()} ${tradeSymbol()} executed`);
+      setTradeSymbol(''); // Reset form
+      setTradeQty(1);
+      
+      // Refresh dashboard data to show new position/activity
+      setTimeout(() => {
+        fetchDashboardData(false);
+        setTradeSuccess('');
+      }, 2000);
+    } catch (err: any) {
+      console.error('Quick trade failed:', err);
+      setTradeError(err.message || 'Order failed');
+      setTimeout(() => setTradeError(''), 5000);
+    } finally {
+      setTradeLoading(false);
+    }
   };
 
   // Activity icon mapper
@@ -383,15 +417,21 @@ export default function DashboardPage() {
             />
             <button 
               type="submit"
-              disabled={!tradeSymbol()}
+              disabled={!tradeSymbol() || tradeLoading()}
               class={`px-4 rounded font-bold text-xs transition-colors ${
-                !tradeSymbol() ? 'bg-terminal-800 text-gray-500 cursor-not-allowed' :
+                !tradeSymbol() || tradeLoading() ? 'bg-terminal-800 text-gray-500 cursor-not-allowed' :
                 tradeSide() === 'buy' ? 'bg-success-500 hover:bg-success-600 text-black' : 'bg-danger-500 hover:bg-danger-600 text-white'
               }`}
             >
-              GO
+              {tradeLoading() ? '...' : 'GO'}
             </button>
           </form>
+          <Show when={tradeSuccess()}>
+            <div class="mt-2 text-xs text-success-400 font-mono">{tradeSuccess()}</div>
+          </Show>
+          <Show when={tradeError()}>
+            <div class="mt-2 text-xs text-danger-400 font-mono">{tradeError()}</div>
+          </Show>
         </div>
       </div>
 
@@ -473,24 +513,30 @@ export default function DashboardPage() {
               <button onClick={() => navigate('/transactions')} class="text-[10px] text-accent-500 hover:text-accent-400">View All</button>
             </div>
             <div class="flex-1 overflow-y-auto">
-              <For each={activities()}>
-                {(activity) => (
-                  <div class="flex items-center justify-between px-4 py-2 border-b border-terminal-800/50 hover:bg-terminal-800/50 transition-colors text-xs">
-                    <div class="flex items-center gap-3">
-                      {getActivityIcon(activity.type)}
-                      <span class="text-gray-300">{activity.description}</span>
+              <Show when={activities().length > 0} fallback={
+                <div class="flex items-center justify-center h-full text-xs text-gray-500">
+                  <span>No recent activity</span>
+                </div>
+              }>
+                <For each={activities()}>
+                  {(activity) => (
+                    <div class="flex items-center justify-between px-4 py-2 border-b border-terminal-800/50 hover:bg-terminal-800/50 transition-colors text-xs">
+                      <div class="flex items-center gap-3">
+                        {getActivityIcon(activity.type)}
+                        <span class="text-gray-300">{activity.description}</span>
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <span class="font-mono text-gray-500">{new Date(activity.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <Show when={activity.amount}>
+                          <span class={`font-mono w-16 text-right ${activity.amount >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                            {formatCurrency(activity.amount)}
+                          </span>
+                        </Show>
+                      </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                      <span class="font-mono text-gray-500">{new Date(activity.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                      <Show when={activity.amount}>
-                        <span class={`font-mono w-16 text-right ${activity.amount >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
-                          {formatCurrency(activity.amount)}
-                        </span>
-                      </Show>
-                    </div>
-                  </div>
-                )}
-              </For>
+                  )}
+                </For>
+              </Show>
             </div>
           </div>
         </div>

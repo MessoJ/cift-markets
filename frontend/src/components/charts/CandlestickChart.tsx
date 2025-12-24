@@ -344,6 +344,23 @@ export default function CandlestickChart(props: CandlestickChartProps) {
           const candleParam = params[0];
           if (!candleParam || !candleParam.data) return '';
           
+          // Handle Line Chart (data is number)
+          if (typeof candleParam.data === 'number') {
+            const close = candleParam.data;
+            const dateLabel = candleParam.axisValue || candleParam.name;
+            return `
+              <div style="padding: 8px;">
+                <div style="font-weight: bold; margin-bottom: 8px; font-size: 13px;">
+                  ${dateLabel}
+                </div>
+                <div style="font-size: 12px;">
+                  <span style="color: #999;">Price:</span>
+                  <span style="font-weight: 600;">${formatPrice(close)}</span>
+                </div>
+              </div>
+            `;
+          }
+
           // Category axis format: [open, close, low, high]
           const [open, close, low, high] = candleParam.data;
           const dateLabel = candleParam.axisValue || candleParam.name; // Use category label

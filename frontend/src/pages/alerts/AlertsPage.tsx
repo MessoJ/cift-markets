@@ -8,6 +8,7 @@ import { Bell, Plus, Trash2, CheckCircle2, Clock, XCircle, Mail, Smartphone, Mon
 import { apiClient, PriceAlert } from '../../lib/api/client';
 import { formatCurrency } from '../../lib/utils';
 import { Sparkline } from '~/components/ui/Sparkline';
+import { authStore } from '~/stores/auth.store';
 
 export default function AlertsPage() {
   const [loading, setLoading] = createSignal(false);
@@ -52,12 +53,11 @@ export default function AlertsPage() {
 
   // Load notification history from API
   const loadNotifications = async () => {
+    if (!authStore.isAuthenticated) return;
     try {
-      const response = await fetch('/api/v1/alerts/notifications');
-      if (response.ok) {
-        const data = await response.json();
-        setNotificationHistory(data.notifications || []);
-      }
+      // Use apiClient to ensure credentials/headers are included
+      const response = await apiClient.axiosInstance.get('/alerts/notifications');
+      setNotificationHistory(response.data.notifications || []);
     } catch (err) {
       console.error('Failed to load notifications:', err);
     }
@@ -78,6 +78,7 @@ export default function AlertsPage() {
   });
 
   const loadAlerts = async () => {
+    if (!authStore.isAuthenticated) return;
     console.log('🔄 Loading alerts with filter:', filterStatus());
     setLoading(true);
     try {
@@ -104,6 +105,18 @@ export default function AlertsPage() {
       return;
     }
 
+    const sym = symbol().toUpperCase();
+    if (!/^[A-Z0-9]{1,10}$/.test(sym)) {
+      setNotification({type: 'error', message: 'Invalid symbol format'});
+      return;
+    }
+
+    const val = parseFloat(targetValue());
+    if (isNaN(val) || val <= 0) {
+      setNotification({type: 'error', message: 'Target value must be a positive number'});
+      return;
+    }
+
     const methods: ('email' | 'sms' | 'push')[] = [];
     if (notifyEmail()) methods.push('email');
     if (notifySms()) methods.push('sms');
@@ -117,11 +130,11 @@ export default function AlertsPage() {
     console.log('📧 Notification methods:', methods);
 
     const alertData = {
-      symbol: symbol().toUpperCase(),
+      symbol: sym,
       alert_type: alertType(),
-      condition_value: parseFloat(targetValue()), // Mapped to backend expectation
+      condition_value: val, // Mapped to backend expectation
       notification_methods: methods,
-      message: `Alert for ${symbol().toUpperCase()} at ${targetValue()}` // Auto-generate message
+      message: `Alert for ${sym} at ${val}` // Auto-generate message
     };
     
     console.log('📤 Sending alert data:', alertData);

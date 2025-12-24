@@ -40,6 +40,8 @@ const ScreenerPage = lazy(() => import('~/pages/screener/ScreenerPage'));
 const AlertsPage = lazy(() => import('~/pages/alerts/AlertsPage'));
 const VerifyTransactionPage = lazy(() => import('~/pages/VerifyTransactionPage'));
 const SymbolDetailPage = lazy(() => import('~/pages/symbol/SymbolDetailPage'));
+const OrderDetailPage = lazy(() => import('~/pages/order/OrderDetailPage'));
+const PositionDetailPage = lazy(() => import('~/pages/position/PositionDetailPage'));
 
 // Protected Route Component
 function ProtectedRoute(props: { children: any }) {
@@ -356,6 +358,26 @@ export default function App() {
       <Route
         path="/onboarding"
         component={() => <OnboardingPage />}
+      />
+
+      {/* Order Detail Route */}
+      <Route
+        path="/order/:id"
+        component={() => (
+          <ProtectedRoute>
+            <OrderDetailPage />
+          </ProtectedRoute>
+        )}
+      />
+
+      {/* Position Detail Route */}
+      <Route
+        path="/position/:symbol"
+        component={() => (
+          <ProtectedRoute>
+            <PositionDetailPage />
+          </ProtectedRoute>
+        )}
       />
 
       {/* Symbol Detail Route */}

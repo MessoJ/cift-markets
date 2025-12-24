@@ -43,6 +43,8 @@ import { useMarketDataWebSocket } from '~/hooks/useMarketDataWebSocket';
 import type { IndicatorConfig } from '~/components/charts/IndicatorPanel';
 import type { DrawingType, Drawing } from '~/types/drawing.types';
 import { getDrawings, createDrawing, deleteDrawing, deleteAllDrawings } from '~/lib/api/drawings';
+import { apiClient } from '~/lib/api/client';
+import { authStore } from '~/stores/auth.store';
 
 export default function ChartsPage() {
   const [symbol, setSymbol] = createSignal('AAPL');
@@ -236,6 +238,7 @@ export default function ChartsPage() {
    * Load drawings from database
    */
   const loadDrawingsFromDB = async () => {
+    if (!authStore.isAuthenticated) return;
     setLoadingDrawings(true);
     try {
       const loadedDrawings = await getDrawings(symbol(), timeframe());
@@ -447,26 +450,15 @@ export default function ChartsPage() {
   // =========================================================================
   const executeQuickTrade = async (side: 'buy' | 'sell') => {
     try {
-      const response = await fetch('/api/v1/trading/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          symbol: symbol(),
-          side,
-          order_type: 'market',
-          quantity: tradeQuantity(),
-          time_in_force: 'day',
-        }),
+      const order = await apiClient.submitOrder({
+        symbol: symbol(),
+        side,
+        order_type: 'market',
+        quantity: tradeQuantity(),
+        time_in_force: 'day',
       });
-      if (response.ok) {
-        const order = await response.json();
-        console.log(`✅ Quick ${side} order placed:`, order);
-        setShowQuickTrade(false);
-      } else {
-        const error = await response.json();
-        alert(`Order failed: ${error.detail}`);
-      }
+      console.log(`✅ Quick ${side} order placed:`, order);
+      setShowQuickTrade(false);
     } catch (err) {
       console.error('Quick trade failed:', err);
       alert('Failed to place order');

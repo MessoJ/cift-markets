@@ -32,10 +32,12 @@ import { OrderBook, type OrderBookData } from '~/components/ui/OrderBook';
 import { TimeSales, type TradeExecution } from '~/components/ui/TimeSales';
 import { registerShortcut, ShortcutHint } from '~/components/ui/KeyboardShortcuts';
 import CandlestickChart from '~/components/charts/CandlestickChart';
+import CompanyProfileWidget from '~/components/trading/CompanyProfileWidget';
 
 // --- Types ---
 type Tab = 'positions' | 'open_orders' | 'order_history' | 'trade_history';
 type MobileTab = 'chart' | 'trade' | 'book' | 'positions';
+type RightPanelTab = 'watchlist' | 'profile';
 type TimeInForce = 'day' | 'gtc' | 'ioc' | 'fok';
 
 // --- Order Confirmation Modal ---
@@ -244,6 +246,7 @@ export default function TradingPage() {
   // UI State
   const [activeTab, setActiveTab] = createSignal<Tab>('positions');
   const [mobileTab, setMobileTab] = createSignal<MobileTab>('chart');
+  const [rightPanelTab, setRightPanelTab] = createSignal<RightPanelTab>('watchlist');
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
   const [showRiskCalc, setShowRiskCalc] = createSignal(false);
   
@@ -298,11 +301,19 @@ export default function TradingPage() {
       setOrderBook(ob);
       setTimeSales(ts);
       
-      // Pre-fill limit price if empty
-      if (!limitPrice() && q) setLimitPrice(q.price.toFixed(2));
+      // Pre-fill limit price with current market price
+      if (q && q.price) setLimitPrice(q.price.toFixed(2));
       
     } catch (err) {
       console.error('Market data fetch failed', err);
+    }
+  });
+
+  // 2b. Order Type Change Effect - ensure limit price is set when switching to limit
+  createEffect(() => {
+    const type = orderType();
+    if (['limit', 'stop_limit'].includes(type) && !limitPrice() && quote()?.price) {
+      setLimitPrice(quote()!.price.toFixed(2));
     }
   });
 
@@ -350,14 +361,58 @@ export default function TradingPage() {
     setOrderError('');
     setOrderSuccess('');
 
+    // --- ROBUST INLINE VALIDATION ---
+    
+    // 1. Symbol Validation
+    const sym = symbol().toUpperCase().trim();
+    if (!sym) {
+      setOrderError('Please enter a valid symbol (e.g., AAPL)');
+      return;
+    }
+
+    // 2. Quantity Validation
+    const qty = parseFloat(quantity());
+    if (isNaN(qty) || qty <= 0) {
+      setOrderError('Please enter a valid positive quantity');
+      return;
+    }
+
+    // 3. Price Validation (for Limit/Stop orders)
+    const type = orderType();
+    let limitP: number | undefined = undefined;
+    let stopP: number | undefined = undefined;
+
+    if (['limit', 'stop_limit'].includes(type)) {
+      limitP = parseFloat(limitPrice());
+      if (isNaN(limitP) || limitP <= 0) {
+        setOrderError('Limit price is required and must be positive');
+        return;
+      }
+    }
+
+    if (['stop', 'stop_limit'].includes(type)) {
+      stopP = parseFloat(stopPrice());
+      if (isNaN(stopP) || stopP <= 0) {
+        setOrderError('Stop price is required and must be positive');
+        return;
+      }
+    }
+
+    // 4. Time in Force Validation
+    const timeInForce = tif();
+    if (!['day', 'gtc', 'ioc', 'fok'].includes(timeInForce)) {
+      setOrderError('Invalid Time in Force selection');
+      return;
+    }
+
     const orderData = {
-      symbol: symbol().toUpperCase(),
+      symbol: sym,
       side: side(),
-      order_type: orderType(),
-      quantity: parseFloat(quantity()),
-      limit_price: ['limit', 'stop_limit'].includes(orderType()) ? parseFloat(limitPrice()) : undefined,
-      stop_price: ['stop', 'stop_limit'].includes(orderType()) ? parseFloat(stopPrice()) : undefined,
-      time_in_force: tif(),
+      order_type: type,
+      quantity: qty,
+      price: limitP, // Mapped to 'price' for backend compatibility
+      stop_price: stopP,
+      time_in_force: timeInForce,
       take_profit: useBracket() && takeProfit() ? parseFloat(takeProfit()) : undefined,
       stop_loss: useBracket() && stopLoss() ? parseFloat(stopLoss()) : undefined,
       estimated_value: estimatedTotal()
@@ -383,7 +438,7 @@ export default function TradingPage() {
         side: orderData.side,
         order_type: orderData.order_type,
         quantity: orderData.quantity,
-        limit_price: orderData.limit_price,
+        price: orderData.price, // Send as 'price'
         stop_price: orderData.stop_price,
         time_in_force: orderData.time_in_force
       });
@@ -1117,39 +1172,67 @@ export default function TradingPage() {
             </form>
           </div>
 
-          {/* Watchlist - Separate scrollable section */}
-          <div class="h-48 flex flex-col border-t border-terminal-800 shrink-0">
-            <div class="px-4 py-2 border-b border-terminal-800 flex items-center justify-between bg-terminal-850">
-              <h3 class="text-xs font-bold text-gray-400 uppercase">Watchlist</h3>
-              <button class="text-gray-500 hover:text-white"><Plus class="w-4 h-4" /></button>
+          {/* Right Panel Tabs (Watchlist / Profile) */}
+          <div class="flex-1 flex flex-col border-t border-terminal-800 min-h-0">
+            <div class="flex border-b border-terminal-800 bg-terminal-850">
+              <button 
+                onClick={() => setRightPanelTab('watchlist')}
+                class={`flex-1 py-2 text-xs font-bold uppercase transition-colors ${rightPanelTab() === 'watchlist' ? 'text-white bg-terminal-800 border-b-2 border-accent-500' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                Watchlist
+              </button>
+              <button 
+                onClick={() => setRightPanelTab('profile')}
+                class={`flex-1 py-2 text-xs font-bold uppercase transition-colors ${rightPanelTab() === 'profile' ? 'text-white bg-terminal-800 border-b-2 border-accent-500' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                Profile
+              </button>
             </div>
-            <div class="flex-1 overflow-auto">
-              <Show when={!watchlistLoading()} fallback={
-                <div class="flex items-center justify-center h-full text-gray-500">
-                  <Loader2 class="w-4 h-4 animate-spin mr-2" /> Loading...
-                </div>
-              }>
-                <table class="w-full text-left border-collapse">
-                  <tbody class="text-xs font-mono divide-y divide-terminal-800">
-                    <For each={watchlistQuotes()} fallback={
-                      <tr><td colspan="3" class="p-4 text-center text-gray-600">No symbols in watchlist</td></tr>
-                    }>
-                      {(item) => (
-                        <tr 
-                          onClick={() => setSymbol(item.symbol)}
-                          class={`hover:bg-terminal-800 cursor-pointer transition-colors ${symbol() === item.symbol ? 'bg-accent-500/10' : ''}`}
-                        >
-                          <td class="p-2 font-bold text-white">{item.symbol}</td>
-                          <td class="p-2 text-right text-white">{formatCurrency(item.price || 0)}</td>
-                          <td class={`p-2 text-right ${(item.change || 0) >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
-                            {formatPercent(item.change_pct || 0)}
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </Show>
+
+            <div class="flex-1 overflow-hidden relative">
+              <Switch>
+                <Match when={rightPanelTab() === 'watchlist'}>
+                  <div class="absolute inset-0 flex flex-col">
+                    <div class="px-4 py-2 border-b border-terminal-800 flex items-center justify-between bg-terminal-900">
+                      <h3 class="text-[10px] font-bold text-gray-500 uppercase">My Watchlist</h3>
+                      <button class="text-gray-500 hover:text-white"><Plus class="w-3 h-3" /></button>
+                    </div>
+                    <div class="flex-1 overflow-auto">
+                      <Show when={!watchlistLoading()} fallback={
+                        <div class="flex items-center justify-center h-full text-gray-500">
+                          <Loader2 class="w-4 h-4 animate-spin mr-2" /> Loading...
+                        </div>
+                      }>
+                        <table class="w-full text-left border-collapse">
+                          <tbody class="text-xs font-mono divide-y divide-terminal-800">
+                            <For each={watchlistQuotes()} fallback={
+                              <tr><td colspan="3" class="p-4 text-center text-gray-600">No symbols in watchlist</td></tr>
+                            }>
+                              {(item) => (
+                                <tr 
+                                  onClick={() => setSymbol(item.symbol)}
+                                  class={`hover:bg-terminal-800 cursor-pointer transition-colors ${symbol() === item.symbol ? 'bg-accent-500/10' : ''}`}
+                                >
+                                  <td class="p-2 font-bold text-white">{item.symbol}</td>
+                                  <td class="p-2 text-right text-white">{formatCurrency(item.price || 0)}</td>
+                                  <td class={`p-2 text-right ${(item.change || 0) >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                                    {formatPercent(item.change_pct || 0)}
+                                  </td>
+                                </tr>
+                              )}
+                            </For>
+                          </tbody>
+                        </table>
+                      </Show>
+                    </div>
+                  </div>
+                </Match>
+                <Match when={rightPanelTab() === 'profile'}>
+                  <div class="absolute inset-0 overflow-auto p-2">
+                    <CompanyProfileWidget symbol={symbol()} />
+                  </div>
+                </Match>
+              </Switch>
             </div>
           </div>
 

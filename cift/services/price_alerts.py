@@ -334,7 +334,7 @@ class PriceAlertService:
             rows = await conn.fetch(
                 """
                 SELECT * FROM price_alerts
-                WHERE status = 'active'
+                WHERE is_active = true
                 AND triggered_at IS NULL
                 AND (expires_at IS NULL OR expires_at > NOW())
             """
