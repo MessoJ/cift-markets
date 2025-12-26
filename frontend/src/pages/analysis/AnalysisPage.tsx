@@ -672,9 +672,9 @@ export default function AnalysisPage() {
   });
   
   return (
-    <div class="min-h-screen bg-slate-900 text-white">
+    <div class="min-h-screen bg-slate-950 text-white">
       {/* Header Section */}
-      <div class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
+      <div class="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-10">
         <div class="max-w-7xl mx-auto px-4 py-4">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -953,7 +953,7 @@ export default function AnalysisPage() {
               
               {/* Bullish/Bearish/Risks Grid */}
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                   <div class="flex items-center gap-2 mb-3">
                     <TrendingUp class="h-4 w-4 text-emerald-400" />
                     <h4 class="font-medium text-emerald-400">Bullish Factors</h4>
@@ -973,7 +973,7 @@ export default function AnalysisPage() {
                   </ul>
                 </div>
                 
-                <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                   <div class="flex items-center gap-2 mb-3">
                     <TrendingDown class="h-4 w-4 text-red-400" />
                     <h4 class="font-medium text-red-400">Bearish Factors</h4>
@@ -993,7 +993,7 @@ export default function AnalysisPage() {
                   </ul>
                 </div>
                 
-                <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                   <div class="flex items-center gap-2 mb-3">
                     <AlertTriangle class="h-4 w-4 text-yellow-400" />
                     <h4 class="font-medium text-yellow-400">Key Risks</h4>
