@@ -165,6 +165,24 @@ export interface PerformanceMetrics {
   _backend?: 'clickhouse+polars' | 'postgresql';
 }
 
+export interface MLPrediction {
+  timestamp: number;
+  symbol: string;
+  direction: 'long' | 'short' | 'neutral';
+  direction_probability: number;
+  magnitude: number;
+  confidence: number;
+  model_agreement: number;
+  current_regime: string;
+  regime_probability: number;
+  should_trade: boolean;
+  position_size: number;
+  stop_loss_bps: number;
+  take_profit_bps: number;
+  model_weights: Record<string, number>;
+  inference_latency_ms: number;
+}
+
 export interface OrderDetail {
   order: Order;
   fills: Array<{
@@ -1217,6 +1235,43 @@ export class CIFTApiClient {
         return_1d: 0, return_1w: 0, return_1m: 0, return_3m: 0, return_ytd: 0,
         best_trades: [], worst_trades: []
       };
+    }
+  }
+
+  // ==========================================================================
+  // ML INFERENCE
+  // ==========================================================================
+
+  /**
+   * Get ML model prediction for a symbol.
+   * Returns direction, confidence, and trade recommendation.
+   */
+  async getMLPrediction(symbol: string): Promise<MLPrediction | null> {
+    try {
+      const { data } = await this.axiosInstance.post<MLPrediction>('/predict', { symbol });
+      return data;
+    } catch (error) {
+      console.warn('Failed to get ML prediction:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get ML system status (models loaded, pipeline status).
+   */
+  async getMLSystemStatus(): Promise<{
+    status: string;
+    models: Array<{ model_name: string; loaded: boolean; total_predictions: number }>;
+    pipeline_running: boolean;
+    active_symbols: string[];
+    total_predictions: number;
+  } | null> {
+    try {
+      const { data } = await this.axiosInstance.get('/predict/status');
+      return data;
+    } catch (error) {
+      console.warn('Failed to get ML system status:', error);
+      return null;
     }
   }
 
