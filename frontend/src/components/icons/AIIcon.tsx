@@ -7,7 +7,7 @@ interface AIIconProps {
   color?: string;
 }
 
-const AIIcon = (props: AIIconProps): JSX.Element => {
+export const AIIcon = (props: AIIconProps): JSX.Element => {
   const merged = mergeProps({ size: 24, animate: false, color: '#f97316' }, props);
   
   return (
@@ -119,4 +119,4 @@ const AIIcon = (props: AIIconProps): JSX.Element => {
   );
 };
 
-export default AIIcon;
+
