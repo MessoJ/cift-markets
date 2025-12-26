@@ -45,6 +45,7 @@ import { formatCurrency, formatPercent, formatNumber, formatLargeNumber } from '
 import { DonutChart } from '~/components/ui/DonutChart';
 import { MiniEquityCurve } from '~/components/ui/EquityCurve';
 import { NoPositionsState } from '~/components/ui/EmptyState';
+import { PortfolioAnalyzer } from '~/components/analysis/PortfolioAnalyzer';
 
 interface AnalyticsData {
   sharpe_ratio: number;
@@ -332,7 +333,10 @@ export default function PortfolioPage() {
             {pos.symbol.slice(0, 2)}
           </div>
           <div class="flex flex-col">
-            <span class="font-bold text-white text-sm">{pos.symbol}</span>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white text-sm">{pos.symbol}</span>
+              <PortfolioAnalyzer symbol={pos.symbol} currentPrice={pos.current_price} avgCost={pos.avg_cost} />
+            </div>
             <span class={`text-[10px] ${pos.side === 'long' ? 'text-success-400' : 'text-danger-400'}`}>
               {pos.side.toUpperCase()} • {formatPercent((enhancedPositions().find(p => p.symbol === pos.symbol)?.weight || 0))} of portfolio
             </span>
@@ -678,7 +682,12 @@ export default function PortfolioPage() {
                                 {pos.symbol.substring(0, 2)}
                               </div>
                               <div>
-                                <div class="font-bold text-white">{pos.symbol}</div>
+                                <div class="flex items-center gap-2">
+                                  <div class="font-bold text-white">{pos.symbol}</div>
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <PortfolioAnalyzer symbol={pos.symbol} currentPrice={pos.current_price} avgCost={pos.avg_cost} />
+                                  </div>
+                                </div>
                                 <div class={`text-[10px] font-mono ${pos.side === 'long' ? 'text-success-400' : 'text-danger-400'}`}>
                                   {pos.side.toUpperCase()}
                                 </div>

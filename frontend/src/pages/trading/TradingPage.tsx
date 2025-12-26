@@ -26,6 +26,7 @@ import {
 } from 'lucide-solid';
 import { apiClient, Quote, Order, Position, Watchlist, PortfolioSummary } from '~/lib/api/client';
 import { formatCurrency, formatPercent } from '~/lib/utils/format';
+import { marketStore } from '~/stores/marketData.store';
 
 // Components
 import { OrderBook, type OrderBookData } from '~/components/ui/OrderBook';
@@ -33,6 +34,7 @@ import { TimeSales, type TradeExecution } from '~/components/ui/TimeSales';
 import { registerShortcut, ShortcutHint } from '~/components/ui/KeyboardShortcuts';
 import CandlestickChart from '~/components/charts/CandlestickChart';
 import CompanyProfileWidget from '~/components/trading/CompanyProfileWidget';
+import { InlineAnalyzer } from '~/components/analysis/InlineAnalyzer';
 
 // --- Types ---
 type Tab = 'positions' | 'open_orders' | 'order_history' | 'trade_history';
@@ -202,7 +204,29 @@ export default function TradingPage() {
   
   // -- State --
   const [symbol, setSymbol] = createSignal(searchParams.symbol || 'AAPL');
-  const [quote, setQuote] = createSignal<Quote | null>(null);
+  // Use market store for real-time quote
+  const realtimeQuote = () => marketStore.getTicker(symbol());
+  const [staticQuote, setStaticQuote] = createSignal<Quote | null>(null);
+  
+  // Derived quote combining static (initial) and real-time updates
+  const quote = () => {
+    const rt = realtimeQuote();
+    const st = staticQuote();
+    if (rt) {
+      return {
+        symbol: rt.symbol,
+        price: rt.price,
+        change: rt.change || st?.change || 0,
+        changePercent: rt.changePercent || st?.changePercent || 0,
+        volume: rt.volume || st?.volume || 0,
+        bid: rt.bid || st?.bid,
+        ask: rt.ask || st?.ask,
+        timestamp: rt.timestamp
+      } as Quote;
+    }
+    return st;
+  };
+
   const [loading, setLoading] = createSignal(true);
   
   // Portfolio State (for buying power)
@@ -257,6 +281,9 @@ export default function TradingPage() {
 
   // 1. Initial Data Load
   onMount(async () => {
+    // Connect to WebSocket
+    marketStore.connect();
+
     setLoading(true);
     try {
       // Load Portfolio (for buying power)
@@ -290,6 +317,9 @@ export default function TradingPage() {
     // Update URL without reloading
     setSearchParams({ symbol: sym });
 
+    // Subscribe to real-time updates
+    marketStore.subscribe([sym]);
+
     try {
       const [q, ob, ts] = await Promise.all([
         apiClient.getQuote(sym),
@@ -297,7 +327,7 @@ export default function TradingPage() {
         fetchTimeSalesData(sym)
       ]);
       
-      setQuote(q);
+      setStaticQuote(q);
       setOrderBook(ob);
       setTimeSales(ts);
       
@@ -308,6 +338,15 @@ export default function TradingPage() {
       console.error('Market data fetch failed', err);
     }
   });
+
+  // Cleanup subscription on unmount or symbol change (handled by store logic mostly, but good practice)
+  createEffect((prevSym) => {
+    const sym = symbol().toUpperCase();
+    if (prevSym && prevSym !== sym) {
+      marketStore.unsubscribe([prevSym]);
+    }
+    return sym;
+  }, '');
 
   // 2b. Order Type Change Effect - ensure limit price is set when switching to limit
   createEffect(() => {
@@ -567,6 +606,10 @@ export default function TradingPage() {
                 <div>
                   <span class="block text-[10px] uppercase">Vol</span>
                   <span class="text-white tabular-nums">{((quote()!.volume || 0) / 1000000).toFixed(2)}M</span>
+                </div>
+                {/* Inline AI Analyzer */}
+                <div class="border-l border-terminal-700 pl-3 ml-1">
+                  <InlineAnalyzer symbol={symbol()} />
                 </div>
               </div>
             </div>

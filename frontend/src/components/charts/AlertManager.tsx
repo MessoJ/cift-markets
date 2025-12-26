@@ -8,6 +8,7 @@
 import { createSignal, createEffect, For, Show, onMount } from 'solid-js';
 import { Bell, BellOff, Plus, Trash2, TrendingUp, TrendingDown } from 'lucide-solid';
 import { authStore } from '~/stores/auth.store';
+import { apiClient } from '~/lib/api/client';
 
 export interface PriceAlert {
   id: string;
@@ -45,17 +46,14 @@ export default function AlertManager(props: AlertManagerProps) {
     if (!authStore.isAuthenticated) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/price-alerts?symbol=${props.symbol}&active_only=false`, {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setAlerts(data);
-        console.log(`🔔 Loaded ${data.length} alerts for ${props.symbol}`);
+      const data = await apiClient.get(`/price-alerts?symbol=${props.symbol}&active_only=false`);
+      setAlerts(data || []);
+      console.log(`🔔 Loaded ${data?.length || 0} alerts for ${props.symbol}`);
+    } catch (error: any) {
+      // Silently handle auth errors
+      if (error?.status !== 401) {
+        console.error('Failed to load alerts:', error);
       }
-    } catch (error) {
-      console.error('Failed to load alerts:', error);
     } finally {
       setLoading(false);
     }
@@ -73,32 +71,21 @@ export default function AlertManager(props: AlertManagerProps) {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/price-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          symbol: props.symbol,
-          alert_type: alertType(),
-          price: price,
-          message: alertMessage() || null,
-        }),
+      const newAlert = await apiClient.post('/price-alerts', {
+        symbol: props.symbol,
+        alert_type: alertType(),
+        price: price,
+        message: alertMessage() || null,
       });
 
-      if (response.ok) {
-        const newAlert = await response.json();
-        setAlerts([newAlert, ...alerts()]);
-        setShowCreateDialog(false);
-        setAlertPrice('');
-        setAlertMessage('');
-        console.log(`✅ Created alert: ${props.symbol} ${alertType()} $${price}`);
-      } else {
-        const error = await response.json();
-        alert(`Failed to create alert: ${error.detail}`);
-      }
-    } catch (error) {
+      setAlerts([newAlert, ...alerts()]);
+      setShowCreateDialog(false);
+      setAlertPrice('');
+      setAlertMessage('');
+      console.log(`✅ Created alert: ${props.symbol} ${alertType()} $${price}`);
+    } catch (error: any) {
       console.error('Failed to create alert:', error);
-      alert('Failed to create alert');
+      alert(`Failed to create alert: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -112,15 +99,9 @@ export default function AlertManager(props: AlertManagerProps) {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/price-alerts/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        setAlerts(alerts().filter(a => a.id !== id));
-        console.log(`🗑️ Deleted alert: ${id}`);
-      }
+      await apiClient.delete(`/price-alerts/${id}`);
+      setAlerts(alerts().filter(a => a.id !== id));
+      console.log(`🗑️ Deleted alert: ${id}`);
     } catch (error) {
       console.error('Failed to delete alert:', error);
     } finally {
@@ -133,18 +114,9 @@ export default function AlertManager(props: AlertManagerProps) {
    */
   const toggleAlert = async (id: string, currentState: boolean) => {
     try {
-      const response = await fetch(`/api/v1/price-alerts/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ enabled: !currentState }),
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        setAlerts(alerts().map(a => a.id === id ? updated : a));
-        console.log(`🔔 Toggled alert: ${id} → ${!currentState}`);
-      }
+      const updated = await apiClient.patch(`/price-alerts/${id}`, { enabled: !currentState });
+      setAlerts(alerts().map(a => a.id === id ? updated : a));
+      console.log(`🔔 Toggled alert: ${id} → ${!currentState}`);
     } catch (error) {
       console.error('Failed to toggle alert:', error);
     }
@@ -157,25 +129,21 @@ export default function AlertManager(props: AlertManagerProps) {
     if (!props.currentPrice) return;
 
     try {
-      const response = await fetch(
-        `/api/v1/price-alerts/check/${props.symbol}?current_price=${props.currentPrice}`,
-        { credentials: 'include' }
+      const result = await apiClient.get(
+        `/price-alerts/check/${props.symbol}?current_price=${props.currentPrice}`
       );
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.triggered_count > 0) {
-          console.log(`🚨 ${result.triggered_count} alerts triggered!`);
-          loadAlerts(); // Reload to get updated triggered status
-          
-          // Notify parent component
-          result.triggered_ids.forEach((id: string) => {
-            const alert = alerts().find(a => a.id === id);
-            if (alert) {
-              props.onAlertTriggered?.(alert);
-            }
-          });
-        }
+      if (result?.triggered_count > 0) {
+        console.log(`🚨 ${result.triggered_count} alerts triggered!`);
+        loadAlerts(); // Reload to get updated triggered status
+        
+        // Notify parent component
+        result.triggered_ids?.forEach((id: string) => {
+          const alert = alerts().find(a => a.id === id);
+          if (alert) {
+            props.onAlertTriggered?.(alert);
+          }
+        });
       }
     } catch (error) {
       console.error('Failed to check alerts:', error);

@@ -229,75 +229,81 @@ async def _get_ohlcv_from_postgres(
     This is a fallback when QuestDB is not available or has no data.
     """
     async with db_manager.pool.acquire() as conn:
-        # For 1m bars, query directly
+        # Try to find exact timeframe match first
+        rows = await conn.fetch(
+            """
+            SELECT timestamp, symbol, open, high, low, close, volume
+            FROM ohlcv_bars
+            WHERE symbol = $1 AND timeframe = $2
+              AND timestamp BETWEEN $3 AND $4
+            ORDER BY timestamp DESC
+            LIMIT $5
+            """,
+            symbol.upper(), timeframe, start_time, end_time, n_bars
+        )
+        
+        if rows:
+             return [dict(row) for row in rows]
+
+        # If not found, and timeframe != '1m', try aggregating from '1m'
         if timeframe == '1m':
+             return []
+
+        # For other timeframes, aggregate from 1m bars using proper interval
+        # PostgreSQL date_trunc only supports: minute, hour, day, week, month, year
+        # For multi-minute intervals, we need to use time_bucket or DIV approach
+        minutes_map = {
+            '5m': 5, '15m': 15, '30m': 30,
+            '1h': 60, '4h': 240, '1d': 1440,
+        }
+        minutes = minutes_map.get(timeframe, 1)
+
+        if minutes >= 60:
+            # Use date_trunc for hour/day intervals
+            if minutes == 60:
+                trunc_unit = 'hour'
+            elif minutes == 1440:
+                trunc_unit = 'day'
+            else:
+                # 4h - round to nearest 4 hours
+                trunc_unit = 'hour'
+
             rows = await conn.fetch(
-                """
-                SELECT timestamp, symbol, open, high, low, close, volume
+                f"""
+                SELECT
+                    date_trunc('{trunc_unit}', timestamp) as timestamp,
+                    symbol,
+                    (array_agg(open ORDER BY timestamp ASC))[1] as open,
+                    MAX(high) as high,
+                    MIN(low) as low,
+                    (array_agg(close ORDER BY timestamp DESC))[1] as close,
+                    SUM(volume) as volume
                 FROM ohlcv_bars
                 WHERE symbol = $1 AND timeframe = '1m'
                   AND timestamp BETWEEN $2 AND $3
+                GROUP BY date_trunc('{trunc_unit}', timestamp), symbol
                 ORDER BY timestamp DESC
                 LIMIT $4
                 """,
                 symbol.upper(), start_time, end_time, n_bars
             )
         else:
-            # For other timeframes, aggregate from 1m bars using proper interval
-            # PostgreSQL date_trunc only supports: minute, hour, day, week, month, year
-            # For multi-minute intervals, we need to use time_bucket or DIV approach
-            minutes_map = {
-                '5m': 5, '15m': 15, '30m': 30,
-                '1h': 60, '4h': 240, '1d': 1440,
-            }
-            minutes = minutes_map.get(timeframe, 1)
-
-            if minutes >= 60:
-                # Use date_trunc for hour/day intervals
-                if minutes == 60:
-                    trunc_unit = 'hour'
-                elif minutes == 1440:
-                    trunc_unit = 'day'
-                else:
-                    # 4h - round to nearest 4 hours
-                    trunc_unit = 'hour'
-
-                rows = await conn.fetch(
-                    f"""
-                    SELECT
-                        date_trunc('{trunc_unit}', timestamp) as timestamp,
-                        symbol,
-                        (array_agg(open ORDER BY timestamp ASC))[1] as open,
-                        MAX(high) as high,
-                        MIN(low) as low,
-                        (array_agg(close ORDER BY timestamp DESC))[1] as close,
-                        SUM(volume) as volume
-                    FROM ohlcv_bars
-                    WHERE symbol = $1 AND timeframe = '1m'
-                      AND timestamp BETWEEN $2 AND $3
-                    GROUP BY date_trunc('{trunc_unit}', timestamp), symbol
-                    ORDER BY timestamp DESC
-                    LIMIT $4
-                    """,
-                    symbol.upper(), start_time, end_time, n_bars
-                )
-            else:
-                # For 5m, 15m, 30m - use epoch-based bucketing
-                rows = await conn.fetch(
-                    f"""
-                    SELECT
-                        to_timestamp(
-                            (EXTRACT(EPOCH FROM timestamp)::bigint / {minutes * 60}) * {minutes * 60}
-                        ) as timestamp,
-                        symbol,
-                        (array_agg(open ORDER BY timestamp ASC))[1] as open,
-                        MAX(high) as high,
-                        MIN(low) as low,
-                        (array_agg(close ORDER BY timestamp DESC))[1] as close,
-                        SUM(volume) as volume
-                    FROM ohlcv_bars
-                    WHERE symbol = $1 AND timeframe = '1m'
-                      AND timestamp BETWEEN $2 AND $3
+            # For 5m, 15m, 30m - use epoch-based bucketing
+            rows = await conn.fetch(
+                f"""
+                SELECT
+                    to_timestamp(
+                        (EXTRACT(EPOCH FROM timestamp)::bigint / {minutes * 60}) * {minutes * 60}
+                    ) as timestamp,
+                    symbol,
+                    (array_agg(open ORDER BY timestamp ASC))[1] as open,
+                    MAX(high) as high,
+                    MIN(low) as low,
+                    (array_agg(close ORDER BY timestamp DESC))[1] as close,
+                    SUM(volume) as volume
+                FROM ohlcv_bars
+                WHERE symbol = $1 AND timeframe = '1m'
+                  AND timestamp BETWEEN $2 AND $3
                     GROUP BY
                         (EXTRACT(EPOCH FROM timestamp)::bigint / {minutes * 60}),
                         symbol

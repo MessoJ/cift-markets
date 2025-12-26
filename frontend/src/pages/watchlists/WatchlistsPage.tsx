@@ -18,6 +18,7 @@ import { apiClient } from '~/lib/api/client';
 import { formatCurrency, formatPercent, formatLargeNumber } from '~/lib/utils/format';
 import { Plus, X, TrendingUp, Bell, MoreHorizontal, Star, Edit2, Trash2, GripVertical, ArrowUpDown, Search, ChevronDown, Check, LayoutGrid, List, RefreshCw, Filter, TrendingDown, BarChart3, Clock } from 'lucide-solid';
 import { Sparkline } from '~/components/ui/Sparkline';
+import { WatchlistAnalyzer } from '~/components/analysis/WatchlistAnalyzer';
 
 export default function WatchlistsPage() {
   const navigate = useNavigate();
@@ -258,15 +259,20 @@ export default function WatchlistsPage() {
       sortable: true,
       align: 'left',
       render: (item) => (
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 relative">
           <GripVertical class="w-3 h-3 text-gray-600 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity" />
           <div>
-            <button
-              onClick={() => navigate(`/symbol/${item.symbol}`)}
-              class="font-mono font-bold text-white hover:text-accent-500 transition-colors text-sm"
-            >
-              {item.symbol}
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                onClick={() => navigate(`/symbol/${item.symbol}`)}
+                class="font-mono font-bold text-white hover:text-accent-500 transition-colors text-sm"
+              >
+                {item.symbol}
+              </button>
+              <div onClick={(e) => e.stopPropagation()}>
+                <WatchlistAnalyzer symbol={item.symbol} />
+              </div>
+            </div>
             <div class="text-[10px] text-gray-500 truncate max-w-[120px]">{item.name || '-'}</div>
           </div>
         </div>
@@ -692,12 +698,17 @@ export default function WatchlistsPage() {
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-xs font-mono text-gray-400">{formatCurrency(item.price || 0)}</span>
-                    <div class="w-12 h-4">
-                      <Sparkline 
-                        data={getSparklineData(item)} 
-                        height={16} 
-                        color={(item.change || 0) >= 0 ? '#22c55e' : '#ef4444'} 
-                      />
+                    <div class="flex items-center gap-2">
+                      <div class="w-12 h-4">
+                        <Sparkline 
+                          data={getSparklineData(item)} 
+                          height={16} 
+                          color={(item.change || 0) >= 0 ? '#22c55e' : '#ef4444'} 
+                        />
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <WatchlistAnalyzer symbol={item.symbol} />
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -787,12 +798,17 @@ export default function WatchlistsPage() {
                             <span class="w-1 h-1 rounded-full bg-terminal-700"></span>
                             <span>MCAP: {formatLargeNumber(item.market_cap || 0)}</span>
                           </div>
-                          <div class="w-24 h-8 opacity-80">
-                            <Sparkline 
-                              data={getSparklineData(item)} 
-                              height={32} 
-                              color={(item.change || 0) >= 0 ? '#22c55e' : '#ef4444'} 
-                            />
+                          <div class="flex items-center gap-3">
+                            <div class="w-24 h-8 opacity-80">
+                              <Sparkline 
+                                data={getSparklineData(item)} 
+                                height={32} 
+                                color={(item.change || 0) >= 0 ? '#22c55e' : '#ef4444'} 
+                              />
+                            </div>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <WatchlistAnalyzer symbol={item.symbol} />
+                            </div>
                           </div>
                         </div>
                       </button>

@@ -459,6 +459,28 @@ async def get_economic_calendar(
         ]
 
 
+@router.post("/refresh")
+async def refresh_news(
+    limit: int = 50,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Force refresh of market news from external providers."""
+    from cift.services.news_service import NewsService
+
+    try:
+        async with NewsService() as service:
+            articles = await service.fetch_latest_news(limit=limit)
+            
+        return {
+            "status": "success",
+            "message": f"Fetched {len(articles)} new articles",
+            "count": len(articles)
+        }
+    except Exception as e:
+        logger.error(f"Failed to refresh news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/economic-calendar/refresh")
 async def refresh_economic_calendar(
     user_id: UUID = Depends(get_current_user_id),

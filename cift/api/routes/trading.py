@@ -462,9 +462,34 @@ async def get_order_by_id(
         )
         
         if not order_row:
-            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+            raise HTTPException(status_code=404, detail="Order not found")
+            
+        # Get fills
+        fills = await conn.fetch(
+            "SELECT * FROM order_fills WHERE order_id = $1 ORDER BY filled_at DESC",
+            order_id
+        )
         
-        return dict(order_row)
+        # Get execution quality metrics if available
+        exec_quality = await conn.fetchrow(
+            """
+            SELECT 
+                avg_fill_price,
+                slippage_bps,
+                total_commission,
+                fill_rate,
+                time_to_first_fill_ms
+            FROM execution_quality_metrics 
+            WHERE order_id = $1
+            """,
+            order_id
+        )
+        
+        return {
+            "order": dict(order_row),
+            "fills": [dict(f) for f in fills],
+            "execution_quality": dict(exec_quality) if exec_quality else None
+        }
 
 
 @router.delete("/orders/{order_id}")
