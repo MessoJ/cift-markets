@@ -379,6 +379,14 @@ app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 
+# Stock Analysis Engine (AI-powered recommendations)
+try:
+    from cift.api.routes import analysis
+    app.include_router(analysis.router, prefix="/api/v1")
+    logger.info("Stock analysis routes loaded")
+except Exception as e:
+    logger.warning(f"Stock analysis routes not available: {e}")
+
 # Real-time streaming routes (SSE)
 try:
     from cift.api.routes import stream
