@@ -327,22 +327,23 @@ class StockAnalyzer:
             logger.error(f"Quote fetch failed for {symbol}: {quote}")
             quote = {"price": 0, "change": 0, "change_percent": 0}
         
-        if isinstance(technical, Exception):
+        if isinstance(technical, Exception) or not technical:
             logger.error(f"Technical analysis failed for {symbol}: {technical}")
             technical = self._default_technical()
 
         
-        if isinstance(fundamental, Exception):
+        if isinstance(fundamental, Exception) or not fundamental:
             logger.error(f"Fundamental analysis failed for {symbol}: {fundamental}")
             fundamental = self._default_fundamental()
         
-        if isinstance(sentiment, Exception):
+        if isinstance(sentiment, Exception) or not sentiment:
             logger.error(f"Sentiment analysis failed for {symbol}: {sentiment}")
             sentiment = self._default_sentiment()
         
-        if isinstance(momentum, Exception):
+        if isinstance(momentum, Exception) or not momentum:
             logger.error(f"Momentum analysis failed for {symbol}: {momentum}")
             momentum = self._default_momentum()
+
         
         # Calculate risk score
         risk = await self._analyze_risk(symbol, quote, technical, momentum)
