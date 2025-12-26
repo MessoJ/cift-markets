@@ -171,10 +171,6 @@ class MarketDataService:
             
         return candles
 
-                logger.warning(f"Polygon batch quote failed: {e}")
-        
-        return results
-
     async def get_company_profile(self, symbol: str) -> dict | None:
         """
         Get company profile.
