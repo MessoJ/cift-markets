@@ -652,7 +652,7 @@ export class CIFTApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 10000, // Reduce timeout to 10 seconds for faster feedback
+      timeout: 30000, // 30 seconds for AI-powered analysis
       withCredentials: true, // Enable CORS credentials
     });
 
@@ -706,6 +706,27 @@ export class CIFTApiClient {
 
     // Load tokens from localStorage
     this.loadTokens();
+  }
+
+  // Generic HTTP methods exposed for flexibility
+  async get(url: string, config?: AxiosRequestConfig): Promise<any> {
+    const { data } = await this.axiosInstance.get(url, config);
+    return data;
+  }
+
+  async post(url: string, data?: any, config?: AxiosRequestConfig): Promise<any> {
+    const response = await this.axiosInstance.post(url, data, config);
+    return response.data;
+  }
+
+  async put(url: string, data?: any, config?: AxiosRequestConfig): Promise<any> {
+    const response = await this.axiosInstance.put(url, data, config);
+    return response.data;
+  }
+
+  async delete(url: string, config?: AxiosRequestConfig): Promise<any> {
+    const response = await this.axiosInstance.delete(url, config);
+    return response.data;
   }
 
   // ==========================================================================

@@ -37,6 +37,7 @@ interface TableProps<T> {
   loading?: boolean;
   emptyMessage?: JSX.Element;
   onRowClick?: (item: T) => void;
+  renderExpandedRow?: (item: T) => JSX.Element;
   striped?: boolean;
   compact?: boolean;
   hoverable?: boolean;
@@ -167,34 +168,52 @@ export function Table<T extends Record<string, any>>(props: TableProps<T>) {
             }
           >
             <For each={sortedData()}>
-              {(item, index) => (
-                <tr
-                  class={twMerge(
-                    'border-b border-terminal-800',
-                    hoverable() && 'hover:bg-terminal-850 transition-colors',
-                    striped() && index() % 2 === 1 && 'bg-terminal-900/30',
-                    props.onRowClick && 'cursor-pointer',
-                    props.rowClass?.(item)
-                  )}
-                  onClick={() => props.onRowClick?.(item)}
-                >
-                  <For each={props.columns}>
-                    {(column) => (
-                      <td 
-                        class={twMerge(
-                          'text-gray-300 font-mono tabular-nums',
-                          compact() ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
-                          column.align === 'center' && 'text-center',
-                          column.align === 'right' && 'text-right',
-                          column.cellClass
+              {(item, index) => {
+                const [expanded, setExpanded] = createSignal(false);
+                return (
+                  <>
+                    <tr
+                      class={twMerge(
+                        'border-b border-terminal-800',
+                        hoverable() && 'hover:bg-terminal-850 transition-colors',
+                        striped() && index() % 2 === 1 && 'bg-terminal-900/30',
+                        (props.onRowClick || props.renderExpandedRow) && 'cursor-pointer',
+                        props.rowClass?.(item),
+                        expanded() && 'bg-terminal-800/50'
+                      )}
+                      onClick={() => {
+                        if (props.renderExpandedRow) {
+                          setExpanded(!expanded());
+                        }
+                        props.onRowClick?.(item);
+                      }}
+                    >
+                      <For each={props.columns}>
+                        {(column) => (
+                          <td 
+                            class={twMerge(
+                              'text-gray-300 font-mono tabular-nums',
+                              compact() ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
+                              column.align === 'center' && 'text-center',
+                              column.align === 'right' && 'text-right',
+                              column.cellClass
+                            )}
+                          >
+                            {column.render ? column.render(item) : item[column.key]}
+                          </td>
                         )}
-                      >
-                        {column.render ? column.render(item) : item[column.key]}
-                      </td>
-                    )}
-                  </For>
-                </tr>
-              )}
+                      </For>
+                    </tr>
+                    <Show when={expanded() && props.renderExpandedRow}>
+                      <tr>
+                        <td colspan={props.columns.length} class="p-0 border-b border-terminal-800 bg-terminal-900/30">
+                          {props.renderExpandedRow!(item)}
+                        </td>
+                      </tr>
+                    </Show>
+                  </>
+                );
+              }}
             </For>
           </Show>
         </tbody>

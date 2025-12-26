@@ -16,6 +16,21 @@ import { apiClient, PaymentMethod } from '../../../lib/api/client';
 import { PaymentMethodLogo } from '../../../components/PaymentMethodLogo';
 import { Modal } from '../../../components/ui/Modal';
 
+// Helper to load Plaid script dynamically
+const loadPlaidScript = () => {
+  return new Promise<any>((resolve, reject) => {
+    if ((window as any).Plaid) {
+      resolve((window as any).Plaid);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+    script.onload = () => resolve((window as any).Plaid);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
+
 interface PaymentMethodsTabProps {
   paymentMethods: PaymentMethod[];
   onUpdate: () => void;
@@ -28,8 +43,67 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
   // Add Method State
   const [addType, setAddType] = createSignal<'bank_account' | 'debit_card' | 'crypto_wallet' | 'mpesa' | 'paypal'>('bank_account');
   const [formData, setFormData] = createSignal<any>({});
+
+  const handleConnectPlaid = async () => {
+    try {
+      // Load Plaid script
+      const Plaid = await loadPlaidScript();
+      
+      // Get Link Token
+      const { data } = await apiClient.post('/funding/plaid/link-token');
+      
+      if (!data.link_token) {
+        throw new Error('No link token received');
+      }
+
+      const handler = Plaid.create({
+        token: data.link_token,
+        onSuccess: async (public_token: string, metadata: any) => {
+          try {
+            // Exchange token
+            await apiClient.post('/funding/plaid/exchange-token', {
+              public_token,
+              account_id: metadata.account?.id || metadata.account_id
+            });
+            
+            // Close modal and refresh
+            setShowAddModal(false);
+            props.onUpdate();
+            // alert('Bank account connected successfully!');
+          } catch (err) {
+            console.error('Token exchange failed', err);
+            alert('Failed to link bank account. Please try again.');
+          }
+        },
+        onExit: (err: any, metadata: any) => {
+          if (err) console.error('Plaid exit', err);
+        },
+      });
+
+      handler.open();
+    } catch (err) {
+      console.error('Plaid connection failed', err);
+      alert('Failed to initialize bank connection. Please try again later.');
+    }
+  };
   const [adding, setAdding] = createSignal(false);
   const [addError, setAddError] = createSignal<string | null>(null);
+
+  const handleVerify = async (id: string) => {
+    try {
+      const result = await apiClient.initiatePaymentVerification(id);
+      
+      if (result.oauth_url) {
+        // Redirect for OAuth (PayPal, etc)
+        window.location.href = result.oauth_url;
+      } else {
+        alert(result.message || 'Verification initiated. Check your email or phone.');
+      }
+    } catch (err: any) {
+      console.error('Verification failed', err);
+      alert(err.response?.data?.detail || err.message || 'Failed to initiate verification');
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this payment method?')) return;
@@ -154,10 +228,20 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
                   </div>
 
                   <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-1.5 text-[10px] text-success-400 bg-success-900/10 px-2 py-1 rounded border border-success-900/30">
-                      <CheckCircle2 size={12} />
-                      VERIFIED
-                    </div>
+                    <Show when={method.is_verified} fallback={
+                      <button 
+                        onClick={() => handleVerify(method.id)}
+                        class="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-900/10 px-2 py-1 rounded border border-amber-900/30 hover:bg-amber-900/20 transition-colors"
+                      >
+                        <AlertCircle size={12} />
+                        VERIFY NOW
+                      </button>
+                    }>
+                      <div class="flex items-center gap-1.5 text-[10px] text-success-400 bg-success-900/10 px-2 py-1 rounded border border-success-900/30">
+                        <CheckCircle2 size={12} />
+                        VERIFIED
+                      </div>
+                    </Show>
                     <div class="flex items-center gap-1.5 text-[10px] text-gray-500">
                       <ShieldCheck size={12} />
                       SECURE
@@ -281,10 +365,7 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
                   <button
                     type="button"
                     class="w-full py-3 px-4 bg-terminal-800 hover:bg-terminal-700 border border-terminal-600 rounded-lg flex items-center justify-center gap-3 transition-all"
-                    onClick={() => {
-                      // This would trigger Plaid Link initialization
-                      alert('Plaid Link integration: Call /api/v1/funding/plaid/link-token to get link token, then open Plaid Link modal');
-                    }}
+                    onClick={handleConnectPlaid}
                   >
                     <Building2 size={20} class="text-accent-400" />
                     <span class="text-sm font-bold text-white">Connect Bank with Plaid</span>

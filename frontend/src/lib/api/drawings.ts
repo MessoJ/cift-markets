@@ -2,18 +2,13 @@
  * Chart Drawings API Client
  * 
  * Functions for saving/loading drawings to PostgreSQL database.
+ * Uses apiClient for proper authentication handling and token refresh.
  */
 
 import { apiClient } from './client';
 import type { Drawing } from '~/types/drawing.types';
 
-const BASE_URL = '/api/v1/chart-drawings';
-
-// Get auth token from localStorage
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('access_token');
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
-}
+const DRAWINGS_PATH = '/chart-drawings';
 
 export interface DrawingCreateDTO {
   symbol: string;
@@ -46,6 +41,25 @@ export interface DrawingResponse {
 }
 
 /**
+ * Transform backend response to frontend Drawing format
+ */
+function transformToDrawing(d: DrawingResponse): Drawing {
+  return {
+    id: d.id,
+    type: d.drawing_type as any,
+    symbol: d.symbol,
+    timeframe: d.timeframe,
+    userId: d.user_id,
+    createdAt: d.created_at,
+    updatedAt: d.updated_at,
+    style: d.style,
+    locked: d.locked,
+    visible: d.visible,
+    ...d.drawing_data, // Merge drawing-specific data (points, price, etc.)
+  };
+}
+
+/**
  * Get all drawings for a symbol and timeframe
  */
 export async function getDrawings(
@@ -53,37 +67,17 @@ export async function getDrawings(
   timeframe: string
 ): Promise<Drawing[]> {
   try {
-    const response = await fetch(
-      `${BASE_URL}?symbol=${symbol}&timeframe=${timeframe}`,
-      {
-        headers: getAuthHeaders(),
-      }
+    const data: DrawingResponse[] = await apiClient.get(
+      `${DRAWINGS_PATH}?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`
     );
-
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 401) {
-        return []; // No drawings found or not authenticated, return empty array
-      }
-      throw new Error(`Failed to load drawings: ${response.statusText}`);
-    }
-
-    const data: DrawingResponse[] = await response.json();
     
-    // Transform backend format to frontend format
-    return data.map(d => ({
-      id: d.id,
-      type: d.drawing_type as any,
-      symbol: d.symbol,
-      timeframe: d.timeframe,
-      userId: d.user_id,
-      createdAt: d.created_at,
-      updatedAt: d.updated_at,
-      style: d.style,
-      locked: d.locked,
-      visible: d.visible,
-      ...d.drawing_data, // Merge drawing-specific data (points, price, etc.)
-    }));
-  } catch (error) {
+    return data.map(transformToDrawing);
+  } catch (error: any) {
+    // Silently return empty for auth errors or not found
+    if (error?.status === 401 || error?.status === 404) {
+      console.warn('Drawings not available:', error?.message || 'Auth or not found');
+      return [];
+    }
     console.error('Failed to load drawings:', error);
     return [];
   }
@@ -95,53 +89,49 @@ export async function getDrawings(
 export async function createDrawing(drawing: Partial<Drawing>): Promise<Drawing | null> {
   try {
     // Extract drawing-specific data
-    const { id, userId, createdAt, updatedAt, ...drawingData } = drawing as any;
+    const { id, userId, createdAt, updatedAt, type, symbol, timeframe, style, locked, visible, ...drawingData } = drawing as any;
     
     const payload: DrawingCreateDTO = {
-      symbol: drawing.symbol!,
-      timeframe: drawing.timeframe!,
-      drawing_type: drawing.type!,
+      symbol: symbol!,
+      timeframe: timeframe!,
+      drawing_type: type!,
       drawing_data: drawingData,
-      style: drawing.style || {
+      style: style || {
         color: '#3b82f6',
         lineWidth: 2,
         lineType: 'solid',
       },
-      locked: drawing.locked || false,
-      visible: drawing.visible !== false,
+      locked: locked || false,
+      visible: visible !== false,
     };
 
-    const response = await fetch(BASE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to save drawing: ${response.statusText}`);
-    }
-
-    const data: DrawingResponse = await response.json();
-    
-    // Transform to frontend format
-    return {
-      id: data.id,
-      type: data.drawing_type as any,
-      symbol: data.symbol,
-      timeframe: data.timeframe,
-      userId: data.user_id,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      style: data.style,
-      locked: data.locked,
-      visible: data.visible,
-      ...data.drawing_data,
-    };
+    const data: DrawingResponse = await apiClient.post(DRAWINGS_PATH, payload);
+    return transformToDrawing(data);
   } catch (error) {
     console.error('Failed to save drawing:', error);
+    return null;
+  }
+}
+
+/**
+ * Update an existing drawing
+ */
+export async function updateDrawing(id: string, updates: Partial<Drawing>): Promise<Drawing | null> {
+  try {
+    const { type, symbol, timeframe, userId, createdAt, updatedAt, style, locked, visible, ...drawingData } = updates as any;
+    
+    const payload: any = {};
+    if (Object.keys(drawingData).length > 0) {
+      payload.drawing_data = drawingData;
+    }
+    if (style) payload.style = style;
+    if (locked !== undefined) payload.locked = locked;
+    if (visible !== undefined) payload.visible = visible;
+
+    const data: DrawingResponse = await apiClient.patch(`${DRAWINGS_PATH}/${id}`, payload);
+    return transformToDrawing(data);
+  } catch (error) {
+    console.error('Failed to update drawing:', error);
     return null;
   }
 }
@@ -151,15 +141,7 @@ export async function createDrawing(drawing: Partial<Drawing>): Promise<Drawing 
  */
 export async function deleteDrawing(id: string): Promise<boolean> {
   try {
-    const response = await fetch(`${BASE_URL}/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to delete drawing: ${response.statusText}`);
-    }
-
+    await apiClient.delete(`${DRAWINGS_PATH}/${id}`);
     return true;
   } catch (error) {
     console.error('Failed to delete drawing:', error);
@@ -176,19 +158,10 @@ export async function deleteAllDrawings(
 ): Promise<number> {
   try {
     const url = timeframe
-      ? `${BASE_URL}/symbol/${symbol}?timeframe=${timeframe}`
-      : `${BASE_URL}/symbol/${symbol}`;
+      ? `${DRAWINGS_PATH}/symbol/${encodeURIComponent(symbol)}?timeframe=${encodeURIComponent(timeframe)}`
+      : `${DRAWINGS_PATH}/symbol/${encodeURIComponent(symbol)}`;
 
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to delete drawings: ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    const data = await apiClient.delete(url);
     return data.deleted_count || 0;
   } catch (error) {
     console.error('Failed to delete all drawings:', error);

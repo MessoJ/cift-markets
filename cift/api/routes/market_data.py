@@ -111,7 +111,73 @@ async def get_quote(symbol: str):
             symbol_upper,
         )
 
-        # Fallback to market_data if not in cache
+        # Check if data is stale (older than 10 seconds) or missing
+        is_stale = False
+        if row and row["timestamp"]:
+            # Handle timezone-aware vs naive datetime comparison
+            db_ts = row["timestamp"]
+            now = datetime.utcnow()
+            
+            # If db_ts is timezone-aware, make now aware too
+            if db_ts.tzinfo is not None:
+                from datetime import timezone
+                now = datetime.now(timezone.utc)
+            
+            age = (now - db_ts).total_seconds()
+            if age > 10:  # 10 seconds staleness threshold for REST API
+                is_stale = True
+        
+        if not row or is_stale:
+            try:
+                # Fetch real-time data
+                quotes = await market_data_service.get_quotes_batch([symbol_upper])
+                quote_data = quotes.get(symbol_upper)
+                
+                if quote_data:
+                    # Update cache
+                    await conn.execute(
+                        """
+                        INSERT INTO market_data_cache (
+                            symbol, price, bid, ask, volume, change, change_pct, high, low, open, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+                        ON CONFLICT (symbol) DO UPDATE SET
+                            price = EXCLUDED.price,
+                            bid = EXCLUDED.bid,
+                            ask = EXCLUDED.ask,
+                            volume = EXCLUDED.volume,
+                            change = EXCLUDED.change,
+                            change_pct = EXCLUDED.change_pct,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            open = EXCLUDED.open,
+                            updated_at = NOW()
+                        """,
+                        symbol_upper,
+                        quote_data.get("price"),
+                        quote_data.get("bid"),
+                        quote_data.get("ask"),
+                        quote_data.get("volume"),
+                        quote_data.get("change"),
+                        quote_data.get("change_percent"),
+                        quote_data.get("high"),
+                        quote_data.get("low"),
+                        quote_data.get("open")
+                    )
+                    
+                    # Fetch the updated row
+                    row = await conn.fetchrow(
+                        """
+                        SELECT symbol, price, bid, ask, volume, change, change_pct, high, low, open, updated_at as timestamp
+                        FROM market_data_cache
+                        WHERE symbol = $1
+                        """,
+                        symbol_upper,
+                    )
+            except Exception as e:
+                logger.error(f"Failed to fetch/update real-time quote for {symbol_upper}: {e}")
+                # If we have stale data, we'll use it. If no data, we'll fall through to market_data table check.
+
+        # Fallback to market_data (historical/seeded) if still no row
         if not row:
             row = await conn.fetchrow(
                 """
@@ -462,6 +528,32 @@ async def get_bars(
     """
     # Use optimized QuestDB query
     bars = await get_ohlcv_last_n_bars(symbol, timeframe, limit)
+
+    if not bars:
+        # Try to fetch from Finnhub (FREE and working) or Polygon as fallback
+        logger.info(f"No bars found for {symbol}, fetching from Finnhub/Polygon...")
+        try:
+            # Determine days to fetch based on timeframe and limit
+            days_to_fetch = 30 # Default
+            if timeframe == '1d':
+                days_to_fetch = limit + 60 # Fetch more for daily
+            elif timeframe == '1h':
+                days_to_fetch = (limit // 24) + 14
+            elif timeframe in ('5m', '15m', '30m'):
+                days_to_fetch = 14 # 2 weeks for intraday
+            
+            # Use new unified fetch method (Finnhub primary, Polygon fallback)
+            await market_data_service.fetch_and_store_ohlcv(
+                symbol=symbol, 
+                days=days_to_fetch, 
+                timeframe=timeframe
+            )
+            
+            # Retry query
+            bars = await get_ohlcv_last_n_bars(symbol, timeframe, limit)
+            
+        except Exception as e:
+            logger.error(f"Failed to backfill bars for {symbol}: {e}")
 
     if not bars:
         raise HTTPException(status_code=404, detail=f"No bar data found for {symbol}")

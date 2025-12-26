@@ -9,7 +9,7 @@
  * ALL DATA FROM BACKEND - NO MOCK DATA
  */
 
-import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
+import { createSignal, createEffect, Show, onCleanup, onMount, For } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { Table, Column } from '~/components/ui/Table';
 import { apiClient } from '~/lib/api/client';
@@ -19,6 +19,91 @@ import { DateRangePicker, DateRange, defaultPresets } from '~/components/ui/Date
 
 type OrderStatus = 'all' | 'open' | 'filled' | 'cancelled';
 
+
+const ExpandedOrderRow = (props: { order: any }) => {
+  const [details, setDetails] = createSignal<any>(null);
+  const [loading, setLoading] = createSignal(true);
+
+  onMount(async () => {
+    try {
+      const data = await apiClient.getOrder(props.order.id);
+      setDetails(data);
+    } catch (err) {
+      console.error('Failed to load order details:', err);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  return (
+    <div class="p-4 text-sm bg-terminal-900/50">
+      <Show when={!loading()} fallback={<div class="text-gray-500 flex items-center gap-2"><RefreshCw class="w-3 h-3 animate-spin"/> Loading details...</div>}>
+        <Show when={details()}>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <h4 class="text-[10px] font-bold text-accent-500 uppercase mb-3 tracking-wider">Execution Analysis</h4>
+              <div class="space-y-2 font-mono text-xs">
+                <div class="flex justify-between border-b border-terminal-800 pb-1">
+                  <span class="text-gray-500">Order ID</span>
+                  <span class="text-gray-400 select-all">{details().order.id}</span>
+                </div>
+                <div class="flex justify-between border-b border-terminal-800 pb-1">
+                  <span class="text-gray-500">Strategy</span>
+                  <span class="text-white">{details().order.strategy_id || 'Manual Trade'}</span>
+                </div>
+                <div class="flex justify-between border-b border-terminal-800 pb-1">
+                  <span class="text-gray-500">Avg Fill Price</span>
+                  <span class="text-white font-bold">{formatCurrency(details().execution_quality?.avg_fill_price || 0)}</span>
+                </div>
+                <div class="flex justify-between border-b border-terminal-800 pb-1">
+                  <span class="text-gray-500">Slippage</span>
+                  <span class={`${(details().execution_quality?.slippage_bps || 0) > 0 ? 'text-danger-400' : 'text-success-400'}`}>
+                    {details().execution_quality?.slippage_bps || 0} bps
+                  </span>
+                </div>
+                <div class="flex justify-between border-b border-terminal-800 pb-1">
+                  <span class="text-gray-500">Total Fees</span>
+                  <span class="text-gray-300">{formatCurrency(details().execution_quality?.total_commission || 0)}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 class="text-[10px] font-bold text-accent-500 uppercase mb-3 tracking-wider">Fills & Events</h4>
+              <Show when={details().fills && details().fills.length > 0} fallback={<div class="text-gray-500 italic text-xs">No fills recorded</div>}>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs font-mono">
+                    <thead>
+                      <tr class="text-gray-500 text-left border-b border-terminal-800">
+                        <th class="pb-2 font-normal">Time</th>
+                        <th class="pb-2 text-right font-normal">Qty</th>
+                        <th class="pb-2 text-right font-normal">Price</th>
+                        <th class="pb-2 text-right font-normal">Venue</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-terminal-800/50">
+                      <For each={details().fills}>
+                        {(fill: any) => (
+                          <tr>
+                            <td class="py-2 text-gray-400">{new Date(fill.timestamp).toLocaleTimeString()}</td>
+                            <td class="py-2 text-right text-white">{fill.quantity}</td>
+                            <td class="py-2 text-right text-white">{formatCurrency(fill.price)}</td>
+                            <td class="py-2 text-right text-gray-500">{fill.venue || 'EXCH'}</td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </Show>
+    </div>
+  );
+};
+
 export default function OrdersPage() {
   const navigate = useNavigate();
   
@@ -27,8 +112,8 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = createSignal<OrderStatus>('all');
   const [symbolFilter, setSymbolFilter] = createSignal('');
   const [dateRange, setDateRange] = createSignal<DateRange>({
-    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
-    endDate: new Date(),
+    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+    end: new Date(),
     label: 'Last 30 Days'
   });
   
@@ -76,8 +161,8 @@ export default function OrdersPage() {
     }
 
     // Date Filter (Client-side filtering if API doesn't support it yet)
-    const start = dateRange().startDate.getTime();
-    const end = dateRange().endDate.getTime();
+    const start = dateRange().start.getTime();
+    const end = dateRange().end.getTime();
     filtered = filtered.filter(o => {
       const time = new Date(o.created_at).getTime();
       return time >= start && time <= end;
@@ -379,7 +464,8 @@ export default function OrdersPage() {
               </button>
             </div>
           }
-          onRowClick={(order) => navigate(`/order/${order.id}`)}
+          onRowClick={(order) => { /* Expand handled by Table */ }}
+          renderExpandedRow={(order) => <ExpandedOrderRow order={order} />}
           compact
           hoverable
           rowClass={(order) => `

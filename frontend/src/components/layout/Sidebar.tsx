@@ -39,9 +39,10 @@ import {
   Pin,
   PieChart,
   CandlestickChart,
-  Activity
+  Activity,
 } from 'lucide-solid';
 import { Logo } from './Logo';
+import { AIIcon } from '~/components/icons/AIIcon';
 import { authStore } from '~/stores/auth.store';
 import { twMerge } from 'tailwind-merge';
 
@@ -82,6 +83,7 @@ const navSections: NavSection[] = [
     icon: Activity,
     defaultOpen: true,
     items: [
+      { label: 'Analysis', href: '/analysis', icon: AIIcon, isNew: true },
       { label: 'Charts', href: '/charts', icon: CandlestickChart, shortcut: '⌘K' },
       { label: 'Screener', href: '/screener', icon: Filter },
       { label: 'Watchlists', href: '/watchlists', icon: Star },

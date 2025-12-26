@@ -18,6 +18,10 @@ from cift.core.config import settings
 from cift.core.database import get_postgres_pool
 from cift.services.finnhub_realtime_service import FinnhubRealtimeService
 from cift.services.alltick_service import AlltickService
+# Import publisher (lazy import inside method to avoid circular dependency if needed, 
+# but top-level is better if possible. market_data imports market_data_service which imports this.
+# So we have a circular dependency: market_data -> market_data_service -> polygon_realtime_service.
+# We must use local import for publish_price_update)
 
 
 class PolygonRealtimeService:
@@ -670,6 +674,20 @@ class PolygonRealtimeService:
                     )
                     updated += 1
 
+                    # Broadcast real-time update to WebSocket clients
+                    try:
+                        from cift.api.routes.market_data import publish_price_update
+                        await publish_price_update(
+                            symbol=symbol,
+                            price=quote["price"],
+                            bid=quote.get("bid"),
+                            ask=quote.get("ask")
+                        )
+                    except ImportError:
+                        pass # Avoid circular import issues during startup
+                    except Exception as ws_error:
+                        logger.warning(f"Failed to broadcast update for {symbol}: {ws_error}")
+
                 except Exception as e:
                     logger.error(f"Failed to update cache for {symbol}: {e}")
 
@@ -677,7 +695,7 @@ class PolygonRealtimeService:
         return updated
 
     async def update_ohlcv_bars(
-        self, symbols: list[str] | None = None, days: int = 5, timespan: str = "minute"
+        self, symbols: list[str] | None = None, days: int = 5, timespan: str = "minute", multiplier: int = 1
     ) -> int:
         """
         Fetch and store OHLCV bars to PostgreSQL.
@@ -696,15 +714,28 @@ class PolygonRealtimeService:
         to_date = datetime.utcnow()
         from_date = to_date - timedelta(days=days)
 
+        # Map Polygon timespan to DB timeframe
+        timeframe_map = {
+            "minute": "1m",
+            "hour": "1h",
+            "day": "1d",
+            "week": "1w",
+            "month": "1M",
+        }
+        
+        db_timeframe = timeframe_map.get(timespan, "1m")
+        if timespan == "minute" and multiplier != 1:
+             db_timeframe = f"{multiplier}m"
+
         for symbol in symbols:
             try:
                 bars = await self.get_aggregates(
                     symbol=symbol,
-                    multiplier=1,
+                    multiplier=multiplier,
                     timespan=timespan,
                     from_date=from_date,
                     to_date=to_date,
-                    limit=5000,
+                    limit=50000,
                 )
 
                 if not bars:
@@ -731,23 +762,25 @@ class PolygonRealtimeService:
                             """,
                                 symbol,
                                 timestamp,
-                                "1min",
-                                bar["o"],
-                                bar["h"],
-                                bar["l"],
-                                bar["c"],
+                                db_timeframe,
+                                float(bar["o"]),
+                                float(bar["h"]),
+                                float(bar["l"]),
+                                float(bar["c"]),
                                 int(bar["v"]),
                             )
                             total_bars += 1
 
-                        except Exception:
-                            # Skip duplicates
-                            pass
+                        except Exception as e:
+                            logger.warning(f"Error inserting bar for {symbol}: {e}")
 
                 logger.info(f"Stored {len(bars)} bars for {symbol}")
 
-                # Rate limiting (free tier: 5 req/min)
-                await asyncio.sleep(12)
+                # Rate limiting
+                if not self.api_key:
+                     await asyncio.sleep(12) # Free tier limit
+                else:
+                     await asyncio.sleep(0.1)
 
             except Exception as e:
                 logger.error(f"Error fetching bars for {symbol}: {e}")

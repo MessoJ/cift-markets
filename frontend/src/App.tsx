@@ -42,6 +42,7 @@ const VerifyTransactionPage = lazy(() => import('~/pages/VerifyTransactionPage')
 const SymbolDetailPage = lazy(() => import('~/pages/symbol/SymbolDetailPage'));
 const OrderDetailPage = lazy(() => import('~/pages/order/OrderDetailPage'));
 const PositionDetailPage = lazy(() => import('~/pages/position/PositionDetailPage'));
+const AnalysisPage = lazy(() => import('~/pages/analysis/AnalysisPage'));
 
 // Protected Route Component
 function ProtectedRoute(props: { children: any }) {
@@ -350,6 +351,24 @@ export default function App() {
         component={() => (
           <ProtectedRoute>
             <AlertsPage />
+          </ProtectedRoute>
+        )}
+      />
+
+      {/* Analysis Routes (AI-Powered) */}
+      <Route
+        path="/analysis"
+        component={() => (
+          <ProtectedRoute>
+            <AnalysisPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/analysis/:symbol"
+        component={() => (
+          <ProtectedRoute>
+            <AnalysisPage />
           </ProtectedRoute>
         )}
       />

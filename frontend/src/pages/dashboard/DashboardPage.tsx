@@ -523,7 +523,15 @@ export default function DashboardPage() {
                     <div class="flex items-center justify-between px-4 py-2 border-b border-terminal-800/50 hover:bg-terminal-800/50 transition-colors text-xs">
                       <div class="flex items-center gap-3">
                         {getActivityIcon(activity.type)}
-                        <span class="text-gray-300">{activity.description}</span>
+                        <span class="text-gray-300">
+                          {activity.description || (
+                            // Fallback if description is missing
+                            activity.type === 'order' ? `${activity.side?.toUpperCase()} ${activity.quantity} ${activity.symbol}` :
+                            activity.type === 'fill' ? `FILLED ${activity.quantity} ${activity.symbol}` :
+                            activity.type === 'transfer' ? `${activity.transfer_type?.toUpperCase()} ${formatCurrency(activity.amount)}` :
+                            'Activity'
+                          )}
+                        </span>
                       </div>
                       <div class="flex items-center gap-3">
                         <span class="font-mono text-gray-500">{new Date(activity.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>

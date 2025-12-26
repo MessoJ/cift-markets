@@ -225,17 +225,34 @@ export default function NewsPage() {
       setEconomicEvents(eventsData || []);
       setLastUpdate(new Date());
       
-      // Set breaking news (most recent high-impact article)
+      // Set breaking news (most recent high-impact article within last 24 hours)
       const breaking = newsData?.articles?.find(a => 
         a.sentiment !== 'neutral' && 
-        new Date(a.published_at).getTime() > Date.now() - 3600000 // Within last hour
+        new Date(a.published_at).getTime() > Date.now() - 86400000 // Within last 24 hours
       );
       if (breaking) setBreakingNews(breaking);
+      
+      // If no recent breaking news, fallback to most recent important news
+      if (!breaking && newsData?.articles?.length > 0) {
+         setBreakingNews(newsData.articles[0]);
+      }
 
     } catch (err) {
       console.error('Failed to load news data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await apiClient.post('/news/refresh');
+      await loadData(true);
+    } catch (err) {
+      console.error('Failed to refresh news:', err);
+    } finally {
       setRefreshing(false);
     }
   };
@@ -252,7 +269,7 @@ export default function NewsPage() {
         {/* Live indicator */}
         <div class="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-terminal-950 to-transparent z-10 flex items-center pl-2">
           <span class="flex items-center gap-1 text-[9px] font-bold text-success-400">
-            <div class="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse" />
+            <div class="w-1.5 h-1.5 rounded-full bg-success-500" />
             LIVE
           </span>
         </div>
@@ -284,7 +301,7 @@ export default function NewsPage() {
 
       {/* ===== BREAKING NEWS BANNER ===== */}
       <Show when={breakingNews() && showBreakingBanner()}>
-        <div class="bg-gradient-to-r from-danger-900/40 via-danger-800/30 to-danger-900/40 border-b border-danger-700/50 px-4 py-2 flex items-center gap-3 animate-pulse-subtle">
+        <div class="bg-gradient-to-r from-danger-900/40 via-danger-800/30 to-danger-900/40 border-b border-danger-700/50 px-4 py-2 flex items-center gap-3">
           <div class="flex items-center gap-2 text-danger-400">
             <AlertTriangle class="w-4 h-4" />
             <span class="text-[10px] font-bold uppercase tracking-wider">Breaking</span>
@@ -376,10 +393,10 @@ export default function NewsPage() {
             
             {/* Refresh */}
             <button
-              onClick={() => loadData()}
+              onClick={handleRefresh}
               disabled={refreshing()}
               class="p-2.5 bg-terminal-850 hover:bg-terminal-800 border border-terminal-700 text-gray-400 hover:text-white rounded-lg transition-all disabled:opacity-50"
-              title="Refresh Feed"
+              title="Force Refresh Feed"
             >
               <RefreshCw class={`w-4 h-4 ${refreshing() ? 'animate-spin' : ''}`} />
             </button>

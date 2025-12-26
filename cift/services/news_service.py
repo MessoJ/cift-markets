@@ -42,46 +42,49 @@ class NewsService:
         self.session = None
 
         # Check for API keys
-        self.polygon_api_key = getattr(self.settings, "polygon_api_key", "")
-        self.alphavantage_api_key = getattr(self.settings, "alphavantage_api_key", "")
+        self.polygon_api_key = getattr(self.settings, 'polygon_api_key', '')
+        self.alphavantage_api_key = getattr(self.settings, 'alphavantage_api_key', '')
+        self.fmp_api_key = getattr(self.settings, 'fmp_api_key', '')
+        self.newsapi_key = getattr(self.settings, 'newsapi_key', '')
 
         # News provider configurations
         self.providers = {
+            "fmp": {
+                "enabled": bool(self.fmp_api_key),  # Enable if API key exists
+                "url": "https://financialmodelingprep.com/api/v3/stock_news",
+                "api_key": self.fmp_api_key
+            },
+            "newsapi": {
+                "enabled": bool(self.newsapi_key),
+                "url": "https://newsapi.org/v2/top-headlines",
+                "params": {"category": "business", "language": "en", "apiKey": self.newsapi_key}
+            },
             "polygon": {
                 "enabled": bool(self.polygon_api_key),  # Enable if API key exists
                 "url": "https://api.polygon.io/v2/reference/news",
-                "api_key": self.polygon_api_key,
+                "api_key": self.polygon_api_key
             },
             "alpha_vantage": {
                 "enabled": bool(self.alphavantage_api_key),  # Enable if API key exists
                 "url": "https://www.alphavantage.co/query",
-                "params": {"function": "NEWS_SENTIMENT", "apikey": self.alphavantage_api_key},
+                "params": {"function": "NEWS_SENTIMENT", "apikey": self.alphavantage_api_key}
             },
             "finnhub": {
                 "enabled": False,  # Requires API key
                 "url": "https://finnhub.io/api/v1/news",
-                "headers": {"X-Finnhub-Token": ""},
+                "headers": {"X-Finnhub-Token": ""}
             },
             "mock": {
-                "enabled": not bool(self.polygon_api_key)
-                and not bool(self.alphavantage_api_key),  # Only use mock if no real keys
-                "url": None,
-            },
+                "enabled": not bool(self.polygon_api_key) and not bool(self.alphavantage_api_key) and not bool(self.fmp_api_key) and not bool(self.newsapi_key),
+                "url": None
+            }
         }
 
         # News categories
         self.categories = [
-            "earnings",
-            "mergers",
-            "ipo",
-            "analyst_ratings",
-            "regulatory",
-            "market_outlook",
-            "economic_data",
-            "technology",
-            "healthcare",
-            "finance",
-            "energy",
+            "earnings", "mergers", "ipo", "analyst_ratings",
+            "regulatory", "market_outlook", "economic_data",
+            "technology", "healthcare", "finance", "energy"
         ]
 
     async def __aenter__(self):
@@ -93,7 +96,10 @@ class NewsService:
             await self.session.close()
 
     async def fetch_latest_news(
-        self, symbols: list[str] | None = None, categories: list[str] | None = None, limit: int = 50
+        self,
+        symbols: list[str] | None = None,
+        categories: list[str] | None = None,
+        limit: int = 50
     ) -> list[NewsArticle]:
         """Fetch latest financial news from multiple sources."""
 
@@ -118,7 +124,9 @@ class NewsService:
         # Deduplicate and sort by importance/recency
         unique_articles = self._deduplicate_articles(all_articles)
         sorted_articles = sorted(
-            unique_articles, key=lambda x: (x.importance, x.published_at), reverse=True
+            unique_articles,
+            key=lambda x: (x.importance, x.published_at),
+            reverse=True
         )
 
         # Store in database
@@ -127,11 +135,17 @@ class NewsService:
         return sorted_articles[:limit]
 
     async def _fetch_from_provider(
-        self, provider: str, symbols: list[str] | None, categories: list[str] | None, limit: int
+        self,
+        provider: str,
+        symbols: list[str] | None,
+        categories: list[str] | None,
+        limit: int
     ) -> list[NewsArticle]:
         """Fetch news from a specific provider."""
 
-        if provider == "polygon":
+        if provider == "fmp":
+            return await self._fetch_fmp_news(symbols, limit)
+        elif provider == "polygon":
             return await self._fetch_polygon_news(symbols, limit)
         elif provider == "mock":
             return await self._fetch_mock_news(symbols, categories, limit)
@@ -139,10 +153,152 @@ class NewsService:
             return await self._fetch_alpha_vantage_news(symbols, limit)
         elif provider == "finnhub":
             return await self._fetch_finnhub_news(symbols, limit)
+        elif provider == "newsapi":
+            return await self._fetch_newsapi_news(symbols, limit)
         else:
             return []
 
-    async def _fetch_polygon_news(self, symbols: list[str] | None, limit: int) -> list[NewsArticle]:
+    async def _fetch_newsapi_news(
+        self,
+        symbols: list[str] | None,
+        limit: int
+    ) -> list[NewsArticle]:
+        """Fetch news from NewsAPI.org."""
+        articles = []
+        try:
+            url = self.providers["newsapi"]["url"]
+            params = self.providers["newsapi"]["params"].copy()
+            params["pageSize"] = limit
+            
+            if symbols:
+                # NewsAPI uses 'q' for query
+                params["q"] = " OR ".join(symbols[:3]) # Limit to 3 symbols to avoid long query
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status != 200:
+                    logger.warning(f"NewsAPI returned {response.status}")
+                    return []
+                
+                data = await response.json()
+                if data.get("status") != "ok":
+                    logger.warning(f"NewsAPI error: {data.get('message')}")
+                    return []
+                
+                for item in data.get("articles", []):
+                    articles.append(NewsArticle(
+                        id=str(uuid4()),
+                        title=item.get("title", "No Title"),
+                        summary=item.get("description"),
+                        content=item.get("content"),
+                        url=item.get("url", ""),
+                        source=item.get("source", {}).get("name", "NewsAPI"),
+                        author=item.get("author"),
+                        published_at=datetime.fromisoformat(item["publishedAt"].replace("Z", "+00:00")),
+                        symbols=symbols if symbols else [],
+                        categories=["general"],
+                        image_url=item.get("urlToImage")
+                    ))
+        except Exception as e:
+            logger.error(f"Error fetching NewsAPI news: {e}")
+            
+        return articles
+
+    async def _fetch_fmp_news(
+        self,
+        symbols: list[str] | None,
+        limit: int
+    ) -> list[NewsArticle]:
+        """Fetch news from Financial Modeling Prep API."""
+        
+        articles = []
+        try:
+            # Use general news endpoint if no symbols, otherwise stock news
+            if symbols and len(symbols) > 0:
+                base_url = "https://financialmodelingprep.com/api/v3/stock_news"
+                params = {
+                    "tickers": ",".join(symbols[:5]),  # FMP supports multiple tickers
+                    "limit": limit,
+                    "apikey": self.fmp_api_key
+                }
+            else:
+                base_url = "https://financialmodelingprep.com/api/v4/general_news"
+                params = {
+                    "limit": limit,
+                    "apikey": self.fmp_api_key
+                }
+
+            async with self.session.get(base_url, params=params) as response:
+                if response.status != 200:
+                    logger.warning(f"FMP news API returned {response.status}")
+                    # Read body to see error message
+                    try:
+                        error_body = await response.text()
+                        logger.warning(f"FMP Error Body: {error_body}")
+                    except:
+                        pass
+                    return []
+
+                data = await response.json()
+                
+                # Handle FMP error response (dict instead of list)
+                if isinstance(data, dict) and "Error Message" in data:
+                    logger.error(f"FMP API Error: {data['Error Message']}")
+                    return []
+                
+                if not isinstance(data, list):
+                    logger.error(f"FMP API returned unexpected format: {type(data)}")
+                    return []
+                
+                for item in data:
+                    try:
+                        # Parse published time
+                        published_str = item.get("publishedDate", "")
+                        if published_str:
+                            published_at = datetime.fromisoformat(published_str)
+                        else:
+                            published_at = datetime.utcnow()
+
+                        # Determine sentiment (FMP provides sentiment in some endpoints, but basic here)
+                        sentiment = "neutral"
+                        title_lower = item.get("title", "").lower()
+                        text_lower = item.get("text", "").lower()
+                        
+                        if any(w in title_lower or w in text_lower for w in ["surge", "rally", "gain", "beat", "growth", "jump", "soar"]):
+                            sentiment = "positive"
+                        elif any(w in title_lower or w in text_lower for w in ["fall", "drop", "miss", "loss", "crash", "plunge", "decline"]):
+                            sentiment = "negative"
+
+                        article = NewsArticle(
+                            id=str(uuid4()),  # FMP doesn't provide stable IDs
+                            title=item.get("title", ""),
+                            summary=item.get("text", "")[:500] + "...",
+                            content=item.get("text", ""),
+                            url=item.get("url", ""),
+                            source=item.get("site", "Financial Modeling Prep"),
+                            author=item.get("site", ""),
+                            published_at=published_at,
+                            symbols=[item.get("symbol")] if item.get("symbol") else [],
+                            categories=["market_news"],
+                            sentiment=sentiment,
+                            importance=3,
+                            image_url=item.get("image", "")
+                        )
+                        articles.append(article)
+                    except Exception as e:
+                        logger.warning(f"Error parsing FMP article: {e}")
+
+                logger.success(f"Fetched {len(articles)} news articles from FMP")
+
+        except Exception as e:
+            logger.error(f"Failed to fetch FMP news: {e}")
+
+        return articles
+
+    async def _fetch_polygon_news(
+        self,
+        symbols: list[str] | None,
+        limit: int
+    ) -> list[NewsArticle]:
         """Fetch news from Polygon.io API."""
 
         articles = []
@@ -154,7 +310,7 @@ class NewsService:
                 "apiKey": self.polygon_api_key,
                 "limit": min(limit, 100),  # Polygon max is 100
                 "order": "desc",
-                "sort": "published_utc",
+                "sort": "published_utc"
             }
 
             # Add ticker filter if specified
@@ -174,9 +330,7 @@ class NewsService:
                         # Parse published time
                         published_str = item.get("published_utc", "")
                         if published_str:
-                            published_at = datetime.fromisoformat(
-                                published_str.replace("Z", "+00:00")
-                            )
+                            published_at = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
                         else:
                             published_at = datetime.utcnow()
 
@@ -196,14 +350,9 @@ class NewsService:
                         # Basic sentiment from title if no insights
                         if sentiment == "neutral":
                             title_lower = item.get("title", "").lower()
-                            if any(
-                                w in title_lower
-                                for w in ["surge", "rally", "gain", "beat", "growth"]
-                            ):
+                            if any(w in title_lower for w in ["surge", "rally", "gain", "beat", "growth"]):
                                 sentiment = "positive"
-                            elif any(
-                                w in title_lower for w in ["fall", "drop", "miss", "loss", "crash"]
-                            ):
+                            elif any(w in title_lower for w in ["fall", "drop", "miss", "loss", "crash"]):
                                 sentiment = "negative"
 
                         article = NewsArticle(
@@ -219,7 +368,7 @@ class NewsService:
                             categories=["market_news"],
                             sentiment=sentiment,
                             importance=3 if len(tickers) > 0 else 2,
-                            image_url=item.get("image_url", ""),
+                            image_url=item.get("image_url", "")
                         )
 
                         articles.append(article)
@@ -235,7 +384,10 @@ class NewsService:
         return articles
 
     async def _fetch_mock_news(
-        self, symbols: list[str] | None, categories: list[str] | None, limit: int
+        self,
+        symbols: list[str] | None,
+        categories: list[str] | None,
+        limit: int
     ) -> list[NewsArticle]:
         """Generate realistic mock news for testing."""
 
@@ -246,36 +398,36 @@ class NewsService:
                 "summary": "{symbol} exceeded analyst expectations with strong revenue growth.",
                 "categories": ["earnings"],
                 "sentiment": "positive",
-                "importance": 4,
+                "importance": 4
             },
             {
                 "title": "Analyst Upgrades {symbol} to Buy on Strong Outlook",
                 "summary": "Major investment firm raises price target following positive developments.",
                 "categories": ["analyst_ratings"],
                 "sentiment": "positive",
-                "importance": 3,
+                "importance": 3
             },
             {
                 "title": "{symbol} Faces Regulatory Scrutiny Over Recent Practices",
                 "summary": "Government agencies investigating potential compliance issues.",
                 "categories": ["regulatory"],
                 "sentiment": "negative",
-                "importance": 3,
+                "importance": 3
             },
             {
                 "title": "Breaking: {symbol} Announces Major Acquisition Deal",
                 "summary": "Company expands market presence through strategic acquisition.",
                 "categories": ["mergers"],
                 "sentiment": "positive",
-                "importance": 5,
+                "importance": 5
             },
             {
                 "title": "Market Outlook: Technology Sector Shows Resilience",
                 "summary": "Analysts remain optimistic about tech stocks despite volatility.",
                 "categories": ["market_outlook", "technology"],
                 "sentiment": "positive",
-                "importance": 2,
-            },
+                "importance": 2
+            }
         ]
 
         # Generate articles
@@ -296,11 +448,11 @@ class NewsService:
                 summary=template["summary"].format(symbol=symbol),
                 url=f"https://example-news.com/article-{i}",
                 source="Mock Financial News",
-                published_at=datetime.utcnow() - timedelta(hours=i, minutes=i * 15),
+                published_at=datetime.utcnow() - timedelta(hours=i, minutes=i*15),
                 symbols=[symbol] if "{symbol}" in template["title"] else [],
                 categories=template["categories"],
                 sentiment=template["sentiment"],
-                importance=template["importance"],
+                importance=template["importance"]
             )
 
             articles.append(article)
@@ -308,7 +460,9 @@ class NewsService:
         return articles
 
     async def _fetch_alpha_vantage_news(
-        self, symbols: list[str] | None, limit: int
+        self,
+        symbols: list[str] | None,
+        limit: int
     ) -> list[NewsArticle]:
         """Fetch from Alpha Vantage News API."""
         config = self.providers["alpha_vantage"]
@@ -332,9 +486,7 @@ class NewsService:
                 data = await response.json()
 
                 if "feed" not in data:
-                    logger.warning(
-                        f"Alpha Vantage response missing 'feed': {data.get('Note', 'Unknown')}"
-                    )
+                    logger.warning(f"Alpha Vantage response missing 'feed': {data.get('Note', 'Unknown')}")
                     return []
 
                 articles = []
@@ -369,7 +521,7 @@ class NewsService:
                         published_at=published_at,
                         symbols=item_symbols,
                         sentiment=sentiment,
-                        image_url=item.get("banner_image"),
+                        image_url=item.get("banner_image")
                     )
                     articles.append(article)
 
@@ -379,7 +531,11 @@ class NewsService:
             logger.error(f"Error fetching Alpha Vantage news: {e}")
             return []
 
-    async def _fetch_finnhub_news(self, symbols: list[str] | None, limit: int) -> list[NewsArticle]:
+    async def _fetch_finnhub_news(
+        self,
+        symbols: list[str] | None,
+        limit: int
+    ) -> list[NewsArticle]:
         """Fetch from Finnhub News API."""
         # TODO: Implement Finnhub integration
         logger.info("Finnhub news integration not implemented")
@@ -412,8 +568,7 @@ class NewsService:
         async with pool.acquire() as conn:
             for article in articles:
                 try:
-                    await conn.execute(
-                        """
+                    await conn.execute("""
                         INSERT INTO news_articles (
                             id, title, summary, content, url, source, author,
                             published_at, symbols, categories, sentiment,
@@ -441,7 +596,7 @@ class NewsService:
                         article.sentiment,
                         article.importance,
                         article.image_url,
-                        datetime.utcnow(),
+                        datetime.utcnow()
                     )
 
                 except Exception as e:
@@ -449,81 +604,77 @@ class NewsService:
 
         logger.success(f"Stored {len(articles)} news articles")
 
-    async def get_news_by_symbol(self, symbol: str, limit: int = 20) -> list[NewsArticle]:
+    async def get_news_by_symbol(
+        self,
+        symbol: str,
+        limit: int = 20
+    ) -> list[NewsArticle]:
         """Get news articles related to a specific symbol."""
 
         pool = await get_postgres_pool()
 
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
+            rows = await conn.fetch("""
                 SELECT * FROM news_articles
                 WHERE symbols::text LIKE $1
                 ORDER BY published_at DESC, importance DESC
                 LIMIT $2
-            """,
-                f'%"{symbol}"%',
-                limit,
-            )
+            """, f'%"{symbol}"%', limit)
 
         articles = []
         for row in rows:
-            articles.append(
-                NewsArticle(
-                    id=row["id"],
-                    title=row["title"],
-                    summary=row["summary"],
-                    content=row["content"],
-                    url=row["url"],
-                    source=row["source"],
-                    author=row["author"],
-                    published_at=row["published_at"],
-                    symbols=json.loads(row["symbols"] or "[]"),
-                    categories=json.loads(row["categories"] or "[]"),
-                    sentiment=row["sentiment"],
-                    importance=row["importance"],
-                    image_url=row["image_url"],
-                )
-            )
+            articles.append(NewsArticle(
+                id=row['id'],
+                title=row['title'],
+                summary=row['summary'],
+                content=row['content'],
+                url=row['url'],
+                source=row['source'],
+                author=row['author'],
+                published_at=row['published_at'],
+                symbols=json.loads(row['symbols'] or '[]'),
+                categories=json.loads(row['categories'] or '[]'),
+                sentiment=row['sentiment'],
+                importance=row['importance'],
+                image_url=row['image_url']
+            ))
 
         return articles
 
-    async def get_news_by_category(self, category: str, limit: int = 20) -> list[NewsArticle]:
+    async def get_news_by_category(
+        self,
+        category: str,
+        limit: int = 20
+    ) -> list[NewsArticle]:
         """Get news articles by category."""
 
         pool = await get_postgres_pool()
 
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
+            rows = await conn.fetch("""
                 SELECT * FROM news_articles
                 WHERE categories::text LIKE $1
                 ORDER BY published_at DESC, importance DESC
                 LIMIT $2
-            """,
-                f'%"{category}"%',
-                limit,
-            )
+            """, f'%"{category}"%', limit)
 
         articles = []
         for row in rows:
-            articles.append(
-                NewsArticle(
-                    id=row["id"],
-                    title=row["title"],
-                    summary=row["summary"],
-                    content=row["content"],
-                    url=row["url"],
-                    source=row["source"],
-                    author=row["author"],
-                    published_at=row["published_at"],
-                    symbols=json.loads(row["symbols"] or "[]"),
-                    categories=json.loads(row["categories"] or "[]"),
-                    sentiment=row["sentiment"],
-                    importance=row["importance"],
-                    image_url=row["image_url"],
-                )
-            )
+            articles.append(NewsArticle(
+                id=row['id'],
+                title=row['title'],
+                summary=row['summary'],
+                content=row['content'],
+                url=row['url'],
+                source=row['source'],
+                author=row['author'],
+                published_at=row['published_at'],
+                symbols=json.loads(row['symbols'] or '[]'),
+                categories=json.loads(row['categories'] or '[]'),
+                sentiment=row['sentiment'],
+                importance=row['importance'],
+                image_url=row['image_url']
+            ))
 
         return articles
 
@@ -535,35 +686,31 @@ class NewsService:
 
         async with pool.acquire() as conn:
             # Get top gainers
-            gainers = await conn.fetch(
-                """
+            gainers = await conn.fetch("""
                 SELECT symbol FROM market_data_cache
                 WHERE change_percent > 5
                 ORDER BY change_percent DESC
                 LIMIT 10
-            """
-            )
+            """)
 
             # Get top losers
-            losers = await conn.fetch(
-                """
+            losers = await conn.fetch("""
                 SELECT symbol FROM market_data_cache
                 WHERE change_percent < -5
                 ORDER BY change_percent ASC
                 LIMIT 10
-            """
-            )
+            """)
 
         result = {"gainers": [], "losers": []}
 
         # Get news for gainers
         for row in gainers:
-            news = await self.get_news_by_symbol(row["symbol"], 3)
+            news = await self.get_news_by_symbol(row['symbol'], 3)
             result["gainers"].extend(news)
 
         # Get news for losers
         for row in losers:
-            news = await self.get_news_by_symbol(row["symbol"], 3)
+            news = await self.get_news_by_symbol(row['symbol'], 3)
             result["losers"].extend(news)
 
         return result
@@ -574,20 +721,16 @@ class NewsService:
         pool = await get_postgres_pool()
 
         async with pool.acquire() as conn:
-            result = await conn.execute(
-                """
+            result = await conn.execute("""
                 DELETE FROM news_articles
                 WHERE published_at < NOW() - INTERVAL '%s days'
-            """,
-                days_to_keep,
-            )
+            """, days_to_keep)
 
             logger.info(f"Cleaned up old news articles: {result}")
 
 
 # Global news service instance
 _news_service = None
-
 
 def get_news_service() -> NewsService:
     """Get the global news service instance."""
@@ -625,7 +768,10 @@ if __name__ == "__main__":
     async def test_news():
         async with NewsService() as service:
             # Test mock news generation
-            articles = await service.fetch_latest_news(symbols=["AAPL", "MSFT"], limit=10)
+            articles = await service.fetch_latest_news(
+                symbols=["AAPL", "MSFT"],
+                limit=10
+            )
 
             print(f"Fetched {len(articles)} articles:")
             for article in articles[:3]:
