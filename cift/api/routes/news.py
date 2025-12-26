@@ -113,51 +113,77 @@ async def get_news(
     query += f" ORDER BY published_at DESC LIMIT ${param_count} OFFSET ${param_count + 1}"
     params.extend([limit, offset])
 
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
+    articles = []
+    
+    # 1. Try Database
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query, *params)
 
-        articles = []
-        import json
-        for row in rows:
-            # Filter out known CORS-blocked domains
-            image_url = row["image_url"]
-            if image_url and (
-                any(domain in image_url for domain in ["cryptoslate.com", "medium.com"])
-                or image_url.startswith("|")
-            ):
-                image_url = None
+                import json
+                for row in rows:
+                    # Filter out known CORS-blocked domains
+                    image_url = row["image_url"]
+                    if image_url and (
+                        any(domain in image_url for domain in ["cryptoslate.com", "medium.com"])
+                        or image_url.startswith("|")
+                    ):
+                        image_url = None
 
-            # Parse symbols if string
-            symbols = row["symbols"]
-            if isinstance(symbols, str):
-                try:
-                    symbols = json.loads(symbols)
-                except:
-                    symbols = []
-            elif symbols is None:
-                symbols = []
+                    # Parse symbols if string
+                    symbols_list = row["symbols"]
+                    if isinstance(symbols_list, str):
+                        try:
+                            symbols_list = json.loads(symbols_list)
+                        except:
+                            symbols_list = []
+                    elif symbols_list is None:
+                        symbols_list = []
 
-            articles.append(
-                {
-                    "id": row["id"],
-                    "title": row["title"],
-                    "summary": row["summary"],
-                    "source": row["source"],
-                    "url": row["url"],
-                    "published_at": row["published_at"],
-                    "category": row["category"] or "general",
-                    "sentiment": row["sentiment"],
-                    "symbols": symbols,
-                    "image_url": image_url,
-                }
-            )
+                    articles.append(
+                        {
+                            "id": row["id"],
+                            "title": row["title"],
+                            "summary": row["summary"],
+                            "source": row["source"],
+                            "url": row["url"],
+                            "published_at": row["published_at"],
+                            "category": row["category"] or "general",
+                            "sentiment": row["sentiment"],
+                            "symbols": symbols_list,
+                            "image_url": image_url,
+                        }
+                    )
+        except Exception as e:
+            logger.error(f"News DB fetch failed: {e}")
 
-        # Get total count
-        count_query = "SELECT COUNT(*) FROM news_articles WHERE published_at >= $1"
-        count_params = [datetime.utcnow() - timedelta(days=7)]
+    # 2. Fallback to Finnhub if empty
+    if not articles and symbol:
+        try:
+            from cift.services.finnhub_realtime_service import FinnhubRealtimeService
+            finnhub = FinnhubRealtimeService()
+            news_data = await finnhub.get_company_news(symbol)
+            
+            for item in news_data[:limit]:
+                articles.append({
+                    "id": str(item.get("id", "")),
+                    "title": item.get("headline", ""),
+                    "summary": item.get("summary", ""),
+                    "source": item.get("source", "Finnhub"),
+                    "url": item.get("url", ""),
+                    "published_at": datetime.fromtimestamp(item.get("datetime", 0)),
+                    "category": item.get("category", "general"),
+                    "sentiment": "neutral",
+                    "symbols": [symbol],
+                    "image_url": item.get("image", "")
+                })
+        except Exception as e:
+            logger.warning(f"Finnhub news fallback failed: {e}")
 
-        if category and category != "all":
-            count_query += f" AND category = ${len(count_params) + 1}"
+    return articles
+
+    # Get total count (Optional, skipping for now as it's not used in response)
             count_params.append(category)
 
         if symbol:

@@ -1,4 +1,5 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
+import { AIIcon } from '~/components/icons/AIIcon';
 import { 
   X, Brain, Sparkles, Cpu, Building2, Activity, Map as MapIcon, 
   TrendingUp, TrendingDown, Shield, AlertTriangle, Zap, Globe,
@@ -61,7 +62,7 @@ export function UnifiedRightPanel(props: UnifiedRightPanelProps) {
                 : 'text-gray-500 hover:text-gray-300 hover:bg-terminal-800'
             }`}
           >
-            <Brain class="w-3.5 h-3.5" />
+            <AIIcon size={14} />
             AI Intel
           </button>
           <button

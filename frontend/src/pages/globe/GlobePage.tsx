@@ -11,6 +11,7 @@
  */
 
 import { createSignal, onMount, onCleanup, Show, For, createMemo } from 'solid-js';
+import { AIIcon } from '~/components/icons/AIIcon';
 import { useNavigate } from '@solidjs/router';
 import {
   Globe, Search, Filter, Layers, Activity, X, ChevronRight,
@@ -356,7 +357,7 @@ export default function GlobePage() {
             class={`p-1.5 rounded transition-colors ${showRightPanel() ? 'bg-accent-500/20 text-accent-400' : 'text-gray-400 hover:text-white hover:bg-terminal-800'}`}
             title="AI Intelligence Panel"
           >
-            <Brain class="w-4 h-4" />
+            <AIIcon size={16} />
           </button>
           <button
             onClick={() => setShowLegend(true)}
