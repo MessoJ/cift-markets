@@ -405,17 +405,34 @@ class StockAnalyzer:
         try:
             # Get historical bars
             pool = await get_postgres_pool()
-            async with pool.acquire() as conn:
-                bars = await conn.fetch(
-                    """
-                    SELECT timestamp, open, high, low, close, volume
-                    FROM ohlcv_bars
-                    WHERE symbol = $1 AND timeframe = '1d'
-                    ORDER BY timestamp DESC
-                    LIMIT 200
-                    """,
-                    symbol
-                )
+            bars = []
+            
+            # 1. Try Database
+            if pool:
+                try:
+                    async with pool.acquire() as conn:
+                        bars = await conn.fetch(
+                            """
+                            SELECT timestamp, open, high, low, close, volume
+                            FROM ohlcv_bars
+                            WHERE symbol = $1 AND timeframe = '1d'
+                            ORDER BY timestamp DESC
+                            LIMIT 200
+                            """,
+                            symbol
+                        )
+                except Exception as e:
+                    logger.warning(f"DB fetch failed for {symbol}: {e}")
+
+            # 2. Fallback to Market Data Service if DB empty
+            if not bars or len(bars) < 20:
+                logger.info(f"Fetching historical data for {symbol} from external source")
+                from cift.services.market_data_service import market_data_service
+                history = await market_data_service.get_historical_data(symbol, days=200)
+                
+                if history:
+                    # Convert to format expected by analysis (dict-like)
+                    bars = history
             
             if not bars or len(bars) < 20:
                 return self._default_technical()

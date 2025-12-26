@@ -9,7 +9,8 @@
 
 import { createSignal, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { Sparkles, ChevronRight, TrendingUp, TrendingDown, Minus, Shield, Target, Zap } from 'lucide-solid';
+import { ChevronRight, TrendingUp, TrendingDown, Minus, Shield, Target, Zap } from 'lucide-solid';
+import { AIIcon } from '~/components/icons/AIIcon';
 import { apiClient } from '~/lib/api/client';
 
 interface InlineAnalyzerProps {
@@ -111,9 +112,7 @@ export function InlineAnalyzer(props: InlineAnalyzerProps) {
         `}
         title={`Analyze ${props.symbol}`}
       >
-        <Sparkles 
-          class={`w-3.5 h-3.5 transition-transform duration-500 ${isAnalyzing() ? 'animate-spin' : ''}`} 
-        />
+        <AIIcon size={14} animate={isAnalyzing()} />
       </button>
 
       {/* Expanding Content */}

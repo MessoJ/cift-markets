@@ -10,7 +10,8 @@
 
 import { createSignal, Show, onMount, onCleanup, createEffect } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { Crosshair, ChevronRight, TrendingUp, TrendingDown, Gauge, Shield, Zap, X } from 'lucide-solid';
+import { ChevronRight, TrendingUp, TrendingDown, Gauge, Shield, Zap, X } from 'lucide-solid';
+import { AIIcon } from '~/components/icons/AIIcon';
 import { apiClient } from '~/lib/api/client';
 
 interface WatchlistAnalyzerProps {
@@ -189,7 +190,7 @@ export function WatchlistAnalyzer(props: WatchlistAnalyzerProps) {
         `}
         title={`Analyze ${props.symbol}`}
       >
-        <Crosshair class={`w-3.5 h-3.5 ${isAnalyzing() ? 'animate-spin' : ''}`} />
+        <AIIcon size={14} animate={isAnalyzing()} />
       </button>
 
       {/* Expanded Panel - Fixed positioning to avoid clipping */}

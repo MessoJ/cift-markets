@@ -10,7 +10,8 @@
 
 import { createSignal, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { Activity, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Target, AlertTriangle } from 'lucide-solid';
+import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Target, AlertTriangle } from 'lucide-solid';
+import { AIIcon } from '~/components/icons/AIIcon';
 import { apiClient } from '~/lib/api/client';
 import { formatCurrency } from '~/lib/utils/format';
 
@@ -136,9 +137,7 @@ export function PortfolioAnalyzer(props: PortfolioAnalyzerProps) {
           }
         `}
       >
-        <Activity 
-          class={`w-3 h-3 ${isAnalyzing() ? 'animate-pulse' : ''}`} 
-        />
+        <AIIcon size={12} animate={isAnalyzing()} />
         <span>AI</span>
         <ChevronDown 
           class={`w-3 h-3 transition-transform duration-200 ${isExpanded() ? 'rotate-180' : ''}`} 
