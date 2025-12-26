@@ -91,7 +91,7 @@ class MarketDataService:
                         "ask": quote.get("price", 0) * 1.0001,  # Simulated ask
                         "volume": quote.get("volume", 0),
                         "change": quote.get("change", 0),
-                        "change_pct": quote.get("change_percent", 0),
+                        "change_percent": quote.get("change_percent", 0),
                         "high": quote.get("high", 0),
                         "low": quote.get("low", 0),
                         "open": quote.get("open", 0),
@@ -170,14 +170,7 @@ class MarketDataService:
             curr_price = close_p # Walk backwards
             
         return candles
-        
-        # 2. For any missing symbols, try Polygon (might work for some)
-        missing = [s for s in symbols if s not in results]
-        if missing:
-            try:
-                polygon_results = await self.polygon.get_quotes_batch(missing)
-                results.update(polygon_results)
-            except Exception as e:
+
                 logger.warning(f"Polygon batch quote failed: {e}")
         
         return results
