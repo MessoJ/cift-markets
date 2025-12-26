@@ -39,9 +39,9 @@ const MetricRow = (props: {
   };
 
   return (
-    <div class="flex justify-between items-center py-2 border-b border-slate-700/50 last:border-0">
-      <span class="text-sm text-slate-400">{props.label}</span>
-      <span class={`text-sm font-medium ${statusColor()}`}>{formattedValue()}</span>
+    <div class="flex justify-between items-center py-1 border-b border-slate-800 last:border-0">
+      <span class="text-xs text-slate-400">{props.label}</span>
+      <span class={`text-xs font-medium ${statusColor()}`}>{formattedValue()}</span>
     </div>
   );
 };
@@ -66,9 +66,9 @@ const TrendIndicator = (props: { label: string; trend?: string | null }) => {
   const Icon = config.icon;
 
   return (
-    <div class="text-center p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
-      <div class="text-xs text-slate-500 mb-1">{props.label}</div>
-      <div class={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+    <div class="text-center p-2 rounded-lg bg-slate-900 border border-slate-800">
+      <div class="text-[10px] text-slate-500 mb-1">{props.label}</div>
+      <div class={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${config.color}`}>
         <Icon class="w-3 h-3" />
         {config.text}
       </div>
@@ -154,36 +154,36 @@ export function ExpandableAnalysisSection(props: ExpandableAnalysisSectionProps)
   const Icon = config().icon;
 
   return (
-    <div class={`bg-slate-800/50 border ${props.isExpanded ? config().border : 'border-slate-700'} rounded-xl overflow-hidden transition-all duration-300`}>
+    <div class={`bg-slate-900 border ${props.isExpanded ? config().border : 'border-slate-800'} rounded-lg overflow-hidden transition-all duration-300`}>
       {/* Header - Always Visible */}
       <button
         onClick={props.onToggle}
-        class={`w-full p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors ${props.isExpanded ? `bg-gradient-to-r ${config().gradient}` : ''}`}
+        class={`w-full p-3 flex items-center justify-between hover:bg-slate-800 transition-colors ${props.isExpanded ? `bg-gradient-to-r ${config().gradient}` : ''}`}
       >
-        <div class="flex items-center gap-4">
-          <div class={`p-2.5 rounded-lg ${props.isExpanded ? 'bg-slate-800' : 'bg-slate-700/50'} ${config().iconColor}`}>
-            <Icon class="w-5 h-5" />
+        <div class="flex items-center gap-3">
+          <div class={`p-2 rounded-lg ${props.isExpanded ? 'bg-slate-900' : 'bg-slate-800'} ${config().iconColor}`}>
+            <Icon class="w-4 h-4" />
           </div>
           <div class="text-left">
-            <div class="text-sm font-medium text-white">{config().title}</div>
-            <div class="flex items-center gap-2 mt-1">
-              <span class={`text-lg font-bold ${scoreColor()}`}>{Math.round(props.score)}</span>
-              <span class="text-slate-500 text-xs">/100</span>
-              <span class={`px-2 py-0.5 rounded text-xs font-medium ${signalConfig().bg} ${signalConfig().text}`}>
+            <div class="text-xs font-medium text-white">{config().title}</div>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class={`text-sm font-bold ${scoreColor()}`}>{Math.round(props.score)}</span>
+              <span class="text-slate-500 text-[10px]">/100</span>
+              <span class={`px-1.5 py-0.5 rounded text-[10px] font-medium ${signalConfig().bg} ${signalConfig().text}`}>
                 {props.signal?.replace('_', ' ') || 'NEUTRAL'}
               </span>
             </div>
           </div>
         </div>
-        <div class={`p-1.5 rounded-full ${props.isExpanded ? 'bg-slate-800' : 'bg-slate-700/50'} transition-colors`}>
-          {props.isExpanded ? <ChevronUp class="w-4 h-4 text-slate-400" /> : <ChevronDown class="w-4 h-4 text-slate-400" />}
+        <div class={`p-1 rounded-full ${props.isExpanded ? 'bg-slate-900' : 'bg-slate-800'} transition-colors`}>
+          {props.isExpanded ? <ChevronUp class="w-3 h-3 text-slate-400" /> : <ChevronDown class="w-3 h-3 text-slate-400" />}
         </div>
       </button>
 
       {/* Expanded Content */}
       <Show when={props.isExpanded}>
-        <div class="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
-          <div class="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent mb-4" />
+        <div class="px-3 pb-3 animate-in slide-in-from-top-2 duration-200">
+          <div class="h-px bg-gradient-to-r from-transparent via-slate-800 to-transparent mb-3" />
           
           {/* Technical Analysis Details */}
           <Show when={props.type === 'technical'}>

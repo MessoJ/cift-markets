@@ -37,7 +37,6 @@ import {
   Minus,
   Sparkles,
   Briefcase,
-  Brain,
   Bot,
   Cpu,
   LineChart,
@@ -267,7 +266,7 @@ const MLPredictionCard = (props: { prediction: MLPrediction | null; loading: boo
     <div class="bg-gradient-to-br from-purple-500/10 via-slate-800/50 to-blue-500/10 border border-purple-500/30 rounded-xl p-5">
       <div class="flex items-center gap-2 mb-4">
         <div class="p-2 bg-purple-500/20 rounded-lg">
-          <Brain class="h-5 w-5 text-purple-400" />
+          <AIIcon class="h-5 w-5 text-purple-400" />
         </div>
         <div>
           <h3 class="text-sm font-semibold text-white">AI Model Prediction</h3>
@@ -683,7 +682,7 @@ export default function AnalysisPage() {
                 <AIIcon size={24} class="text-accent-400" />
                 Stock Analysis
                 <span class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-xs font-medium">
-                  <Brain class="h-3 w-3" />
+                  <AIIcon class="h-3 w-3" />
                   AI + ML
                 </span>
               </h1>
