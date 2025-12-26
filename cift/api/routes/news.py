@@ -181,23 +181,12 @@ async def get_news(
         except Exception as e:
             logger.warning(f"Finnhub news fallback failed: {e}")
 
-    return articles
-
-    # Get total count (Optional, skipping for now as it's not used in response)
-            count_params.append(category)
-
-        if symbol:
-            count_query += f" AND ${len(count_params) + 1} = ANY(symbols)"
-            count_params.append(symbol.upper())
-
-        total = await conn.fetchval(count_query, *count_params)
-
-        return {
-            "articles": articles,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
+    return {
+        "articles": articles,
+        "total": len(articles),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/articles/{article_id}")
