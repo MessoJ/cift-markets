@@ -323,13 +323,14 @@ class StockAnalyzer:
         )
         
         # Handle any failures gracefully
-        if isinstance(quote, Exception):
+        if isinstance(quote, Exception) or not quote:
             logger.error(f"Quote fetch failed for {symbol}: {quote}")
             quote = {"price": 0, "change": 0, "change_percent": 0}
         
         if isinstance(technical, Exception):
             logger.error(f"Technical analysis failed for {symbol}: {technical}")
             technical = self._default_technical()
+
         
         if isinstance(fundamental, Exception):
             logger.error(f"Fundamental analysis failed for {symbol}: {fundamental}")
