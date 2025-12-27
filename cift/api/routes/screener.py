@@ -23,10 +23,8 @@ router = APIRouter(prefix="/screener", tags=["screener"])
 # MODELS
 # ============================================================================
 
-
 class ScreenerCriteria(BaseModel):
     """Screener criteria model"""
-
     # Price filters
     price_min: Decimal | None = None
     price_max: Decimal | None = None
@@ -58,7 +56,6 @@ class ScreenerCriteria(BaseModel):
 
 class ScreenerResponse(BaseModel):
     """Screener response with pagination"""
-
     results: list[dict]
     total_count: int
     page: int
@@ -67,7 +64,6 @@ class ScreenerResponse(BaseModel):
 
 class ScreenerResult(BaseModel):
     """Screener result model"""
-
     symbol: str
     name: str
     price: Decimal
@@ -84,7 +80,6 @@ class ScreenerResult(BaseModel):
 
 class SavedScreen(BaseModel):
     """Saved screen model"""
-
     id: str
     name: str
     criteria: ScreenerCriteria
@@ -94,7 +89,6 @@ class SavedScreen(BaseModel):
 
 class SaveScreenRequest(BaseModel):
     """Save screen request"""
-
     name: str = Field(..., min_length=1, max_length=100)
     criteria: ScreenerCriteria
 
@@ -102,7 +96,6 @@ class SaveScreenRequest(BaseModel):
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
-
 
 @router.post("/scan")
 async def screen_stocks(
@@ -262,42 +255,32 @@ async def screen_stocks(
             rows = await conn.fetch(data_query, *params, limit, offset)
 
             for row in rows:
-                results.append(
-                    {
-                        "symbol": row["symbol"],
-                        "name": row["name"],
-                        "price": float(row["price"]) if row["price"] else 0,
-                        "change": float(row["change"]) if row["change"] else 0,
-                        "change_pct": float(row["change_percent"]) if row["change_percent"] else 0,
-                        "volume": int(row["volume"]) if row["volume"] else 0,
-                        "market_cap": float(row["market_cap"]) if row["market_cap"] else 0,
-                        "pe_ratio": float(row["pe_ratio"]) if row["pe_ratio"] else None,
-                        "forward_pe": float(row["forward_pe"]) if row["forward_pe"] else None,
-                        "dividend_yield": (
-                            float(row["dividend_yield"]) if row["dividend_yield"] else None
-                        ),
-                        "beta": float(row["beta"]) if row["beta"] else None,
-                        "week52_high": (
-                            float(row["fifty_two_week_high"])
-                            if row["fifty_two_week_high"]
-                            else None
-                        ),
-                        "week52_low": (
-                            float(row["fifty_two_week_low"]) if row["fifty_two_week_low"] else None
-                        ),
-                        "avg_volume": int(row["avg_volume_10d"]) if row["avg_volume_10d"] else None,
-                        "sector": row["sector"] or "Unknown",
-                        "industry": row["industry"] or "Unknown",
-                        "country": row["country"] or "Unknown",
-                    }
-                )
+                results.append({
+                    "symbol": row['symbol'],
+                    "name": row['name'],
+                    "price": float(row['price']) if row['price'] else 0,
+                    "change": float(row['change']) if row['change'] else 0,
+                    "change_pct": float(row['change_percent']) if row['change_percent'] else 0,
+                    "volume": int(row['volume']) if row['volume'] else 0,
+                    "market_cap": float(row['market_cap']) if row['market_cap'] else 0,
+                    "pe_ratio": float(row['pe_ratio']) if row['pe_ratio'] else None,
+                    "forward_pe": float(row['forward_pe']) if row['forward_pe'] else None,
+                    "dividend_yield": float(row['dividend_yield']) if row['dividend_yield'] else None,
+                    "beta": float(row['beta']) if row['beta'] else None,
+                    "week52_high": float(row['fifty_two_week_high']) if row['fifty_two_week_high'] else None,
+                    "week52_low": float(row['fifty_two_week_low']) if row['fifty_two_week_low'] else None,
+                    "avg_volume": int(row['avg_volume_10d']) if row['avg_volume_10d'] else None,
+                    "sector": row['sector'] or "Unknown",
+                    "industry": row['industry'] or "Unknown",
+                    "country": row['country'] or "Unknown",
+                })
 
         logger.info(f"Screener returned {len(results)} results (Total: {total_count})")
         return {
             "results": results,
             "total_count": total_count,
             "page": (offset // limit) + 1,
-            "limit": limit,
+            "limit": limit
         }
 
     except Exception as e:
@@ -316,7 +299,7 @@ async def get_preset_screens():
             "description": "Stocks with positive change today",
             "criteria": {"change_pct_min": 0.01},  # Any positive change
             "sort_by": "change_pct",
-            "sort_order": "desc",
+            "sort_order": "desc"
         },
         {
             "id": "losers",
@@ -324,7 +307,7 @@ async def get_preset_screens():
             "description": "Stocks with negative change today",
             "criteria": {"change_pct_max": -0.01},  # Any negative change
             "sort_by": "change_pct",
-            "sort_order": "asc",
+            "sort_order": "asc"
         },
         {
             "id": "most_active",
@@ -332,7 +315,7 @@ async def get_preset_screens():
             "description": "Highest volume stocks today",
             "criteria": {},  # Return all, sorted by volume
             "sort_by": "volume",
-            "sort_order": "desc",
+            "sort_order": "desc"
         },
         {
             "id": "mega_cap",
@@ -340,7 +323,7 @@ async def get_preset_screens():
             "description": "Market cap over $200B",
             "criteria": {"market_cap_min": 200000},  # 200000 million = $200B
             "sort_by": "market_cap",
-            "sort_order": "desc",
+            "sort_order": "desc"
         },
         {
             "id": "large_cap",
@@ -348,7 +331,7 @@ async def get_preset_screens():
             "description": "Market cap over $10B",
             "criteria": {"market_cap_min": 10000},  # 10000 million = $10B
             "sort_by": "market_cap",
-            "sort_order": "desc",
+            "sort_order": "desc"
         },
         {
             "id": "tech",
@@ -356,7 +339,7 @@ async def get_preset_screens():
             "description": "Technology sector stocks",
             "criteria": {"sector": "Technology"},
             "sort_by": "market_cap",
-            "sort_order": "desc",
+            "sort_order": "desc"
         },
         {
             "id": "healthcare",
@@ -364,10 +347,9 @@ async def get_preset_screens():
             "description": "Healthcare sector stocks",
             "criteria": {"sector": "Health Care"},  # Match actual DB value
             "sort_by": "market_cap",
-            "sort_order": "desc",
-        },
+            "sort_order": "desc"
+        }
     ]
-
 
 @router.get("/saved")
 async def get_saved_screens(
@@ -394,11 +376,11 @@ async def get_saved_screens(
 
         screens = [
             SavedScreen(
-                id=row["id"],
-                name=row["name"],
-                criteria=ScreenerCriteria(**row["criteria"]),
-                created_at=row["created_at"],
-                last_run=row["last_run"],
+                id=row['id'],
+                name=row['name'],
+                criteria=ScreenerCriteria(**row['criteria']),
+                created_at=row['created_at'],
+                last_run=row['last_run'],
             )
             for row in rows
         ]
@@ -431,10 +413,10 @@ async def save_screen(
             )
 
             return SavedScreen(
-                id=row["id"],
-                name=row["name"],
-                criteria=ScreenerCriteria(**row["criteria"]),
-                created_at=row["created_at"],
+                id=row['id'],
+                name=row['name'],
+                criteria=ScreenerCriteria(**row['criteria']),
+                created_at=row['created_at'],
                 last_run=None,
             )
     except Exception as e:
@@ -489,7 +471,7 @@ async def run_saved_screen(
         if not row:
             raise HTTPException(status_code=404, detail="Screen not found")
 
-        criteria = ScreenerCriteria(**row["criteria"])
+        criteria = ScreenerCriteria(**row['criteria'])
 
         # Update last_run timestamp
         await conn.execute(
@@ -517,12 +499,12 @@ async def advanced_stock_screen(
 
         # Convert dict to ScreenerRequest
         screener_request = ScreenerRequest(
-            name=request.get("name", "Advanced Screen"),
-            criteria=request.get("criteria", []),
-            sort_by=request.get("sort_by", "market_cap"),
-            sort_order=request.get("sort_order", "desc"),
-            limit=request.get("limit", 100),
-            save_screen=request.get("save_screen", False),
+            name=request.get('name', 'Advanced Screen'),
+            criteria=request.get('criteria', []),
+            sort_by=request.get('sort_by', 'market_cap'),
+            sort_order=request.get('sort_order', 'desc'),
+            limit=request.get('limit', 100),
+            save_screen=request.get('save_screen', False)
         )
 
         screener = get_screener_service()
@@ -567,8 +549,8 @@ async def get_screener_fields():
                 "!=": "Not equal to",
                 "between": "Between two values",
                 "in": "In list of values",
-                "not_in": "Not in list of values",
-            },
+                "not_in": "Not in list of values"
+            }
         }
 
     except Exception as e:
@@ -613,8 +595,8 @@ async def get_sectors():
 
         return [
             {
-                "sector": row["sector"],
-                "count": row["count"],
+                "sector": row['sector'],
+                "count": row['count'],
             }
             for row in rows
         ]
@@ -645,8 +627,8 @@ async def get_industries(
 
         return [
             {
-                "industry": row["industry"],
-                "count": row["count"],
+                "industry": row['industry'],
+                "count": row['count'],
             }
             for row in rows
         ]

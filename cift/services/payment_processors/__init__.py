@@ -2,7 +2,6 @@
 Payment Processors Package - RULES COMPLIANT
 Central module for all payment processor integrations
 """
-
 from typing import Any
 
 from cift.services.payment_processors.alpaca_processor import AlpacaProcessor
@@ -13,18 +12,21 @@ from cift.services.payment_processors.paypal import PayPalProcessor
 from cift.services.payment_processors.stripe_processor import StripeProcessor
 
 __all__ = [
-    "PaymentProcessor",
-    "PaymentProcessorError",
-    "MpesaProcessor",
-    "StripeProcessor",
-    "PayPalProcessor",
-    "CryptoProcessor",
-    "AlpacaProcessor",
-    "get_payment_processor",
+    'PaymentProcessor',
+    'PaymentProcessorError',
+    'MpesaProcessor',
+    'StripeProcessor',
+    'PayPalProcessor',
+    'CryptoProcessor',
+    'AlpacaProcessor',
+    'get_payment_processor'
 ]
 
 
-def get_payment_processor(payment_method_type: str, config: dict[str, Any]) -> PaymentProcessor:
+def get_payment_processor(
+    payment_method_type: str,
+    config: dict[str, Any]
+) -> PaymentProcessor:
     """
     Factory function to get the appropriate payment processor
 
@@ -45,12 +47,12 @@ def get_payment_processor(payment_method_type: str, config: dict[str, Any]) -> P
         >>> result = await processor.process_deposit(user_id, amount, payment_method_id)
     """
     processor_map = {
-        "mpesa": MpesaProcessor,
-        "debit_card": StripeProcessor,
-        "credit_card": StripeProcessor,
-        "paypal": PayPalProcessor,
-        "crypto_wallet": CryptoProcessor,
-        "bank_account": AlpacaProcessor,
+        'mpesa': MpesaProcessor,
+        'debit_card': StripeProcessor,
+        'credit_card': StripeProcessor,
+        'paypal': PayPalProcessor,
+        'crypto_wallet': CryptoProcessor,
+        'bank_account': AlpacaProcessor
     }
 
     processor_class = processor_map.get(payment_method_type)

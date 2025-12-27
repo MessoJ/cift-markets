@@ -22,17 +22,14 @@ router = APIRouter(prefix="/chart-drawings", tags=["Chart Drawings"])
 # PYDANTIC MODELS
 # ============================================================================
 
-
 class DrawingPoint(BaseModel):
     """Point in price-time space."""
-
     timestamp: int
     price: float
 
 
 class DrawingStyle(BaseModel):
     """Drawing style configuration."""
-
     color: str = "#3b82f6"
     lineWidth: int = 2
     lineType: str = "solid"
@@ -42,7 +39,6 @@ class DrawingStyle(BaseModel):
 
 class DrawingCreate(BaseModel):
     """Create a new drawing."""
-
     symbol: str = Field(..., max_length=20)
     timeframe: str = Field(..., max_length=10)
     drawing_type: str = Field(
@@ -57,7 +53,6 @@ class DrawingCreate(BaseModel):
 
 class DrawingUpdate(BaseModel):
     """Update an existing drawing."""
-
     drawing_data: dict | None = None
     style: DrawingStyle | None = None
     locked: bool | None = None
@@ -66,7 +61,6 @@ class DrawingUpdate(BaseModel):
 
 class DrawingResponse(BaseModel):
     """Drawing response model."""
-
     id: str
     user_id: str
     symbol: str
@@ -83,7 +77,6 @@ class DrawingResponse(BaseModel):
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
-
 
 @router.get("", response_model=list[DrawingResponse])
 async def get_drawings(
@@ -184,9 +177,7 @@ async def create_drawing(
             drawing.visible,
         )
 
-        logger.info(
-            f"Drawing created: {drawing.drawing_type} on {drawing.symbol} by user {user_id}"
-        )
+        logger.info(f"Drawing created: {drawing.drawing_type} on {drawing.symbol} by user {user_id}")
         return dict(row)
 
     except Exception as e:

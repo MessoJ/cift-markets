@@ -23,10 +23,8 @@ router = APIRouter(prefix="/statements", tags=["statements"])
 # MODELS
 # ============================================================================
 
-
 class AccountStatement(BaseModel):
     """Account statement model"""
-
     id: str
     user_id: str
     statement_type: str  # 'monthly', 'quarterly', 'annual'
@@ -48,7 +46,6 @@ class AccountStatement(BaseModel):
 
 class TaxDocument(BaseModel):
     """Tax document model"""
-
     id: str
     user_id: str
     document_type: str  # '1099-B', '1099-DIV', '1099-INT'
@@ -66,7 +63,6 @@ class TaxDocument(BaseModel):
 
 class TradeConfirmation(BaseModel):
     """Trade confirmation model"""
-
     id: str
     order_id: str
     symbol: str
@@ -83,7 +79,6 @@ class TradeConfirmation(BaseModel):
 # ENDPOINTS - ACCOUNT STATEMENTS
 # ============================================================================
 
-
 @router.get("")
 async def get_statements(
     year: int | None = None,
@@ -96,14 +91,17 @@ async def get_statements(
     try:
         statement_service = get_statement_service()
         statements = await statement_service.get_user_statements(
-            user_id=user_id, account_id=account_id, statement_type=statement_type, limit=50
+            user_id=user_id,
+            account_id=account_id,
+            statement_type=statement_type,
+            limit=50
         )
 
         return {
             "statements": statements,
             "total": len(statements),
             "year": year,
-            "statement_type": statement_type,
+            "statement_type": statement_type
         }
 
     except Exception as e:
@@ -152,21 +150,21 @@ async def get_statements(
 
         return [
             AccountStatement(
-                id=row["id"],
-                user_id=row["user_id"],
-                statement_type=row["statement_type"],
-                period_start=row["period_start"],
-                period_end=row["period_end"],
-                generated_at=row["generated_at"],
-                file_url=row["file_url"],
-                starting_balance=row["starting_balance"],
-                ending_balance=row["ending_balance"],
-                total_deposits=row["total_deposits"],
-                total_withdrawals=row["total_withdrawals"],
-                total_trades=row["total_trades"],
-                realized_gain_loss=row["realized_gain_loss"],
-                dividends_received=row["dividends_received"],
-                fees_paid=row["fees_paid"],
+                id=row['id'],
+                user_id=row['user_id'],
+                statement_type=row['statement_type'],
+                period_start=row['period_start'],
+                period_end=row['period_end'],
+                generated_at=row['generated_at'],
+                file_url=row['file_url'],
+                starting_balance=row['starting_balance'],
+                ending_balance=row['ending_balance'],
+                total_deposits=row['total_deposits'],
+                total_withdrawals=row['total_withdrawals'],
+                total_trades=row['total_trades'],
+                realized_gain_loss=row['realized_gain_loss'],
+                dividends_received=row['dividends_received'],
+                fees_paid=row['fees_paid'],
             )
             for row in rows
         ]
@@ -184,7 +182,10 @@ async def generate_monthly_statement(
     try:
         statement_service = get_statement_service()
         statement = await statement_service.generate_monthly_statement(
-            user_id=user_id, account_id=account_id, year=year, month=month
+            user_id=user_id,
+            account_id=account_id,
+            year=year,
+            month=month
         )
 
         return {
@@ -192,7 +193,7 @@ async def generate_monthly_statement(
             "generated_at": statement.generated_at,
             "file_size": statement.file_size,
             "page_count": statement.page_count,
-            "message": "Monthly statement generated successfully",
+            "message": "Monthly statement generated successfully"
         }
 
     except Exception as e:
@@ -210,14 +211,15 @@ async def generate_trade_confirmation(
     try:
         statement_service = get_statement_service()
         confirmation = await statement_service.generate_trade_confirmation(
-            user_id=user_id, order_id=order_id
+            user_id=user_id,
+            order_id=order_id
         )
 
         return {
             "confirmation_id": str(confirmation.id),
             "generated_at": confirmation.generated_at,
             "file_size": confirmation.file_size,
-            "message": "Trade confirmation generated successfully",
+            "message": "Trade confirmation generated successfully"
         }
 
     except Exception as e:
@@ -237,7 +239,10 @@ async def generate_tax_document(
     try:
         statement_service = get_statement_service()
         tax_doc = await statement_service.generate_tax_document(
-            user_id=user_id, account_id=account_id, tax_year=tax_year, document_type=document_type
+            user_id=user_id,
+            account_id=account_id,
+            tax_year=tax_year,
+            document_type=document_type
         )
 
         return {
@@ -246,7 +251,7 @@ async def generate_tax_document(
             "file_size": tax_doc.file_size,
             "page_count": tax_doc.page_count,
             "document_type": document_type,
-            "message": "Tax document generated successfully",
+            "message": "Tax document generated successfully"
         }
 
     except Exception as e:
@@ -262,7 +267,7 @@ async def generate_statement_legacy(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Generate account statement for a period (legacy endpoint)"""
-    if statement_type not in ["monthly", "quarterly", "annual"]:
+    if statement_type not in ['monthly', 'quarterly', 'annual']:
         raise HTTPException(status_code=400, detail="Invalid statement type")
 
     pool = await get_postgres_pool()
@@ -278,9 +283,8 @@ async def generate_statement_legacy(
             raise HTTPException(status_code=404, detail="Portfolio not found")
 
         # Calculate statement metrics
-        deposits = (
-            await conn.fetchval(
-                """
+        deposits = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
             WHERE user_id = $1
@@ -288,16 +292,13 @@ async def generate_statement_legacy(
             AND status = 'completed'
             AND completed_at BETWEEN $2 AND $3
             """,
-                user_id,
-                period_start,
-                period_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            period_start,
+            period_end,
+        ) or Decimal("0")
 
-        withdrawals = (
-            await conn.fetchval(
-                """
+        withdrawals = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(amount), 0)
             FROM funding_transactions
             WHERE user_id = $1
@@ -305,78 +306,64 @@ async def generate_statement_legacy(
             AND status = 'completed'
             AND completed_at BETWEEN $2 AND $3
             """,
-                user_id,
-                period_start,
-                period_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            period_start,
+            period_end,
+        ) or Decimal("0")
 
-        total_trades = (
-            await conn.fetchval(
-                """
+        total_trades = await conn.fetchval(
+            """
             SELECT COUNT(*)
             FROM orders
             WHERE user_id = $1
             AND status = 'filled'
             AND filled_at BETWEEN $2 AND $3
             """,
-                user_id,
-                period_start,
-                period_end,
-            )
-            or 0
-        )
+            user_id,
+            period_start,
+            period_end,
+        ) or 0
 
         # Calculate realized gains/losses
-        realized_gain_loss = (
-            await conn.fetchval(
-                """
+        realized_gain_loss = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(realized_gain_loss), 0)
             FROM positions
             WHERE user_id = $1
             AND closed_at BETWEEN $2 AND $3
             """,
-                user_id,
-                period_start,
-                period_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            period_start,
+            period_end,
+        ) or Decimal("0")
 
         # Calculate dividends
-        dividends = (
-            await conn.fetchval(
-                """
+        dividends = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(amount), 0)
             FROM transactions
             WHERE user_id = $1
             AND type = 'dividend'
             AND created_at BETWEEN $2 AND $3
             """,
-                user_id,
-                period_start,
-                period_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            period_start,
+            period_end,
+        ) or Decimal("0")
 
         # Calculate fees
-        fees = (
-            await conn.fetchval(
-                """
+        fees = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(commission), 0)
             FROM orders
             WHERE user_id = $1
             AND status = 'filled'
             AND filled_at BETWEEN $2 AND $3
             """,
-                user_id,
-                period_start,
-                period_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            period_start,
+            period_end,
+        ) or Decimal("0")
 
         # Get starting balance (ending balance of previous period or initial)
         prev_statement = await conn.fetchrow(
@@ -391,8 +378,8 @@ async def generate_statement_legacy(
             period_start,
         )
 
-        starting_balance = prev_statement["ending_balance"] if prev_statement else Decimal("0")
-        ending_balance = portfolio["total_value"]
+        starting_balance = prev_statement['ending_balance'] if prev_statement else Decimal("0")
+        ending_balance = portfolio['total_value']
 
         # Create statement record
         row = await conn.fetchrow(
@@ -421,13 +408,11 @@ async def generate_statement_legacy(
         # TODO: Generate PDF document
         # file_url = await generate_statement_pdf(...)
 
-        logger.info(
-            f"Statement generated: id={row['id']}, user_id={user_id}, type={statement_type}"
-        )
+        logger.info(f"Statement generated: id={row['id']}, user_id={user_id}, type={statement_type}")
 
         return {
-            "statement_id": row["id"],
-            "generated_at": row["generated_at"],
+            "statement_id": row['id'],
+            "generated_at": row['generated_at'],
             "message": "Statement generated successfully",
         }
 
@@ -454,16 +439,15 @@ async def download_statement(
         if not row:
             raise HTTPException(status_code=404, detail="Statement not found")
 
-        if not row["file_url"]:
+        if not row['file_url']:
             raise HTTPException(status_code=404, detail="Statement file not available")
 
-        return {"download_url": row["file_url"]}
+        return {"download_url": row['file_url']}
 
 
 # ============================================================================
 # ENDPOINTS - TAX DOCUMENTS
 # ============================================================================
-
 
 @router.get("/tax")
 async def get_tax_documents(
@@ -502,17 +486,17 @@ async def get_tax_documents(
 
         return [
             TaxDocument(
-                id=row["id"],
-                user_id=row["user_id"],
-                document_type=row["document_type"],
-                tax_year=row["tax_year"],
-                generated_at=row["generated_at"],
-                file_url=row["file_url"],
-                total_proceeds=row["total_proceeds"],
-                total_cost_basis=row["total_cost_basis"],
-                total_gain_loss=row["total_gain_loss"],
-                total_dividends=row["total_dividends"],
-                total_interest=row["total_interest"],
+                id=row['id'],
+                user_id=row['user_id'],
+                document_type=row['document_type'],
+                tax_year=row['tax_year'],
+                generated_at=row['generated_at'],
+                file_url=row['file_url'],
+                total_proceeds=row['total_proceeds'],
+                total_cost_basis=row['total_cost_basis'],
+                total_gain_loss=row['total_gain_loss'],
+                total_dividends=row['total_dividends'],
+                total_interest=row['total_interest'],
             )
             for row in rows
         ]
@@ -535,33 +519,27 @@ async def generate_tax_forms(
 
     async with pool.acquire() as conn:
         # Generate 1099-B (Capital gains/losses)
-        proceeds = (
-            await conn.fetchval(
-                """
+        proceeds = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(quantity * average_price), 0)
             FROM positions
             WHERE user_id = $1 AND closed_at BETWEEN $2 AND $3
             """,
-                user_id,
-                year_start,
-                year_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            year_start,
+            year_end,
+        ) or Decimal("0")
 
-        cost_basis = (
-            await conn.fetchval(
-                """
+        cost_basis = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(quantity * cost_basis), 0)
             FROM positions
             WHERE user_id = $1 AND closed_at BETWEEN $2 AND $3
             """,
-                user_id,
-                year_start,
-                year_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            year_start,
+            year_end,
+        ) or Decimal("0")
 
         gain_loss = proceeds - cost_basis
 
@@ -587,21 +565,18 @@ async def generate_tax_forms(
             )
 
         # Generate 1099-DIV (Dividends)
-        dividends = (
-            await conn.fetchval(
-                """
+        dividends = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(amount), 0)
             FROM transactions
             WHERE user_id = $1
             AND type = 'dividend'
             AND created_at BETWEEN $2 AND $3
             """,
-                user_id,
-                year_start,
-                year_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            year_start,
+            year_end,
+        ) or Decimal("0")
 
         if dividends > 0:
             await conn.execute(
@@ -620,21 +595,18 @@ async def generate_tax_forms(
             )
 
         # Generate 1099-INT (Interest - if applicable)
-        interest = (
-            await conn.fetchval(
-                """
+        interest = await conn.fetchval(
+            """
             SELECT COALESCE(SUM(amount), 0)
             FROM transactions
             WHERE user_id = $1
             AND type = 'interest'
             AND created_at BETWEEN $2 AND $3
             """,
-                user_id,
-                year_start,
-                year_end,
-            )
-            or Decimal("0")
-        )
+            user_id,
+            year_start,
+            year_end,
+        ) or Decimal("0")
 
         if interest > 0:
             await conn.execute(
@@ -689,7 +661,7 @@ async def download_tax_document(
         if not row:
             raise HTTPException(status_code=404, detail="Tax document not found")
 
-        if not row["file_url"]:
+        if not row['file_url']:
             raise HTTPException(status_code=404, detail="Document file not available")
 
-        return {"download_url": row["file_url"]}
+        return {"download_url": row['file_url']}

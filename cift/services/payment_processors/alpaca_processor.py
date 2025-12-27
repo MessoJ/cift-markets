@@ -2,7 +2,6 @@
 Alpaca Payment Processor - RULES COMPLIANT
 Handles ACH transfers and brokerage funding via Alpaca API
 """
-
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -21,16 +20,19 @@ class AlpacaProcessor(PaymentProcessor):
 
     def _validate_config(self) -> None:
         """Validate Alpaca configuration"""
-        if not self.config.get("api_key") or not self.config.get("secret_key"):
+        if not self.config.get('api_key') or not self.config.get('secret_key'):
             raise PaymentProcessorError("Alpaca API key and secret key are required")
 
-        self.base_url = self.config.get("base_url", "https://paper-api.alpaca.markets")
+        self.base_url = self.config.get('base_url', 'https://paper-api.alpaca.markets')
         self.headers = {
-            "APCA-API-KEY-ID": self.config["api_key"],
-            "APCA-API-SECRET-KEY": self.config["secret_key"],
+            'APCA-API-KEY-ID': self.config['api_key'],
+            'APCA-API-SECRET-KEY': self.config['secret_key']
         }
 
-    async def create_account(self, user_details: dict[str, Any]) -> dict[str, Any]:
+    async def create_account(
+        self,
+        user_details: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Create a brokerage account for the user on Alpaca
 
@@ -44,14 +46,12 @@ class AlpacaProcessor(PaymentProcessor):
             Dict with 'id' (Alpaca Account ID) and 'status'
         """
         try:
-            if "paper" in self.base_url and user_details.get("simulation", False):
-                logger.info(
-                    f"Simulating Alpaca Account Creation for {user_details.get('email_address')}"
-                )
+            if 'paper' in self.base_url and user_details.get('simulation', False):
+                logger.info(f"Simulating Alpaca Account Creation for {user_details.get('email_address')}")
                 return {
-                    "id": f"alpaca_acct_{UUID(int=0)}",
-                    "status": "ACTIVE",
-                    "account_number": "SIM123456789",
+                    'id': f"alpaca_acct_{UUID(int=0)}",
+                    'status': 'ACTIVE',
+                    'account_number': 'SIM123456789'
                 }
 
             async with aiohttp.ClientSession() as session:
@@ -60,56 +60,56 @@ class AlpacaProcessor(PaymentProcessor):
                 # Construct payload matching Alpaca Broker API requirements
                 payload = {
                     "contact": {
-                        "email_address": user_details["email_address"],
-                        "phone_number": user_details.get("phone_number"),
-                        "street_address": [user_details["street_address"]],
-                        "city": user_details["city"],
-                        "state": user_details["state"],
-                        "postal_code": user_details["postal_code"],
-                        "country": user_details.get("country", "USA"),
+                        "email_address": user_details['email_address'],
+                        "phone_number": user_details.get('phone_number'),
+                        "street_address": [user_details['street_address']],
+                        "city": user_details['city'],
+                        "state": user_details['state'],
+                        "postal_code": user_details['postal_code'],
+                        "country": user_details.get('country', 'USA')
                     },
                     "identity": {
-                        "given_name": user_details["first_name"],
-                        "family_name": user_details["last_name"],
-                        "date_of_birth": user_details["date_of_birth"],
-                        "tax_id": user_details.get("tax_id"),
-                        "tax_id_type": user_details.get("tax_id_type", "USA_SSN"),
-                        "funding_source": ["employment_income"],  # Default
+                        "given_name": user_details['first_name'],
+                        "family_name": user_details['last_name'],
+                        "date_of_birth": user_details['date_of_birth'],
+                        "tax_id": user_details.get('tax_id'),
+                        "tax_id_type": user_details.get('tax_id_type', 'USA_SSN'),
+                        "funding_source": ["employment_income"] # Default
                     },
                     "disclosures": {
                         "is_control_person": False,
                         "is_affiliated_exchange_or_finra": False,
                         "is_politically_exposed": False,
-                        "immediate_family_exposed": False,
+                        "immediate_family_exposed": False
                     },
                     "agreements": [
                         {
                             "agreement": "margin_agreement",
-                            "signed_at": "2023-01-01T00:00:00Z",  # Should be current time
-                            "ip_address": "127.0.0.1",  # Should be user IP
+                            "signed_at": "2023-01-01T00:00:00Z", # Should be current time
+                            "ip_address": "127.0.0.1" # Should be user IP
                         },
                         {
                             "agreement": "account_agreement",
                             "signed_at": "2023-01-01T00:00:00Z",
-                            "ip_address": "127.0.0.1",
+                            "ip_address": "127.0.0.1"
                         },
                         {
                             "agreement": "customer_agreement",
                             "signed_at": "2023-01-01T00:00:00Z",
-                            "ip_address": "127.0.0.1",
-                        },
+                            "ip_address": "127.0.0.1"
+                        }
                     ],
                     "account_type": "trading",
-                    "trading_configurations": {"dtbp_check": "entry"},
+                    "trading_configurations": {
+                        "dtbp_check": "entry"
+                    }
                 }
 
                 async with session.post(url, json=payload, headers=self.headers) as response:
                     if response.status not in [200, 201]:
                         error_text = await response.text()
                         logger.error(f"Alpaca Create Account error: {error_text}")
-                        raise PaymentProcessorError(
-                            f"Alpaca account creation failed: {response.status} - {error_text}"
-                        )
+                        raise PaymentProcessorError(f"Alpaca account creation failed: {response.status} - {error_text}")
 
                     data = await response.json()
                     return data
@@ -119,7 +119,10 @@ class AlpacaProcessor(PaymentProcessor):
             raise PaymentProcessorError(f"Failed to create Alpaca account: {str(e)}") from e
 
     async def link_account(
-        self, user_id: UUID, account_details: dict[str, Any], metadata: dict[str, Any] | None = None
+        self,
+        user_id: UUID,
+        account_details: dict[str, Any],
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Link a bank account via Alpaca ACH Relationship
@@ -140,33 +143,31 @@ class AlpacaProcessor(PaymentProcessor):
             logger.info(f"Linking bank account for user {user_id} via Alpaca")
 
             # Simulate a relationship ID
-            relationship_id = str(UUID(int=int(user_id) + 1))  # Deterministic simulation
+            relationship_id = str(UUID(int=int(user_id) + 1)) # Deterministic simulation
 
-            if "paper" in self.base_url:
-                return {
-                    "relationship_id": relationship_id,
-                    "status": "APPROVED",  # Auto-approve in simulation
-                    "account_id": str(user_id),  # Assuming user_id maps to Alpaca Account ID
+            if 'paper' in self.base_url:
+                 return {
+                    'relationship_id': relationship_id,
+                    'status': 'APPROVED', # Auto-approve in simulation
+                    'account_id': str(user_id) # Assuming user_id maps to Alpaca Account ID
                 }
 
             async with aiohttp.ClientSession() as session:
                 # This assumes we have an Alpaca Account ID for the user.
                 # In a full implementation, we would need to look up the Alpaca Account ID for this user_id first.
                 # For this implementation, we'll assume it's passed in metadata or we'd need another lookup.
-                alpaca_account_id = metadata.get("alpaca_account_id")
+                alpaca_account_id = metadata.get('alpaca_account_id')
                 if not alpaca_account_id:
-                    # Fallback or error
-                    pass
+                     # Fallback or error
+                     pass
 
                 url = f"{self.base_url}/v1/accounts/{alpaca_account_id}/ach_relationships"
                 payload = {
-                    "account_owner_name": account_details.get("account_owner_name"),
-                    "bank_account_type": account_details.get(
-                        "bank_account_type", "CHECKING"
-                    ).upper(),
-                    "bank_account_number": account_details.get("bank_account_number"),
-                    "bank_routing_number": account_details.get("bank_routing_number"),
-                    "nickname": account_details.get("nickname"),
+                    "account_owner_name": account_details.get('account_owner_name'),
+                    "bank_account_type": account_details.get('bank_account_type', 'CHECKING').upper(),
+                    "bank_account_number": account_details.get('bank_account_number'),
+                    "bank_routing_number": account_details.get('bank_routing_number'),
+                    "nickname": account_details.get('nickname')
                 }
 
                 async with session.post(url, json=payload, headers=self.headers) as response:
@@ -177,9 +178,9 @@ class AlpacaProcessor(PaymentProcessor):
 
                     data = await response.json()
                     return {
-                        "relationship_id": data.get("id"),
-                        "status": data.get("status"),
-                        "account_id": data.get("account_id"),
+                        'relationship_id': data.get('id'),
+                        'status': data.get('status'),
+                        'account_id': data.get('account_id')
                     }
 
         except Exception as e:
@@ -191,7 +192,7 @@ class AlpacaProcessor(PaymentProcessor):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Process an ACH deposit via Alpaca
@@ -213,14 +214,14 @@ class AlpacaProcessor(PaymentProcessor):
             relationship_id = str(payment_method_id)
 
             # If we are in sandbox/paper mode and don't have a real relationship ID, simulate success
-            if "paper" in self.base_url and not self._is_valid_uuid(relationship_id):
+            if 'paper' in self.base_url and not self._is_valid_uuid(relationship_id):
                 logger.info(f"Simulating Alpaca ACH deposit of ${amount}")
                 return {
-                    "id": f"alpaca_sim_{UUID(int=0)}",
-                    "status": "QUEUED",
-                    "amount": float(amount),
-                    "direction": "INCOMING",
-                    "relationship_id": relationship_id,
+                    'id': f"alpaca_sim_{UUID(int=0)}",
+                    'status': 'QUEUED',
+                    'amount': float(amount),
+                    'direction': 'INCOMING',
+                    'relationship_id': relationship_id
                 }
 
             async with aiohttp.ClientSession() as session:
@@ -229,7 +230,7 @@ class AlpacaProcessor(PaymentProcessor):
                     "transfer_type": "ach",
                     "relationship_id": relationship_id,
                     "amount": str(amount),
-                    "direction": "INCOMING",
+                    "direction": "INCOMING"
                 }
 
                 async with session.post(url, json=payload, headers=self.headers) as response:

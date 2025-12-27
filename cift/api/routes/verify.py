@@ -35,7 +35,10 @@ async def verify_transaction(transaction_id: str) -> dict[str, Any]:
         try:
             txn_uuid = UUID(transaction_id)
         except ValueError:
-            return {"valid": False, "message": "Invalid transaction ID format"}
+            return {
+                "valid": False,
+                "message": "Invalid transaction ID format"
+            }
 
         pool = await get_postgres_pool()
 
@@ -54,44 +57,45 @@ async def verify_transaction(transaction_id: str) -> dict[str, Any]:
                 FROM funding_transactions
                 WHERE id = $1
                 """,
-                txn_uuid,
+                txn_uuid
             )
 
             if not transaction:
-                logger.info(
-                    f"Verification attempted for non-existent transaction: {transaction_id}"
-                )
-                return {"valid": False, "message": "Transaction not found in our records"}
+                logger.info(f"Verification attempted for non-existent transaction: {transaction_id}")
+                return {
+                    "valid": False,
+                    "message": "Transaction not found in our records"
+                }
 
             # Fetch payment method type (no sensitive details like full account number)
             payment_method = None
-            if transaction["payment_method_id"]:
+            if transaction['payment_method_id']:
                 payment_method = await conn.fetchrow(
                     """
                     SELECT type, last_four
                     FROM payment_methods
                     WHERE id = $1
                     """,
-                    transaction["payment_method_id"],
+                    transaction['payment_method_id']
                 )
 
             # Build verification response with limited information
             response = {
                 "valid": True,
                 "transaction": {
-                    "id": str(transaction["id"]),
-                    "type": transaction["type"],
-                    "status": transaction["status"],
-                    "amount": float(transaction["amount"]),
-                    "fee": float(transaction["fee"]),
-                    "created_at": transaction["created_at"].isoformat(),
-                },
+                    "id": str(transaction['id']),
+                    "type": transaction['type'],
+                    "status": transaction['status'],
+                    "amount": float(transaction['amount']),
+                    "fee": float(transaction['fee']),
+                    "created_at": transaction['created_at'].isoformat(),
+                }
             }
 
             # Add payment method info if available (no sensitive data)
             if payment_method:
-                response["transaction"]["payment_method_type"] = payment_method["type"]
-                response["transaction"]["payment_method_last4"] = payment_method["last_four"]
+                response["transaction"]["payment_method_type"] = payment_method['type']
+                response["transaction"]["payment_method_last4"] = payment_method['last_four']
 
             logger.info(f"Transaction verified successfully: {transaction_id}")
             return response
@@ -99,5 +103,6 @@ async def verify_transaction(transaction_id: str) -> dict[str, Any]:
     except Exception as e:
         logger.error(f"Error verifying transaction {transaction_id}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=500, detail="An error occurred while verifying the transaction"
+            status_code=500,
+            detail="An error occurred while verifying the transaction"
         ) from e

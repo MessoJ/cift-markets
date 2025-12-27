@@ -8,7 +8,12 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from cift.core.database import DatabaseManager, QuestDBManager, RedisManager, check_all_connections
+from cift.core.database import (
+    DatabaseManager,
+    QuestDBManager,
+    RedisManager,
+    check_all_connections,
+)
 
 
 class TestDatabaseManager:
@@ -102,7 +107,9 @@ class TestQuestDBManager:
         )
 
         # Verify table exists by querying it
-        result = await questdb_conn.fetchrow("SELECT count() FROM test_ticks")
+        result = await questdb_conn.fetchrow(
+            "SELECT count() FROM test_ticks"
+        )
         assert result is not None
 
     @pytest.mark.asyncio
@@ -120,7 +127,9 @@ class TestQuestDBManager:
         )
 
         # Query the table
-        results = await questdb_conn.fetch("SELECT count() as cnt FROM test_market_data")
+        results = await questdb_conn.fetch(
+            "SELECT count() as cnt FROM test_market_data"
+        )
 
         assert len(results) > 0
         assert results[0]["cnt"] == 0  # Empty table

@@ -21,9 +21,7 @@ import numpy as np
 
 
 def _as_float_array(values: Iterable[float] | np.ndarray) -> np.ndarray:
-    arr = np.asarray(
-        list(values) if not isinstance(values, np.ndarray) else values, dtype=np.float64
-    )
+    arr = np.asarray(list(values) if not isinstance(values, np.ndarray) else values, dtype=np.float64)
     return arr[np.isfinite(arr)]
 
 

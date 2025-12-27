@@ -22,17 +22,19 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from cift.inference.pipeline import InferencePipeline, InferenceResult, PipelineConfig
+from cift.inference.pipeline import (
+    InferencePipeline,
+    InferenceResult,
+    PipelineConfig,
+)
 from cift.ml.ensemble import build_ensemble
 
 # ============================================================================
 # PYDANTIC MODELS
 # ============================================================================
 
-
 class PredictionRequest(BaseModel):
     """Request for single prediction."""
-
     symbol: str = Field(..., description="Symbol to predict")
     tick_features: list[list[float]] | None = Field(None, description="Recent tick features")
     second_features: list[list[float]] | None = Field(None, description="Second bar features")
@@ -42,12 +44,11 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     """Response with prediction."""
-
     timestamp: float
     symbol: str
 
     # Primary signal
-    direction: str  # "long", "short", "neutral"
+    direction: str                   # "long", "short", "neutral"
     direction_probability: float
     magnitude: float
 
@@ -74,7 +75,6 @@ class PredictionResponse(BaseModel):
 
 class ModelStatus(BaseModel):
     """Model status information."""
-
     model_name: str
     loaded: bool
     last_prediction_time: float | None
@@ -84,7 +84,6 @@ class ModelStatus(BaseModel):
 
 class SystemStatus(BaseModel):
     """Overall system status."""
-
     status: str  # "healthy", "degraded", "error"
     models: list[ModelStatus]
     pipeline_running: bool
@@ -96,7 +95,6 @@ class SystemStatus(BaseModel):
 # ============================================================================
 # API STATE
 # ============================================================================
-
 
 class InferenceAPIState:
     """Singleton state for inference API."""
@@ -154,20 +152,18 @@ class InferenceAPIState:
         """Broadcast prediction to all WebSocket clients."""
         import json
 
-        message = json.dumps(
-            {
-                "type": "prediction",
-                "data": {
-                    "timestamp": result.timestamp,
-                    "symbol": result.symbol,
-                    "direction": result.prediction.direction,
-                    "probability": result.prediction.direction_probability,
-                    "confidence": result.prediction.confidence,
-                    "should_trade": result.prediction.should_trade,
-                    "latency_ms": result.total_latency_ms,
-                },
+        message = json.dumps({
+            "type": "prediction",
+            "data": {
+                "timestamp": result.timestamp,
+                "symbol": result.symbol,
+                "direction": result.prediction.direction,
+                "probability": result.prediction.direction_probability,
+                "confidence": result.prediction.confidence,
+                "should_trade": result.prediction.should_trade,
+                "latency_ms": result.total_latency_ms,
             }
-        )
+        })
 
         for ws in self.ws_connections.copy():
             try:
@@ -299,11 +295,13 @@ async def predict_stream(
         while True:
             try:
                 # Handle any incoming messages (e.g., subscription changes)
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                message = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=30.0
+                )
 
                 # Process subscription message
                 import json
-
                 data = json.loads(message)
 
                 if data.get("type") == "subscribe":
@@ -333,15 +331,13 @@ async def get_model_status(
         stats = state.model_stats.get(name, {"predictions": 0, "latencies": []})
         latencies = stats["latencies"]
 
-        models.append(
-            ModelStatus(
-                model_name=name,
-                loaded=state.ensemble is not None,
-                last_prediction_time=latencies[-1] if latencies else None,
-                total_predictions=stats["predictions"],
-                avg_latency_ms=sum(latencies[-100:]) / len(latencies[-100:]) if latencies else 0,
-            )
-        )
+        models.append(ModelStatus(
+            model_name=name,
+            loaded=state.ensemble is not None,
+            last_prediction_time=latencies[-1] if latencies else None,
+            total_predictions=stats["predictions"],
+            avg_latency_ms=sum(latencies[-100:]) / len(latencies[-100:]) if latencies else 0,
+        ))
 
     # Determine overall status
     if state.ensemble is None:

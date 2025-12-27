@@ -46,35 +46,13 @@ class FinnhubDataSeeder:
     # Major symbols to seed
     DEFAULT_SYMBOLS = [
         # Mega-cap tech
-        "AAPL",
-        "MSFT",
-        "GOOGL",
-        "AMZN",
-        "META",
-        "NVDA",
-        "TSLA",
+        "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA",
         # Blue chips
-        "JPM",
-        "V",
-        "JNJ",
-        "UNH",
-        "PG",
-        "HD",
-        "DIS",
+        "JPM", "V", "JNJ", "UNH", "PG", "HD", "DIS",
         # Popular trading stocks
-        "AMD",
-        "NFLX",
-        "PYPL",
-        "SQ",
-        "COIN",
-        "PLTR",
-        "RIVN",
+        "AMD", "NFLX", "PYPL", "SQ", "COIN", "PLTR", "RIVN",
         # ETFs
-        "SPY",
-        "QQQ",
-        "IWM",
-        "DIA",
-        "VTI",
+        "SPY", "QQQ", "IWM", "DIA", "VTI",
         # Indices (use ETF proxies)
     ]
 
@@ -92,10 +70,12 @@ class FinnhubDataSeeder:
 
     def __init__(self, api_key: str | None = None):
         """Initialize seeder with API key."""
-        self.api_key = api_key or getattr(settings, "finnhub_api_key", "")
+        self.api_key = api_key or getattr(settings, 'finnhub_api_key', '')
 
         if not self.api_key:
-            raise ValueError("Finnhub API key required. Get FREE key at: https://finnhub.io/")
+            raise ValueError(
+                "Finnhub API key required. Get FREE key at: https://finnhub.io/"
+            )
 
         self.session: aiohttp.ClientSession | None = None
         self._last_request_time = 0.0
@@ -196,14 +176,11 @@ class FinnhubDataSeeder:
         from_date = datetime.now().strftime("%Y-%m-%d")
         to_date = (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d")
 
-        data = await self._get(
-            "calendar/earnings",
-            {
-                "symbol": symbol,
-                "from": from_date,
-                "to": to_date,
-            },
-        )
+        data = await self._get("calendar/earnings", {
+            "symbol": symbol,
+            "from": from_date,
+            "to": to_date,
+        })
 
         return data.get("earningsCalendar", []) if data else []
 
@@ -213,23 +190,17 @@ class FinnhubDataSeeder:
 
         Patterns detected: Head and Shoulders, Double Top/Bottom, Triangle, etc.
         """
-        return await self._get(
-            "scan/pattern",
-            {
-                "symbol": symbol,
-                "resolution": resolution,
-            },
-        )
+        return await self._get("scan/pattern", {
+            "symbol": symbol,
+            "resolution": resolution,
+        })
 
     async def get_support_resistance(self, symbol: str, resolution: str = "D") -> dict | None:
         """Get support/resistance levels from Finnhub."""
-        return await self._get(
-            "scan/support-resistance",
-            {
-                "symbol": symbol,
-                "resolution": resolution,
-            },
-        )
+        return await self._get("scan/support-resistance", {
+            "symbol": symbol,
+            "resolution": resolution,
+        })
 
     # ========================================================================
     # HISTORICAL CANDLE DATA
@@ -262,27 +233,18 @@ class FinnhubDataSeeder:
         if from_timestamp is None:
             # Calculate from_timestamp based on resolution and count
             seconds_per_bar = {
-                "1": 60,
-                "5": 300,
-                "15": 900,
-                "30": 1800,
-                "60": 3600,
-                "D": 86400,
-                "W": 604800,
-                "M": 2592000,
+                "1": 60, "5": 300, "15": 900, "30": 1800,
+                "60": 3600, "D": 86400, "W": 604800, "M": 2592000
             }
             bar_seconds = seconds_per_bar.get(resolution, 86400)
             from_timestamp = to_timestamp - (count * bar_seconds)
 
-        data = await self._get(
-            "stock/candle",
-            {
-                "symbol": symbol,
-                "resolution": resolution,
-                "from": from_timestamp,
-                "to": to_timestamp,
-            },
-        )
+        data = await self._get("stock/candle", {
+            "symbol": symbol,
+            "resolution": resolution,
+            "from": from_timestamp,
+            "to": to_timestamp,
+        })
 
         if not data or data.get("s") == "no_data":
             logger.warning(f"No candle data for {symbol}")
@@ -302,16 +264,14 @@ class FinnhubDataSeeder:
         volumes = data.get("v", [])
 
         for i in range(len(timestamps)):
-            candles.append(
-                {
-                    "timestamp": datetime.fromtimestamp(timestamps[i], tz=UTC),
-                    "open": opens[i],
-                    "high": highs[i],
-                    "low": lows[i],
-                    "close": closes[i],
-                    "volume": int(volumes[i]) if i < len(volumes) else 0,
-                }
-            )
+            candles.append({
+                "timestamp": datetime.fromtimestamp(timestamps[i], tz=UTC),
+                "open": opens[i],
+                "high": highs[i],
+                "low": lows[i],
+                "close": closes[i],
+                "volume": int(volumes[i]) if i < len(volumes) else 0,
+            })
 
         return candles
 
@@ -338,8 +298,7 @@ class FinnhubDataSeeder:
 
         try:
             async with db_manager.pool.acquire() as conn:
-                await conn.execute(
-                    """
+                await conn.execute("""
                     INSERT INTO company_profiles (
                         symbol, name, exchange, industry, sector,
                         market_cap, shares_outstanding, ipo_date,
@@ -385,8 +344,7 @@ class FinnhubDataSeeder:
 
         try:
             async with db_manager.pool.acquire() as conn:
-                await conn.execute(
-                    """
+                await conn.execute("""
                     INSERT INTO market_data_cache (
                         symbol, price, open, high, low, close, prev_close,
                         change, change_pct, volume, updated_at
@@ -415,9 +373,7 @@ class FinnhubDataSeeder:
                     0,  # Volume not in quote endpoint
                 )
 
-            logger.info(
-                f"✅ Seeded quote: {symbol} @ ${quote.get('c'):.2f} ({quote.get('dp'):+.2f}%)"
-            )
+            logger.info(f"✅ Seeded quote: {symbol} @ ${quote.get('c'):.2f} ({quote.get('dp'):+.2f}%)")
             return True
 
         except Exception as e:
@@ -446,8 +402,7 @@ class FinnhubDataSeeder:
             async with db_manager.pool.acquire() as conn:
                 # Use batch insert for efficiency
                 for candle in candles:
-                    await conn.execute(
-                        """
+                    await conn.execute("""
                         INSERT INTO ohlcv_bars (
                             timestamp, symbol, timeframe,
                             open, high, low, close, volume
@@ -509,19 +464,14 @@ class FinnhubDataSeeder:
                             earnings_time = "dmh"  # During Market Hours
 
                     # Check if already exists
-                    existing = await conn.fetchval(
-                        """
+                    existing = await conn.fetchval("""
                         SELECT id FROM earnings_calendar
                         WHERE symbol = $1 AND earnings_date = $2
-                    """,
-                        symbol,
-                        earnings_date,
-                    )
+                    """, symbol, earnings_date)
 
                     if existing:
                         # Update existing record
-                        await conn.execute(
-                            """
+                        await conn.execute("""
                             UPDATE earnings_calendar SET
                                 earnings_time = $1,
                                 eps_estimate = $2,
@@ -539,8 +489,7 @@ class FinnhubDataSeeder:
                         )
                     else:
                         # Insert new record
-                        await conn.execute(
-                            """
+                        await conn.execute("""
                             INSERT INTO earnings_calendar (
                                 symbol, earnings_date, earnings_time,
                                 eps_estimate, eps_actual,
@@ -642,12 +591,10 @@ class FinnhubDataSeeder:
             except Exception as e:
                 logger.error(f"Failed to seed {symbol}: {e}")
                 results["failed"] += 1
-                results["details"].append(
-                    {
-                        "symbol": symbol,
-                        "error": str(e),
-                    }
-                )
+                results["details"].append({
+                    "symbol": symbol,
+                    "error": str(e),
+                })
 
         elapsed = time.time() - start_time
         results["elapsed_seconds"] = round(elapsed, 2)
@@ -664,7 +611,6 @@ class FinnhubDataSeeder:
 # ============================================================================
 # CLI
 # ============================================================================
-
 
 async def main():
     """CLI for running seeder."""

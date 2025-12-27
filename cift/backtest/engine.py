@@ -89,9 +89,7 @@ def backtest_positions(
     metrics: dict[str, Any] = {}
     metrics["total_return"] = float(equity[-1] / float(initial_capital) - 1.0)
     metrics["cagr"] = float(cagr(net, periods_per_year=periods_per_year))
-    metrics["annual_volatility"] = float(
-        annualized_volatility(net, periods_per_year=periods_per_year)
-    )
+    metrics["annual_volatility"] = float(annualized_volatility(net, periods_per_year=periods_per_year))
     metrics["sharpe_ratio"] = float(
         annualized_sharpe(
             net,

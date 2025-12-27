@@ -303,23 +303,28 @@ class StockAnalyzer:
         if not self._initialized:
             await self.initialize()
         
-        # Handle common index aliases
+        # Map common index names to their tradeable ETF equivalents
+        # These are NOT the actual indices (^GSPC, ^DJI, ^IXIC) but ETFs that track them
+        # SPY = SPDR S&P 500 ETF (tracks S&P 500)
+        # QQQ = Invesco QQQ Trust ETF (tracks NASDAQ-100, NOT full NASDAQ Composite)
+        # DIA = SPDR Dow Jones Industrial Average ETF (tracks DJIA)
+        # IWM = iShares Russell 2000 ETF (tracks Russell 2000)
+        # VXX = iPath Series B S&P 500 VIX Short-Term Futures ETN
         symbol_map = {
             "S&P": "SPY",
             "S&P500": "SPY",
             "SPX": "SPY",
             "DOW": "DIA",
             "DJIA": "DIA",
-            "NASDAQ": "QQQ",
-            "NDX": "QQQ",
             "RUSSELL": "IWM",
             "RUT": "IWM",
-            "VIX": "VXX"
         }
         
         symbol = symbol.upper()
+        original_symbol = symbol
         if symbol in symbol_map:
             symbol = symbol_map[symbol]
+            logger.info(f"Mapped '{original_symbol}' to ETF '{symbol}'")
         
         # Fetch all data concurrently
         quote_task = self._get_quote(symbol)

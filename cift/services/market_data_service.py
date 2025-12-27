@@ -2,14 +2,15 @@
 CIFT Markets - Unified Market Data Service
 
 Orchestrates data fetching across multiple providers:
-1. Polygon.io (Primary for US Stocks)
-2. Finnhub (Primary for Fundamentals, Fallback for Quotes)
-3. Alltick.co (Fallback for Global Data)
-4. Mock Data (Final Fallback)
+1. Finnhub (Primary for Quotes - FREE)
+2. Polygon.io (Backup for Historical Data)
+3. Alltick.co (Global Fallback)
+
+NO MOCK DATA - Only real API data.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from loguru import logger
@@ -37,81 +38,56 @@ class MarketDataService:
     async def get_quote(self, symbol: str) -> dict[str, Any]:
         """
         Get real-time quote with fallback strategy.
-        Strategy: Polygon -> Finnhub -> Alltick -> Mock
+        Strategy: Finnhub (FREE) -> Polygon -> Alltick
+        NO MOCK DATA - returns empty dict if symbol unavailable.
         """
-        # 1. Try Polygon
+        # 1. Try Finnhub (FREE and reliable)
+        try:
+            quote = await self.finnhub.get_quote(symbol)
+            if quote and quote.get("price", 0) > 0:
+                return quote
+        except Exception as e:
+            logger.warning(f"Finnhub quote failed for {symbol}: {e}")
+
+        # 2. Try Polygon
         try:
             quote = await self.polygon.get_snapshot(symbol)
             if quote and quote.get("status") == "OK":
-                return quote
+                ticker = quote.get("ticker", {})
+                last_trade = ticker.get("lastTrade", {})
+                return {
+                    "symbol": symbol,
+                    "price": last_trade.get("p", 0),
+                    "status": "OK"
+                }
         except Exception as e:
             logger.warning(f"Polygon quote failed for {symbol}: {e}")
-
-        # 2. Try Finnhub
-        try:
-            quote = await self.finnhub.get_quote(symbol)
-            if quote:
-                # Normalize to Polygon format if needed, or return as is
-                # For now, returning as is, caller might need to handle different formats
-                # Ideally we should normalize here.
-                return {"status": "OK", "ticker": {"lastTrade": {"p": quote["price"]}}}
-        except Exception as e:
-            logger.warning(f"Finnhub quote failed for {symbol}: {e}")
 
         # 3. Try Alltick
         try:
             quote = await self.alltick.get_quote(symbol)
-            if quote:
+            if quote and quote.get("price", 0) > 0:
                 return quote
         except Exception as e:
             logger.warning(f"Alltick quote failed for {symbol}: {e}")
 
-        # 4. Fallback to Mock (handled by Polygon service internally if we call get_quotes_batch)
-        # But since we called get_snapshot directly, we might need to invoke mock manually
-        # or rely on Polygon's internal fallback if we use get_quotes_batch
-        
-        return self.polygon._generate_mock_quotes([symbol]).get(symbol, {})
+        # NO DATA - Return empty (no mock fallback)
+        logger.warning(f"No real data available for {symbol}")
+        return {}
 
     async def get_quotes_batch(self, symbols: list[str]) -> dict[str, dict]:
         """
-        Get batch quotes.
-        Strategy: Finnhub (FREE, working) -> Polygon (if available) -> Mock
+        Get batch quotes using real APIs only.
+        Strategy: Delegate to PolygonRealtimeService which tries Finnhub -> Polygon -> Alltick
+        NO MOCK DATA.
         """
-        results = {}
-        
-        # 1. Try Finnhub first (it's FREE and working)
-        for symbol in symbols:
-            try:
-                quote = await self.finnhub.get_quote(symbol)
-                if quote and quote.get("price", 0) > 0:
-                    results[symbol] = {
-                        "symbol": symbol,
-                        "price": quote.get("price", 0),
-                        "bid": quote.get("price", 0) * 0.9999,  # Simulated bid
-                        "ask": quote.get("price", 0) * 1.0001,  # Simulated ask
-                        "volume": quote.get("volume", 0),
-                        "change": quote.get("change", 0),
-                        "change_percent": quote.get("change_percent", 0),
-                        "high": quote.get("high", 0),
-                        "low": quote.get("low", 0),
-                        "open": quote.get("open", 0),
-                    }
-            except Exception as e:
-                logger.warning(f"Finnhub batch quote failed for {symbol}: {e}")
-
-        # 2. Fill missing with Polygon/Mock
-        missing = [s for s in symbols if s not in results]
-        if missing:
-            # This will use Polygon or Mock internally
-            poly_quotes = self.polygon._generate_mock_quotes(missing)
-            results.update(poly_quotes)
-            
-        return results
+        return await self.polygon.get_quotes_batch(symbols)
 
     async def get_historical_data(self, symbol: str, days: int = 200) -> list[dict]:
         """
         Get historical OHLCV data.
-        Strategy: Finnhub (Free) -> Mock
+        Strategy: Finnhub (Free) -> Polygon -> Empty
+        NO MOCK DATA.
         """
         # Calculate timestamps
         to_ts = int(datetime.utcnow().timestamp())
@@ -138,38 +114,31 @@ class MarketDataService:
                 return candles[:days]
         except Exception as e:
             logger.warning(f"Finnhub history failed for {symbol}: {e}")
-            
-        # 2. Fallback to Mock
-        # Generate synthetic history based on current price
-        current = await self.get_quote(symbol)
-        price = current.get("price", 100.0)
         
-        import random
-        import numpy as np
-        
-        candles = []
-        curr_price = price
-        
-        for i in range(days):
-            change = np.random.normal(0, price * 0.02) # 2% daily volatility
-            open_p = curr_price
-            close_p = curr_price + change
-            high_p = max(open_p, close_p) + abs(change * 0.5)
-            low_p = min(open_p, close_p) - abs(change * 0.5)
-            vol = random.randint(100000, 5000000)
+        # 2. Try Polygon aggregates
+        try:
+            from_date = datetime.utcnow() - timedelta(days=days * 2)
+            to_date = datetime.utcnow()
+            data = await self.polygon.get_aggregates(symbol, 1, "day", from_date, to_date)
+            if data:
+                candles = []
+                for bar in data:
+                    candles.append({
+                        "timestamp": datetime.fromtimestamp(bar['t'] / 1000),
+                        "open": float(bar['o']),
+                        "high": float(bar['h']),
+                        "low": float(bar['l']),
+                        "close": float(bar['c']),
+                        "volume": float(bar.get('v', 0))
+                    })
+                candles.sort(key=lambda x: x["timestamp"], reverse=True)
+                return candles[:days]
+        except Exception as e:
+            logger.warning(f"Polygon history failed for {symbol}: {e}")
             
-            candles.append({
-                "timestamp": datetime.utcnow() - timedelta(days=i),
-                "open": open_p,
-                "high": high_p,
-                "low": low_p,
-                "close": close_p,
-                "volume": vol
-            })
-            
-            curr_price = close_p # Walk backwards
-            
-        return candles
+        # NO DATA - Return empty (no mock fallback)
+        logger.warning(f"No historical data available for {symbol}")
+        return []
 
     async def get_company_profile(self, symbol: str) -> dict | None:
         """
