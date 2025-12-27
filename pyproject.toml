@@ -63,6 +63,7 @@ dependencies = [
     "alpaca-py>=0.13.0",
     "polygon>=1.0.0",
     "ib-insync>=0.9.86",
+    "yfinance>=0.2.36",       # Yahoo Finance (free index data: ^GSPC, ^DJI, ^IXIC)
     
     # MLOps
     "mlflow>=2.8.0",

@@ -10,6 +10,7 @@ API Documentation: https://polygon.io/docs/
 import asyncio
 from datetime import datetime, timedelta
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor
 
 import aiohttp
 from loguru import logger
@@ -18,10 +19,57 @@ from cift.core.config import settings
 from cift.core.database import get_postgres_pool
 from cift.services.finnhub_realtime_service import FinnhubRealtimeService
 from cift.services.alltick_service import AlltickService
+
+# yfinance for real index data (^GSPC, ^DJI, ^IXIC)
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    yf = None
+
 # Import publisher (lazy import inside method to avoid circular dependency if needed, 
 # but top-level is better if possible. market_data imports market_data_service which imports this.
 # So we have a circular dependency: market_data -> market_data_service -> polygon_realtime_service.
 # We must use local import for publish_price_update)
+
+# Index symbol mappings (user-friendly names to Yahoo Finance symbols)
+INDEX_SYMBOL_MAP = {
+    # S&P 500 variants
+    "S&P": "^GSPC",
+    "S&P500": "^GSPC",
+    "SP500": "^GSPC",
+    "SPX": "^GSPC",
+    ".INX": "^GSPC",
+    "^GSPC": "^GSPC",
+    
+    # Dow Jones variants
+    "DOW": "^DJI",
+    "DJIA": "^DJI",
+    "DJI": "^DJI",
+    ".DJI": "^DJI",
+    "^DJI": "^DJI",
+    
+    # NASDAQ Composite variants  
+    "NASDAQ": "^IXIC",
+    "IXIC": "^IXIC",
+    "^IXIC": "^IXIC",
+    ".IXIC": "^IXIC",
+    
+    # NASDAQ-100 variants
+    "NDX": "^NDX",
+    "NASDAQ100": "^NDX",
+    "^NDX": "^NDX",
+    
+    # Russell 2000 variants
+    "RUSSELL": "^RUT",
+    "RUT": "^RUT",
+    "^RUT": "^RUT",
+    
+    # VIX
+    "VIX": "^VIX",
+    "^VIX": "^VIX",
+}
 
 
 class PolygonRealtimeService:
@@ -163,6 +211,78 @@ class PolygonRealtimeService:
             return None
 
     # ========================================================================
+    # INDEX DATA (using yfinance for real index values)
+    # ========================================================================
+    
+    async def get_index_quote(self, symbol: str) -> dict[str, Any] | None:
+        """
+        Get real index data using yfinance.
+        
+        Supports: ^GSPC (S&P 500), ^DJI (Dow Jones), ^IXIC (NASDAQ), ^VIX, etc.
+        
+        Returns the ACTUAL index value (e.g., S&P 500 = 6929.94), NOT ETF prices.
+        """
+        if not YFINANCE_AVAILABLE:
+            logger.warning("yfinance not installed - cannot fetch index data")
+            return None
+            
+        # Map friendly names to Yahoo Finance symbols
+        yahoo_symbol = INDEX_SYMBOL_MAP.get(symbol.upper(), symbol)
+        
+        # Only process actual index symbols (starting with ^)
+        if not yahoo_symbol.startswith("^"):
+            return None
+            
+        try:
+            # Run yfinance in thread pool (it's synchronous)
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                ticker = await loop.run_in_executor(pool, lambda: yf.Ticker(yahoo_symbol))
+                info = await loop.run_in_executor(pool, lambda: ticker.info)
+                
+            if not info:
+                return None
+                
+            # Extract price data
+            current_price = info.get("regularMarketPrice") or info.get("previousClose")
+            if not current_price:
+                return None
+                
+            prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+            change = info.get("regularMarketChange", 0)
+            change_pct = info.get("regularMarketChangePercent", 0)
+            
+            # If change not available, calculate it
+            if not change and prev_close:
+                change = current_price - prev_close
+                change_pct = (change / prev_close * 100) if prev_close else 0
+            
+            # Get the full index name
+            index_name = info.get("shortName") or info.get("longName") or yahoo_symbol
+            
+            return {
+                "symbol": yahoo_symbol,
+                "original_symbol": symbol,
+                "name": index_name,
+                "price": float(current_price),
+                "open": float(info.get("regularMarketOpen") or info.get("open") or 0),
+                "high": float(info.get("regularMarketDayHigh") or info.get("dayHigh") or 0),
+                "low": float(info.get("regularMarketDayLow") or info.get("dayLow") or 0),
+                "prev_close": float(prev_close or 0),
+                "change": float(change),
+                "change_percent": float(change_pct),
+                "volume": int(info.get("regularMarketVolume") or info.get("volume") or 0),
+                "bid": None,  # Indices don't have bid/ask
+                "ask": None,
+                "is_index": True,  # Flag to indicate this is an index, not a stock/ETF
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch index data for {symbol}: {e}")
+            return None
+
+    # ========================================================================
     # REAL-TIME QUOTES
     # ========================================================================
 
@@ -180,13 +300,29 @@ class PolygonRealtimeService:
         """
         Get quotes for multiple symbols using real APIs only.
         
-        Strategy: Finnhub (FREE) -> Polygon -> Alltick
+        Strategy:
+        1. For INDEX symbols (S&P, DOW, NASDAQ, ^GSPC, etc.): Use yfinance for REAL index values
+        2. For STOCKS/ETFs: Finnhub (FREE) -> Polygon -> Alltick
+        
         NO MOCK DATA - returns empty dict for unavailable symbols.
         """
         quotes = {}
 
         for symbol in symbols:
             try:
+                symbol_upper = symbol.upper()
+                
+                # 0. Check if this is an INDEX symbol - use yfinance for real index values
+                if symbol_upper in INDEX_SYMBOL_MAP or symbol_upper.startswith("^"):
+                    index_quote = await self.get_index_quote(symbol)
+                    if index_quote and index_quote.get("price", 0) > 0:
+                        quotes[symbol] = index_quote
+                        logger.info(f"Fetched INDEX {index_quote.get('name', symbol)} via yfinance: {index_quote['price']:.2f}")
+                        continue
+                    # If yfinance fails, don't fallback to ETF - just skip
+                    logger.warning(f"Could not fetch real index data for {symbol}")
+                    continue
+                
                 # 1. Try Finnhub first (FREE and reliable)
                 finnhub_quote = await self.finnhub.get_quote(symbol)
                 if finnhub_quote and finnhub_quote.get("price", 0) > 0:
