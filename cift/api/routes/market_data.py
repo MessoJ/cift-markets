@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from cift.core.auth import User, get_current_active_user
-from cift.core.data_processing import calculate_technical_indicators, load_ohlcv_data
+from cift.core.data_processing import calculate_technical_indicators, load_ohlcv_data, calculate_volume_profile
 from cift.core.database import db_manager
 from cift.core.trading_queries import get_ohlcv_last_n_bars
 from cift.services.market_data_service import market_data_service
@@ -458,7 +458,7 @@ async def get_order_book(
 
 
 # ============================================================================
-# TIME & SALES (Recent Trades)
+# TIME & SALES (Recent Trades) - REAL DATA FROM FINNHUB WEBSOCKET
 # ============================================================================
 
 
@@ -470,13 +470,90 @@ async def get_time_and_sales(
     """
     Get recent trades (Time & Sales) for a symbol.
 
-    **Note:** Currently returns simulated trades based on recent price action.
-    Real T&S data requires market data provider subscription.
+    **Data Sources (in order of priority):**
+    1. Redis/Dragonfly cache (real-time trades from Finnhub WebSocket)
+    2. QuestDB trade_executions table (persisted trades)
+    3. In-memory cache from Finnhub service
+    4. Simulated data (fallback when no real data available)
 
-    Performance: ~3ms
+    Performance: ~1-3ms (cache), ~5-10ms (QuestDB)
     """
     symbol = symbol.upper()
-
+    
+    # Import Finnhub service
+    from cift.services.finnhub_realtime_service import get_finnhub_service
+    
+    finnhub = get_finnhub_service()
+    
+    # Source 1: Try Redis/Dragonfly cache first (fastest)
+    try:
+        trades = await finnhub.get_trades_from_cache(symbol, limit)
+        if trades and len(trades) >= min(limit, 5):  # Have enough trades
+            return {
+                "symbol": symbol,
+                "trades": trades,
+                "count": len(trades),
+                "last_price": trades[0]["price"] if trades else None,
+                "_source": "realtime_cache",
+                "_simulated": False,
+            }
+    except Exception as e:
+        logger.debug(f"Redis cache miss for {symbol}: {e}")
+    
+    # Source 2: Try QuestDB for persisted trades
+    try:
+        await questdb_manager.initialize()
+        rows = await questdb_manager.fetch(
+            """
+            SELECT timestamp, price, size, side, exchange, trade_id
+            FROM trade_executions
+            WHERE symbol = $1
+            ORDER BY timestamp DESC
+            LIMIT $2
+            """,
+            symbol,
+            limit,
+        )
+        
+        if rows and len(rows) >= min(limit, 3):
+            trades = [
+                {
+                    "time": row["timestamp"].isoformat() if row["timestamp"] else None,
+                    "price": float(row["price"]),
+                    "size": int(row["size"]) if row["size"] else 1,
+                    "side": row["side"] or "unknown",
+                    "exchange": row["exchange"] or "UNKNOWN",
+                    "trade_id": row["trade_id"] or "",
+                }
+                for row in rows
+            ]
+            return {
+                "symbol": symbol,
+                "trades": trades,
+                "count": len(trades),
+                "last_price": trades[0]["price"] if trades else None,
+                "_source": "questdb",
+                "_simulated": False,
+            }
+    except Exception as e:
+        logger.debug(f"QuestDB query failed for {symbol}: {e}")
+    
+    # Source 3: In-memory cache from Finnhub service
+    in_memory_trades = finnhub.get_recent_trades(symbol, limit)
+    if in_memory_trades:
+        return {
+            "symbol": symbol,
+            "trades": in_memory_trades,
+            "count": len(in_memory_trades),
+            "last_price": in_memory_trades[0]["price"] if in_memory_trades else None,
+            "_source": "memory_cache",
+            "_simulated": False,
+        }
+    
+    # Source 4: Fallback to simulated data (when no real data available)
+    # This happens when symbol isn't subscribed or market is closed
+    logger.info(f"No real trades for {symbol}, generating simulated data")
+    
     # Get recent bars to simulate trades
     async with db_manager.pool.acquire() as conn:
         bars = await conn.fetch(
@@ -542,6 +619,7 @@ async def get_time_and_sales(
         "trades": trades,
         "count": len(trades),
         "last_price": current_price,
+        "_source": "simulated",
         "_simulated": True,  # Flag that this is simulated data
     }
 
@@ -658,6 +736,30 @@ async def get_historical_data(
 
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+
+
+@router.get("/profile/{symbol}")
+async def get_volume_profile(
+    symbol: str,
+    start_date: datetime,
+    end_date: datetime,
+    bins: int = Query(24, description="Number of price bins"),
+):
+    """
+    Get Volume Profile (Volume by Price) for a symbol over a specific range.
+    
+    Calculates the distribution of volume across price levels.
+    """
+    # Load data using Polars (use 1m for granular volume distribution)
+    df = await load_ohlcv_data([symbol], start_date, end_date, "1m")
+
+    if df.is_empty():
+        # Try with requested timeframe if 1m is not available or too granular
+        # But for now, just return empty profile
+        return {"price_levels": [], "volumes": [], "max_volume": 0}
+
+    profile = calculate_volume_profile(df, bins=bins)
+    return profile
 
 
 @router.get("/symbols", response_model=list[str])

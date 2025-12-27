@@ -17,6 +17,14 @@ export interface OHLCVBar {
   low: number;
   close: number;
   volume: number;
+  // Patterns
+  pattern_doji?: boolean;
+  pattern_hammer?: boolean;
+  pattern_shooting_star?: boolean;
+  pattern_bullish_engulfing?: boolean;
+  pattern_bearish_engulfing?: boolean;
+  // Allow dynamic properties for indicators
+  [key: string]: any;
 }
 
 /**

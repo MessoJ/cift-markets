@@ -10,11 +10,17 @@ mod order_book;
 mod matching_engine;
 mod risk_engine;
 mod market_data;
+mod features;
+mod json_parser;
+mod indicators;
 
 use order_book::{OrderBook, Order, Side, OrderType};
 use matching_engine::MatchingEngine;
 use risk_engine::RiskEngine;
 use market_data::MarketDataProcessor;
+use features::{FeatureExtractor, FeatureVector, RollingStats};
+use json_parser::PyFastJsonParser;
+use indicators::FastIndicators;
 
 /// High-performance order matching engine (Rust implementation)
 /// 
@@ -281,5 +287,138 @@ fn cift_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<FastOrderBook>()?;
     m.add_class::<FastMarketData>()?;
     m.add_class::<FastRiskEngine>()?;
+    m.add_class::<FastFeatureExtractor>()?;
+    m.add_class::<PyFastJsonParser>()?;
+    m.add_class::<FastIndicators>()?;
     Ok(())
+}
+
+// ============================================================================
+// FAST FEATURE EXTRACTOR - PyO3 bindings for ML pipeline
+// ============================================================================
+
+/// High-performance feature extractor for ML pipeline
+/// 
+/// Performance: <100μs per feature vector
+/// Features: 28 ML features per tick
+/// State: Maintains rolling windows for all calculations
+#[pyclass]
+struct FastFeatureExtractor {
+    inner: Arc<RwLock<FeatureExtractor>>,
+}
+
+#[pymethods]
+impl FastFeatureExtractor {
+    #[new]
+    fn new() -> Self {
+        FastFeatureExtractor {
+            inner: Arc::new(RwLock::new(FeatureExtractor::new())),
+        }
+    }
+
+    /// Process a tick and get feature vector
+    /// Input: price, volume, bid, ask, bid_size, ask_size
+    /// Returns: dict with all 28 features
+    fn process_tick(
+        &self,
+        price: f64,
+        volume: f64,
+        bid: f64,
+        ask: f64,
+        bid_size: f64,
+        ask_size: f64,
+    ) -> PyResult<std::collections::HashMap<String, f64>> {
+        let mut extractor = self.inner.write();
+        let fv = extractor.process_tick(price, volume, bid, ask, bid_size, ask_size);
+        
+        let mut result = std::collections::HashMap::new();
+        result.insert("return_1".to_string(), fv.return_1);
+        result.insert("return_5".to_string(), fv.return_5);
+        result.insert("return_20".to_string(), fv.return_20);
+        result.insert("return_60".to_string(), fv.return_60);
+        result.insert("volatility_20".to_string(), fv.volatility_20);
+        result.insert("volatility_60".to_string(), fv.volatility_60);
+        result.insert("volatility_ratio".to_string(), fv.volatility_ratio);
+        result.insert("price_deviation".to_string(), fv.price_deviation);
+        result.insert("volume".to_string(), fv.volume);
+        result.insert("volume_zscore".to_string(), fv.volume_zscore);
+        result.insert("volume_ma_ratio".to_string(), fv.volume_ma_ratio);
+        result.insert("spread".to_string(), fv.spread);
+        result.insert("spread_zscore".to_string(), fv.spread_zscore);
+        result.insert("spread_ma_ratio".to_string(), fv.spread_ma_ratio);
+        result.insert("ofi".to_string(), fv.ofi);
+        result.insert("ofi_mean".to_string(), fv.ofi_mean);
+        result.insert("ofi_cumulative".to_string(), fv.ofi_cumulative);
+        result.insert("imbalance".to_string(), fv.imbalance);
+        result.insert("log_pressure".to_string(), fv.log_pressure);
+        result.insert("microprice".to_string(), fv.microprice);
+        result.insert("microprice_deviation".to_string(), fv.microprice_deviation);
+        result.insert("rsi".to_string(), fv.rsi);
+        result.insert("momentum_divergence".to_string(), fv.momentum_divergence);
+        result.insert("price".to_string(), fv.price);
+        result.insert("mid".to_string(), fv.mid);
+        result.insert("bid".to_string(), fv.bid);
+        result.insert("ask".to_string(), fv.ask);
+        result.insert("trade_intensity".to_string(), fv.trade_intensity);
+        
+        Ok(result)
+    }
+
+    /// Process tick and return as flat array (faster for NumPy)
+    /// Returns: list of 28 floats
+    fn process_tick_array(
+        &self,
+        price: f64,
+        volume: f64,
+        bid: f64,
+        ask: f64,
+        bid_size: f64,
+        ask_size: f64,
+    ) -> PyResult<Vec<f64>> {
+        let mut extractor = self.inner.write();
+        let fv = extractor.process_tick(price, volume, bid, ask, bid_size, ask_size);
+        Ok(fv.to_array().to_vec())
+    }
+
+    /// Batch extract features from historical data
+    /// Input: vectors of price, volume, bid, ask, bid_size, ask_size
+    /// Returns: list of feature arrays (N x 28)
+    fn batch_extract(
+        &self,
+        prices: Vec<f64>,
+        volumes: Vec<f64>,
+        bids: Vec<f64>,
+        asks: Vec<f64>,
+        bid_sizes: Vec<f64>,
+        ask_sizes: Vec<f64>,
+    ) -> PyResult<Vec<Vec<f64>>> {
+        let mut extractor = self.inner.write();
+        let features = extractor.batch_extract(&prices, &volumes, &bids, &asks, &bid_sizes, &ask_sizes);
+        
+        Ok(features.iter().map(|fv| fv.to_array().to_vec()).collect())
+    }
+
+    /// Get feature names for ML model
+    #[staticmethod]
+    fn feature_names() -> Vec<String> {
+        FeatureVector::feature_names().iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Reset extractor state for new symbol
+    fn reset(&self) {
+        let mut extractor = self.inner.write();
+        extractor.reset();
+    }
+
+    /// Calculate rolling returns efficiently
+    #[staticmethod]
+    fn batch_returns(prices: Vec<f64>) -> Vec<f64> {
+        features::simd::batch_returns(&prices)
+    }
+
+    /// Calculate rolling standard deviation efficiently
+    #[staticmethod]
+    fn rolling_std(values: Vec<f64>, window: usize) -> Vec<f64> {
+        features::simd::rolling_std(&values, window)
+    }
 }

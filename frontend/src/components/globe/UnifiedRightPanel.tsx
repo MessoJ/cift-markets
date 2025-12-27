@@ -1,11 +1,11 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
 import { AIIcon } from '~/components/icons/AIIcon';
 import { 
-  X, Brain, Sparkles, Cpu, Building2, Activity, Map as MapIcon, 
-  TrendingUp, TrendingDown, Shield, AlertTriangle, Zap, Globe,
-  ChevronRight, BarChart3, Clock, DollarSign
+  X, Brain, Cpu, Building2, Activity,
+  TrendingUp, TrendingDown, Shield, Zap, Globe,
+  ChevronRight
 } from 'lucide-solid';
-import { AssetMarkerData, AssetCategory, formatLargeNumber, formatPercentage } from '../../config/assetColors';
+import { formatLargeNumber } from '../../config/assetColors';
 import { GlobeExchange } from '../../hooks/useGlobeData';
 
 interface UnifiedRightPanelProps {

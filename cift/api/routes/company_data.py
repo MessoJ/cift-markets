@@ -468,17 +468,22 @@ async def get_symbol_summary(symbol: str):
                 symbol
             )
 
-            # Get next earnings
-            earnings_row = await conn.fetchrow(
-                """
-                SELECT earnings_date, eps_estimate, earnings_time
-                FROM earnings_calendar
-                WHERE symbol = $1 AND earnings_date >= CURRENT_DATE
-                ORDER BY earnings_date ASC
-                LIMIT 1
-                """,
-                symbol
-            )
+            # Get next earnings (gracefully handle missing table)
+            earnings_row = None
+            try:
+                earnings_row = await conn.fetchrow(
+                    """
+                    SELECT earnings_date, eps_estimate, earnings_time
+                    FROM earnings_calendar
+                    WHERE symbol = $1 AND earnings_date >= CURRENT_DATE
+                    ORDER BY earnings_date ASC
+                    LIMIT 1
+                    """,
+                    symbol
+                )
+            except Exception as e:
+                # Table might not exist - that's okay
+                logger.debug(f"Earnings calendar query failed for {symbol}: {e}")
 
             # Calculate 52-week high/low from OHLCV data (if not in market_data_cache)
             high_52w = float(quote_row['high_52w']) if quote_row and quote_row['high_52w'] else None

@@ -86,6 +86,29 @@ const AVAILABLE_INDICATORS: Omit<IndicatorConfig, 'enabled'>[] = [
     color: '#a855f7',
     params: { period: 14 },
   },
+  {
+    id: 'stoch',
+    name: 'Stochastic',
+    category: 'momentum',
+    color: '#22d3ee',
+    params: { k: 14, d: 3, smooth: 3 },
+  },
+  
+  // Volatility indicators
+  {
+    id: 'bb_bands',
+    name: 'Bollinger Bands',
+    category: 'volatility',
+    color: '#ec4899',
+    params: { period: 20, stdDev: 2 },
+  },
+  {
+    id: 'atr_14',
+    name: 'ATR (14)',
+    category: 'volatility',
+    color: '#f43f5e',
+    params: { period: 14 },
+  },
   
   // Volume indicators
   {
@@ -94,6 +117,45 @@ const AVAILABLE_INDICATORS: Omit<IndicatorConfig, 'enabled'>[] = [
     category: 'volume',
     color: '#64748b',
     params: { period: 20 },
+  },
+  {
+    id: 'obv',
+    name: 'On-Balance Volume',
+    category: 'volume',
+    color: '#8b5cf6',
+    params: {},
+  },
+  {
+    id: 'volume_profile',
+    name: 'Volume Profile',
+    category: 'volume',
+    color: '#60a5fa',
+    params: { bins: 50 },
+  },
+
+  // Trend indicators (continued)
+  {
+    id: 'ichimoku',
+    name: 'Ichimoku Cloud',
+    category: 'trend',
+    color: '#10b981',
+    params: { conversion: 9, base: 26, span: 52 },
+  },
+  {
+    id: 'pivot_points',
+    name: 'Pivot Points',
+    category: 'trend',
+    color: '#fbbf24',
+    params: {},
+  },
+  
+  // Patterns
+  {
+    id: 'patterns',
+    name: 'Candlestick Patterns',
+    category: 'trend', // Or 'pattern'
+    color: '#ffffff',
+    params: {},
   },
 ];
 

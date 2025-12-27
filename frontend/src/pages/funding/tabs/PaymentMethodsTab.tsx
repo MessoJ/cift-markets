@@ -7,7 +7,6 @@ import {
   Bitcoin, 
   CheckCircle2,
   AlertCircle,
-  X,
   Lock,
   ShieldCheck,
   MoreVertical
@@ -75,7 +74,7 @@ export function PaymentMethodsTab(props: PaymentMethodsTabProps) {
             alert('Failed to link bank account. Please try again.');
           }
         },
-        onExit: (err: any, metadata: any) => {
+        onExit: (err: any, _metadata: any) => {
           if (err) console.error('Plaid exit', err);
         },
       });

@@ -1,5 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { Brain, X, ArrowRight, Loader2 } from 'lucide-solid';
+import { Brain, ArrowRight, Loader2 } from 'lucide-solid';
 import { useNavigate } from '@solidjs/router';
 import { apiClient } from '~/lib/api/client';
 import { Modal } from '~/components/ui/Modal';

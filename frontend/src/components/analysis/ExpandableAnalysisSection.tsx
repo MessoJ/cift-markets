@@ -5,13 +5,13 @@
  * Maintains brand consistency with gradient borders and glass effects.
  */
 
-import { Show, For, createSignal, createMemo } from 'solid-js';
+import { Show, For, createMemo } from 'solid-js';
 import { 
-  ChevronDown, ChevronUp, Activity, DollarSign, 
+  ChevronUp, Activity, DollarSign, 
   Newspaper, Shield, TrendingUp, TrendingDown,
-  AlertTriangle, CheckCircle2, MinusCircle
+  AlertTriangle, MinusCircle
 } from 'lucide-solid';
-import { formatCurrency, formatPercent } from '~/lib/utils/format';
+import { formatCurrency } from '~/lib/utils/format';
 
 // ============================================================================
 // HELPER COMPONENTS
@@ -151,7 +151,7 @@ export function ExpandableAnalysisSection(props: ExpandableAnalysisSectionProps)
     return { bg: 'bg-yellow-500/20', text: 'text-yellow-400' };
   };
 
-  const Icon = config().icon;
+  const IconComponent = config().icon;
 
   return (
     <div class={`bg-slate-950 border ${props.isExpanded ? config().border : 'border-slate-800'} rounded-xl overflow-hidden transition-all duration-300 h-full`}>

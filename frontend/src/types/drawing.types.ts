@@ -12,7 +12,8 @@ export type DrawingType =
   | 'fibonacci'
   | 'rectangle'
   | 'text'
-  | 'arrow';
+  | 'arrow'
+  | 'ruler';
 
 export type DrawingStyle = {
   color: string;
@@ -85,6 +86,11 @@ export interface ArrowDrawing extends BaseDrawing {
   arrowType: 'single' | 'double';
 }
 
+export interface RulerDrawing extends BaseDrawing {
+  type: 'ruler';
+  points: [DrawingPoint, DrawingPoint];
+}
+
 export type Drawing =
   | TrendlineDrawing
   | HorizontalLineDrawing
@@ -92,7 +98,8 @@ export type Drawing =
   | FibonacciDrawing
   | RectangleDrawing
   | TextDrawing
-  | ArrowDrawing;
+  | ArrowDrawing
+  | RulerDrawing;
 
 export interface DrawingState {
   drawings: Drawing[];
@@ -143,5 +150,10 @@ export const DEFAULT_DRAWING_STYLES: Record<DrawingType, DrawingStyle> = {
     color: '#f97316',
     lineWidth: 2,
     lineType: 'solid',
+  },
+  ruler: {
+    color: '#22d3ee',
+    lineWidth: 2,
+    lineType: 'dashed',
   },
 };

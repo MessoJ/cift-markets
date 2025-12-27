@@ -17,8 +17,25 @@ ahash = "0.8"
 parking_lot = "0.12"
 crossbeam = "0.8"
 
+# Phase 2: High-performance JSON parsing (10x faster than serde_json)
+simd-json = "0.13"
+
+# Phase 2: Zero-copy serialization for IPC
+capnp = "0.18"
+capnp-rpc = "0.18"
+
+# Phase 3: SIMD utilities for batch operations
+packed_simd_2 = { version = "0.3", optional = true }
+
+[features]
+default = []
+simd = ["packed_simd_2"]
+
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+[profile.release.build-override]
+opt-level = 3

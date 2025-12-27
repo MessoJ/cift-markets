@@ -36,9 +36,9 @@ class CreateAlertRequest(BaseModel):
 
 class PriceAlertUpdate(BaseModel):
     """Request model for updating price alert"""
-    price: float | None = Field(None, gt=0)
+    condition_value: float | None = Field(None, gt=0)
     message: str | None = None
-    enabled: bool | None = None
+    is_active: bool | None = None
     expires_at: datetime | None = None
 
 
@@ -48,15 +48,14 @@ class PriceAlertResponse(BaseModel):
     user_id: str
     symbol: str
     alert_type: str
-    price: float
-    current_price: float | None = None  # Added field
+    price: float  # Maps from condition_value
+    current_price: float | None = None
     message: str | None
-    triggered: bool
+    triggered: bool  # Computed from triggered_at
     triggered_at: datetime | None
-    triggered_price: float | None
-    notification_sent: bool
-    is_active: bool = Field(alias="enabled") # Map enabled to is_active if needed, or just use enabled
-    enabled: bool
+    triggered_price: float | None  # Maps from trigger_price
+    is_active: bool
+    enabled: bool  # Alias for frontend compatibility
     created_at: datetime
     expires_at: datetime | None
 
@@ -92,11 +91,11 @@ async def get_alerts(
         param_idx += 1
 
     if active_only:
-        conditions.append("enabled = true AND triggered = false")
+        conditions.append("is_active = true AND triggered_at IS NULL")
 
     query = f"""
-        SELECT id, user_id, symbol, alert_type, price, message, triggered, triggered_at,
-               triggered_price, notification_sent, enabled, expires_at, created_at, updated_at
+        SELECT id, user_id, symbol, alert_type, condition_value, message, triggered_at,
+               trigger_price, is_active, expires_at, created_at, updated_at
         FROM price_alerts
         WHERE {' AND '.join(conditions)}
         ORDER BY created_at DESC
@@ -118,15 +117,14 @@ async def get_alerts(
                 user_id=str(row['user_id']),
                 symbol=row['symbol'],
                 alert_type=row['alert_type'],
-                price=float(row['price']),
+                price=float(row['condition_value']),
                 current_price=current_price,
                 message=row['message'],
-                triggered=row['triggered'],
+                triggered=row['triggered_at'] is not None,
                 triggered_at=row['triggered_at'],
-                triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-                notification_sent=row['notification_sent'],
-                enabled=row['enabled'],
-                is_active=row['enabled'], # Map for frontend compatibility
+                triggered_price=float(row['trigger_price']) if row['trigger_price'] else None,
+                is_active=row['is_active'],
+                enabled=row['is_active'],  # Alias for frontend compatibility
                 expires_at=row['expires_at'],
                 created_at=row['created_at']
             ))
@@ -145,8 +143,8 @@ async def get_alert(
     pool = await get_postgres_pool()
 
     query = """
-        SELECT id, user_id, symbol, alert_type, price, message, triggered, triggered_at,
-               triggered_price, notification_sent, enabled, expires_at, created_at, updated_at
+        SELECT id, user_id, symbol, alert_type, condition_value, message, triggered_at,
+               trigger_price, is_active, expires_at, created_at, updated_at
         FROM price_alerts
         WHERE id = $1 AND user_id = $2
     """
@@ -166,15 +164,14 @@ async def get_alert(
             user_id=str(row['user_id']),
             symbol=row['symbol'],
             alert_type=row['alert_type'],
-            price=float(row['price']),
+            price=float(row['condition_value']),
             current_price=current_price,
             message=row['message'],
-            triggered=row['triggered'],
+            triggered=row['triggered_at'] is not None,
             triggered_at=row['triggered_at'],
-            triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-            notification_sent=row['notification_sent'],
-            enabled=row['enabled'],
-            is_active=row['enabled'],
+            triggered_price=float(row['trigger_price']) if row['trigger_price'] else None,
+            is_active=row['is_active'],
+            enabled=row['is_active'],
             expires_at=row['expires_at'],
             created_at=row['created_at']
         )
@@ -191,10 +188,10 @@ async def create_alert(
     pool = await get_postgres_pool()
 
     query = """
-        INSERT INTO price_alerts (user_id, symbol, alert_type, price, message, expires_at)
+        INSERT INTO price_alerts (user_id, symbol, alert_type, condition_value, message, expires_at)
         VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, user_id, symbol, alert_type, price, message, triggered, triggered_at,
-                  triggered_price, notification_sent, enabled, expires_at, created_at, updated_at
+        RETURNING id, user_id, symbol, alert_type, condition_value, message, triggered_at,
+                  trigger_price, is_active, expires_at, created_at, updated_at
     """
 
     async with pool.acquire() as conn:
@@ -220,15 +217,14 @@ async def create_alert(
                 user_id=str(row['user_id']),
                 symbol=row['symbol'],
                 alert_type=row['alert_type'],
-                price=float(row['price']),
+                price=float(row['condition_value']),
                 current_price=current_price,
                 message=row['message'],
-                triggered=row['triggered'],
+                triggered=row['triggered_at'] is not None,
                 triggered_at=row['triggered_at'],
-                triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-                notification_sent=row['notification_sent'],
-                enabled=row['enabled'],
-                is_active=row['enabled'],
+                triggered_price=float(row['trigger_price']) if row['trigger_price'] else None,
+                is_active=row['is_active'],
+                enabled=row['is_active'],
                 expires_at=row['expires_at'],
                 created_at=row['created_at']
             )
@@ -262,9 +258,9 @@ async def update_alert(
         params = [alert_id, user_id]
         param_idx = 3
 
-        if alert_update.price is not None:
-            updates.append(f"price = ${param_idx}")
-            params.append(alert_update.price)
+        if alert_update.condition_value is not None:
+            updates.append(f"condition_value = ${param_idx}")
+            params.append(alert_update.condition_value)
             param_idx += 1
 
         if alert_update.message is not None:
@@ -272,9 +268,9 @@ async def update_alert(
             params.append(alert_update.message)
             param_idx += 1
 
-        if alert_update.enabled is not None:
-            updates.append(f"enabled = ${param_idx}")
-            params.append(alert_update.enabled)
+        if alert_update.is_active is not None:
+            updates.append(f"is_active = ${param_idx}")
+            params.append(alert_update.is_active)
             param_idx += 1
 
         if alert_update.expires_at is not None:
@@ -289,8 +285,8 @@ async def update_alert(
             UPDATE price_alerts
             SET {', '.join(updates)}
             WHERE id = $1 AND user_id = $2
-            RETURNING id, user_id, symbol, alert_type, price, message, triggered, triggered_at,
-                      triggered_price, notification_sent, enabled, expires_at, created_at, updated_at
+            RETURNING id, user_id, symbol, alert_type, condition_value, message, triggered_at,
+                      trigger_price, is_active, expires_at, created_at, updated_at
         """
 
         try:
@@ -303,16 +299,15 @@ async def update_alert(
                 user_id=str(row['user_id']),
                 symbol=row['symbol'],
                 alert_type=row['alert_type'],
-                price=float(row['price']),
+                price=float(row['condition_value']),
                 message=row['message'],
-                triggered=row['triggered'],
+                triggered=row['triggered_at'] is not None,
                 triggered_at=row['triggered_at'],
-                triggered_price=float(row['triggered_price']) if row['triggered_price'] else None,
-                notification_sent=row['notification_sent'],
-                enabled=row['enabled'],
+                triggered_price=float(row['trigger_price']) if row['trigger_price'] else None,
+                is_active=row['is_active'],
+                enabled=row['is_active'],
                 expires_at=row['expires_at'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                created_at=row['created_at']
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update alert: {str(e)}") from e
@@ -355,8 +350,8 @@ async def trigger_alert(
 
     query = """
         UPDATE price_alerts
-        SET triggered = true, triggered_at = NOW(), triggered_price = $3
-        WHERE id = $1 AND user_id = $2 AND triggered = false
+        SET triggered_at = NOW(), trigger_price = $3
+        WHERE id = $1 AND user_id = $2 AND triggered_at IS NULL
         RETURNING id
     """
 
@@ -385,9 +380,9 @@ async def check_alerts_for_symbol(
 
     # Get active alerts for this symbol
     query = """
-        SELECT id, alert_type, price
+        SELECT id, alert_type, condition_value
         FROM price_alerts
-        WHERE user_id = $1 AND symbol = $2 AND enabled = true AND triggered = false
+        WHERE user_id = $1 AND symbol = $2 AND is_active = true AND triggered_at IS NULL
     """
 
     async with pool.acquire() as conn:
@@ -398,9 +393,9 @@ async def check_alerts_for_symbol(
         for alert in alerts:
             should_trigger = False
 
-            if alert['alert_type'] == 'above' and current_price > float(alert['price']):
+            if alert['alert_type'] in ('above', 'price_above') and current_price > float(alert['condition_value']):
                 should_trigger = True
-            elif alert['alert_type'] == 'below' and current_price < float(alert['price']):
+            elif alert['alert_type'] in ('below', 'price_below') and current_price < float(alert['condition_value']):
                 should_trigger = True
             # 'crosses_above' and 'crosses_below' would need previous price tracking
 
@@ -409,7 +404,7 @@ async def check_alerts_for_symbol(
                 await conn.execute(
                     """
                     UPDATE price_alerts
-                    SET triggered = true, triggered_at = NOW(), triggered_price = $1
+                    SET triggered_at = NOW(), trigger_price = $1
                     WHERE id = $2
                     """,
                     current_price, alert['id']

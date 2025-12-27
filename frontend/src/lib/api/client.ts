@@ -59,6 +59,7 @@ export interface User {
   full_name?: string;
   is_active: boolean;
   is_superuser: boolean;
+  is_verified?: boolean;
   created_at: string;
 }
 
@@ -614,7 +615,9 @@ export interface ApiKey {
   id: string;
   name?: string;
   key_prefix: string;
+  prefix?: string;  // Alias for key_prefix
   scopes: string[];
+  permissions?: string[];  // Alias for scopes
   rate_limit_per_minute: number;
   last_used_at?: string;
   expires_at?: string;
@@ -627,11 +630,14 @@ export interface ApiKeyCreateRequest {
   name: string;
   description?: string;
   scopes?: string[];
+  permissions?: string[];  // Alias for scopes
   expires_in_days?: number;
+  ip_whitelist?: string[];
 }
 
 export interface ApiKeyCreateResponse {
   api_key: string;
+  secret?: string;  // Alias for api_key
   key_id: string;
   name: string;
   expires_at?: string;
@@ -643,14 +649,18 @@ export interface SessionLog {
   ip_address?: string;
   user_agent?: string;
   device_type?: string;
+  device?: string;  // Alias for device_type
   browser?: string;
   os?: string;
   city?: string;
   country?: string;
+  location?: string;  // Combined city/country
   login_at: string;
   logout_at?: string;
   last_activity_at: string;
+  last_active?: string;  // Alias for last_activity_at
   is_active: boolean;
+  is_current?: boolean;  // Current session flag
   is_suspicious: boolean;
   login_method: string;
 }

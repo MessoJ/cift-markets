@@ -22,7 +22,7 @@ export interface MultiTimeframeViewProps {
   timeframes: string[]; // e.g., ['1d', '1h', '15m', '5m']
   layout?: '2x2' | '3x1' | '4x1';
   activeIndicators?: IndicatorConfig[];
-  chartType?: 'candlestick' | 'line' | 'area';
+  chartType?: 'candlestick' | 'line' | 'area' | 'heikin_ashi';
   onLayoutChange?: (layout: '2x2' | '3x1' | '4x1') => void;
 }
 
@@ -70,23 +70,30 @@ export default function MultiTimeframeView(props: MultiTimeframeViewProps) {
       case '2x2':
         return 'grid grid-cols-2 grid-rows-2 gap-2';
       case '3x1':
-        return 'grid grid-cols-1 grid-rows-3 gap-2';
+        return 'flex flex-col gap-2';
       case '4x1':
-        return 'grid grid-cols-1 grid-rows-4 gap-2';
+        return 'flex flex-col gap-2';
       default:
         return 'grid grid-cols-2 grid-rows-2 gap-2';
     }
   };
 
   /**
-   * Get individual panel height
+   * Get individual panel height based on layout
    */
   const getPanelHeight = () => {
+    return '100%';
+  };
+
+  /**
+   * Get panel container style for proper sizing
+   */
+  const getPanelStyle = () => {
     const layout = props.layout || '2x2';
-    if (layout === '2x2') return 'calc(50vh - 160px)'; // 2 rows
-    if (layout === '3x1') return 'calc(33.33vh - 140px)'; // 3 rows
-    if (layout === '4x1') return 'calc(25vh - 130px)'; // 4 rows
-    return '400px';
+    if (layout === '2x2') return {};
+    if (layout === '3x1') return { 'flex': '1', 'min-height': '150px' };
+    if (layout === '4x1') return { 'flex': '1', 'min-height': '120px' };
+    return {};
   };
 
   /**
@@ -98,9 +105,9 @@ export default function MultiTimeframeView(props: MultiTimeframeViewProps) {
   };
 
   return (
-    <div class="h-full flex flex-col gap-2 p-2 bg-terminal-950">
+    <div class="h-full w-full flex flex-col gap-1 p-2 bg-terminal-950 overflow-hidden">
       {/* Layout Controls */}
-      <div class="flex items-center justify-between px-3 py-2 bg-terminal-900 border border-terminal-750 rounded">
+      <div class="flex items-center justify-between px-3 py-2 bg-terminal-900 border border-terminal-750 rounded shrink-0">
         <div class="flex items-center gap-2">
           <LayoutGrid size={18} class="text-gray-400" />
           <span class="text-sm font-medium text-gray-300">Multi-Timeframe View</span>
@@ -150,35 +157,35 @@ export default function MultiTimeframeView(props: MultiTimeframeViewProps) {
         </div>
       </div>
 
-      {/* Chart Panels Grid */}
-      <div class={`flex-1 ${getLayoutClass()}`}>
+      {/* Chart Panels Grid - flex-1 to fill remaining space, min-h-0 to allow shrinking */}
+      <div class={`flex-1 min-h-0 ${getLayoutClass()}`}>
         <For each={panels()}>
           {(panel) => (
             <div
-              class="relative border border-terminal-750 rounded overflow-hidden transition-all duration-200 hover:border-primary-500/50"
+              class="border border-terminal-750 rounded overflow-hidden transition-all duration-200 hover:border-primary-500/50 flex flex-col"
+              style={getPanelStyle()}
               classList={{
                 'ring-2 ring-primary-500': focusedPanel() === panel.id,
               }}
               onClick={() => handlePanelClick(panel.id)}
             >
               {/* Panel Header */}
-              <div class="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-3 py-1.5 bg-terminal-900/90 backdrop-blur-sm border-b border-terminal-750">
+              <div class="flex items-center justify-between px-3 py-1 bg-terminal-900 border-b border-terminal-750 shrink-0">
                 <span class="text-sm font-semibold text-white">{panel.label}</span>
                 <span class="text-xs text-gray-500">{props.symbol}</span>
               </div>
 
-              {/* Chart */}
-              <div class="pt-9"> {/* Offset for header */}
+              {/* Chart Container - fills remaining space */}
+              <div class="flex-1 min-h-0">
                 <CandlestickChart
                   symbol={props.symbol}
                   timeframe={panel.timeframe}
                   chartType={props.chartType || 'candlestick'}
-                  candleLimit={200} // Fewer candles for multi-view performance
+                  candleLimit={200}
                   showVolume={true}
-                  height={getPanelHeight()}
+                  height="100%"
                   activeIndicators={props.activeIndicators || []}
                   enableRealTime={true}
-                  // Drawings disabled in multi-view for simplicity
                   drawings={[]}
                 />
               </div>
@@ -187,10 +194,7 @@ export default function MultiTimeframeView(props: MultiTimeframeViewProps) {
         </For>
       </div>
 
-      {/* Info Footer */}
-      <div class="px-3 py-2 bg-terminal-900 border border-terminal-750 rounded text-xs text-gray-500">
-        <span>💡 Tip: Click a panel to focus. All charts update in real-time.</span>
-      </div>
+      {/* Info Footer - Hidden to save space */}
     </div>
   );
 }

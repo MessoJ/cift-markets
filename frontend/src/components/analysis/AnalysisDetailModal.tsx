@@ -1,9 +1,8 @@
-import { Show, For } from 'solid-js';
+import { Show } from 'solid-js';
 import { Modal } from '~/components/ui/Modal';
 import { 
   TrendingUp, TrendingDown, Activity, BarChart2, 
-  DollarSign, Newspaper, Shield, AlertTriangle,
-  CheckCircle2, XCircle
+  DollarSign, Newspaper, Shield, AlertTriangle
 } from 'lucide-solid';
 import { formatCurrency, formatPercent } from '~/lib/utils/format';
 

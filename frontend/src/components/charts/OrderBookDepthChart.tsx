@@ -136,7 +136,12 @@ export default function OrderBookDepthChart(props: OrderBookDepthChartProps) {
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-semibold text-white">Order Book</h3>
           <Show when={data()?._simulated}>
-            <span class="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">SIM</span>
+            <span 
+              class="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded cursor-help border border-yellow-500/30"
+              title="Simulated Data: Real Level 2 order book data requires expensive exchange feeds. This visualization uses simulated data based on current spread."
+            >
+              SIMULATED
+            </span>
           </Show>
         </div>
         

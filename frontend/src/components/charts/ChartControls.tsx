@@ -76,24 +76,24 @@ export default function ChartControls(props: ChartControlsProps) {
   };
 
   return (
-    <div class="bg-terminal-900 border-b border-terminal-750 p-3">
-      <div class="flex items-center justify-between gap-4">
+    <div class="bg-terminal-900 border-b border-terminal-750 p-2 sm:p-3">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4">
         {/* Left Section: Symbol Search */}
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Symbol Display/Search */}
           <div class="relative">
             <button
               onClick={() => setShowSymbolSearch(!showSymbolSearch())}
-              class="flex items-center gap-2 px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 rounded transition-colors"
+              class="flex items-center gap-2 px-3 sm:px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 rounded transition-colors"
             >
               <TrendingUp size={16} class="text-accent-500" />
-              <span class="font-bold text-white text-lg">{props.symbol}</span>
+              <span class="font-bold text-white text-base sm:text-lg">{props.symbol}</span>
               <Search size={14} class="text-gray-500" />
             </button>
 
             {/* Symbol Search Dropdown */}
             <Show when={showSymbolSearch()}>
-              <div class="absolute top-full left-0 mt-2 w-80 bg-terminal-900 border border-terminal-750 rounded-lg shadow-xl z-50">
+              <div class="absolute top-full left-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-[320px] bg-terminal-900 border border-terminal-750 rounded-lg shadow-xl z-50">
                 {/* Search Input */}
                 <div class="p-3 border-b border-terminal-750">
                   <div class="relative">
@@ -120,12 +120,12 @@ export default function ChartControls(props: ChartControlsProps) {
                 {/* Popular Symbols */}
                 <div class="p-3">
                   <div class="text-xs text-gray-500 mb-2">Popular Symbols</div>
-                  <div class="grid grid-cols-5 gap-2">
+                  <div class="grid grid-cols-4 sm:grid-cols-5 gap-1.5 sm:gap-2">
                     <For each={POPULAR_SYMBOLS}>
                       {(symbol) => (
                         <button
                           onClick={() => selectSymbol(symbol)}
-                          class="px-3 py-1.5 bg-terminal-850 hover:bg-accent-600 border border-terminal-750 hover:border-accent-500 text-white text-xs rounded transition-colors"
+                          class="px-2 sm:px-3 py-1.5 bg-terminal-850 hover:bg-accent-600 border border-terminal-750 hover:border-accent-500 text-white text-xs rounded transition-colors"
                           classList={{
                             'bg-accent-600 border-accent-500': symbol === props.symbol,
                           }}
@@ -156,16 +156,16 @@ export default function ChartControls(props: ChartControlsProps) {
             </Show>
           </div>
 
-          {/* Divider */}
-          <div class="h-8 w-px bg-terminal-750" />
+          {/* Divider - hidden on mobile */}
+          <div class="hidden sm:block h-8 w-px bg-terminal-750" />
 
-          {/* Timeframe Selector */}
-          <div class="flex items-center gap-1">
+          {/* Timeframe Selector - scrollable on mobile */}
+          <div class="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
             <For each={TIMEFRAMES}>
               {(tf: ChartTimeframe) => (
                 <button
                   onClick={() => props.onTimeframeChange(tf.value)}
-                  class="px-3 py-1.5 text-xs font-medium rounded transition-colors"
+                  class="px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap flex-shrink-0"
                   classList={{
                     'bg-accent-600 text-white': tf.value === props.timeframe,
                     'bg-terminal-850 text-gray-400 hover:bg-terminal-800 hover:text-white':
@@ -179,8 +179,8 @@ export default function ChartControls(props: ChartControlsProps) {
           </div>
         </div>
 
-        {/* Right Section: Actions */}
-        <div class="flex items-center gap-2">
+        {/* Right Section: Actions - wrap on mobile */}
+        <div class="flex items-center gap-1 sm:gap-2 flex-wrap justify-end">
           {/* Chart Type Selector */}
           <div class="flex items-center gap-1 bg-terminal-850 rounded p-1 border border-terminal-750">
             <button

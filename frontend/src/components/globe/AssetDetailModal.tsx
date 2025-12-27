@@ -10,7 +10,7 @@
  */
 
 import { createSignal, Show, For, onMount, onCleanup } from 'solid-js';
-import { X, TrendingUp, TrendingDown, AlertTriangle, Activity, Globe, Clock, DollarSign, BarChart3, Newspaper } from 'lucide-solid';
+import { X, AlertTriangle, Activity, Globe, Clock, DollarSign, BarChart3, Newspaper } from 'lucide-solid';
 import { AssetMarkerData, NewsEvent, formatLargeNumber, ASSET_COLORS, EVENT_STATUS_COLORS } from '../../config/assetColors';
 import { assetWebSocket } from '../../services/assetWebSocket';
 
@@ -296,7 +296,7 @@ function NewsItem(props: { news: NewsEvent; compact?: boolean }) {
   );
 }
 
-function ChartTab(props: { asset: AssetMarkerData }) {
+function ChartTab(_props: { asset: AssetMarkerData }) {
   return (
     <div class="space-y-4">
       <div class="h-80 bg-gray-800/30 rounded-lg border border-gray-700 flex items-center justify-center">
@@ -310,7 +310,7 @@ function ChartTab(props: { asset: AssetMarkerData }) {
   );
 }
 
-function RelatedTab(props: { asset: AssetMarkerData }) {
+function RelatedTab(_props: { asset: AssetMarkerData }) {
   return (
     <div class="text-center py-12 text-gray-400">
       <Globe class="w-12 h-12 mx-auto mb-3 opacity-50" />

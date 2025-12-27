@@ -280,6 +280,93 @@ def calculate_technical_indicators(df: pl.DataFrame) -> pl.DataFrame:
         ]
     )
 
+    # NEW INDICATORS IMPLEMENTATION
+    
+    # 1. ATR (Average True Range) - 14 period
+    # TR = Max(High-Low, Abs(High-PrevClose), Abs(Low-PrevClose))
+    df = df.with_columns([
+        (pl.col("high") - pl.col("low")).alias("tr_1"),
+        (pl.col("high") - pl.col("close").shift(1)).abs().alias("tr_2"),
+        (pl.col("low") - pl.col("close").shift(1)).abs().alias("tr_3")
+    ])
+    
+    df = df.with_columns(
+        pl.max_horizontal(["tr_1", "tr_2", "tr_3"]).alias("tr")
+    )
+    
+    df = df.with_columns(
+        pl.col("tr").rolling_mean(window_size=14).alias("atr_14")
+    )
+
+    # 2. Stochastic Oscillator (14, 3, 3)
+    # %K = (Current Close - Lowest Low) / (Highest High - Lowest Low) * 100
+    df = df.with_columns([
+        pl.col("low").rolling_min(window_size=14).alias("low_14"),
+        pl.col("high").rolling_max(window_size=14).alias("high_14")
+    ])
+    
+    df = df.with_columns(
+        ((pl.col("close") - pl.col("low_14")) / (pl.col("high_14") - pl.col("low_14")) * 100).alias("stoch_k")
+    )
+    
+    df = df.with_columns(
+        pl.col("stoch_k").rolling_mean(window_size=3).alias("stoch_d")
+    )
+
+    # 3. OBV (On-Balance Volume)
+    # If close > prev_close, +volume. If close < prev_close, -volume.
+    df = df.with_columns(
+        pl.when(pl.col("close") > pl.col("close").shift(1))
+        .then(pl.col("volume"))
+        .when(pl.col("close") < pl.col("close").shift(1))
+        .then(-pl.col("volume"))
+        .otherwise(0)
+        .alias("obv_change")
+    )
+    
+    df = df.with_columns(
+        pl.col("obv_change").cum_sum().alias("obv")
+    )
+
+    # 4. Ichimoku Cloud
+    # Conversion Line (Tenkan-sen): (9-period high + 9-period low)/2
+    # Base Line (Kijun-sen): (26-period high + 26-period low)/2
+    # Leading Span A (Senkou Span A): (Conversion + Base)/2
+    # Leading Span B (Senkou Span B): (52-period high + 52-period low)/2
+    
+    df = df.with_columns([
+        ((pl.col("high").rolling_max(9) + pl.col("low").rolling_min(9)) / 2).alias("ichimoku_conversion"),
+        ((pl.col("high").rolling_max(26) + pl.col("low").rolling_min(26)) / 2).alias("ichimoku_base"),
+        ((pl.col("high").rolling_max(52) + pl.col("low").rolling_min(52)) / 2).alias("ichimoku_span_b_raw")
+    ])
+    
+    df = df.with_columns(
+        ((pl.col("ichimoku_conversion") + pl.col("ichimoku_base")) / 2).alias("ichimoku_span_a_raw")
+    )
+    
+    # Shift spans forward by 26 periods
+    df = df.with_columns([
+        pl.col("ichimoku_span_a_raw").shift(26).alias("ichimoku_span_a"),
+        pl.col("ichimoku_span_b_raw").shift(26).alias("ichimoku_span_b"),
+        pl.col("close").shift(-26).alias("ichimoku_lagging")
+    ])
+
+    # 5. Pivot Points (Standard)
+    # P = (High + Low + Close) / 3
+    # R1 = 2*P - Low, S1 = 2*P - High
+    # R2 = P + (High - Low), S2 = P - (High - Low)
+    
+    df = df.with_columns(
+        ((pl.col("high").shift(1) + pl.col("low").shift(1) + pl.col("close").shift(1)) / 3).alias("pivot_p")
+    )
+    
+    df = df.with_columns([
+        (2 * pl.col("pivot_p") - pl.col("low").shift(1)).alias("pivot_r1"),
+        (2 * pl.col("pivot_p") - pl.col("high").shift(1)).alias("pivot_s1"),
+        (pl.col("pivot_p") + (pl.col("high").shift(1) - pl.col("low").shift(1))).alias("pivot_r2"),
+        (pl.col("pivot_p") - (pl.col("high").shift(1) - pl.col("low").shift(1))).alias("pivot_s2")
+    ])
+
     # RSI (Relative Strength Index) - 14 period
     # Calculate price changes
     df = df.with_columns(
@@ -336,6 +423,63 @@ def calculate_technical_indicators(df: pl.DataFrame) -> pl.DataFrame:
             ),
         ]
     )
+
+    # Candlestick Patterns
+    # Doji: Body is very small relative to range
+    df = df.with_columns(
+        ((pl.col("close") - pl.col("open")).abs() <= (pl.col("high") - pl.col("low")) * 0.1).alias("pattern_doji")
+    )
+    
+    # Hammer: Small body, long lower wick, small upper wick
+    # Body < 30% of range
+    # Lower wick > 60% of range
+    # Upper wick < 10% of range
+    body_len = (pl.col("close") - pl.col("open")).abs()
+    total_len = pl.col("high") - pl.col("low")
+    lower_wick = pl.min_horizontal(["open", "close"]) - pl.col("low")
+    upper_wick = pl.col("high") - pl.max_horizontal(["open", "close"])
+    
+    df = df.with_columns([
+        (
+            (body_len < 0.3 * total_len) & 
+            (lower_wick > 0.6 * total_len) & 
+            (upper_wick < 0.1 * total_len)
+        ).alias("pattern_hammer")
+    ])
+    
+    # Shooting Star: Inverted Hammer (Bearish)
+    df = df.with_columns([
+        (
+            (body_len < 0.3 * total_len) & 
+            (upper_wick > 0.6 * total_len) & 
+            (lower_wick < 0.1 * total_len)
+        ).alias("pattern_shooting_star")
+    ])
+    
+    # Bullish Engulfing
+    # Previous candle red, current candle green
+    # Current body engulfs previous body
+    prev_open = pl.col("open").shift(1)
+    prev_close = pl.col("close").shift(1)
+    
+    df = df.with_columns([
+        (
+            (pl.col("close") > pl.col("open")) & # Green
+            (prev_close < prev_open) & # Prev Red
+            (pl.col("close") > prev_open) & 
+            (pl.col("open") < prev_close)
+        ).alias("pattern_bullish_engulfing")
+    ])
+    
+    # Bearish Engulfing
+    df = df.with_columns([
+        (
+            (pl.col("close") < pl.col("open")) & # Red
+            (prev_close > prev_open) & # Prev Green
+            (pl.col("close") < prev_open) & 
+            (pl.col("open") > prev_close)
+        ).alias("pattern_bearish_engulfing")
+    ])
 
     return df
 
@@ -714,3 +858,59 @@ def merge_dataframes(
         Merged DataFrame
     """
     return df1.join(df2, on=on, how=how)
+
+
+def calculate_volume_profile(df: pl.DataFrame, bins: int = 24) -> dict:
+    """
+    Calculate Volume Profile (Volume by Price) for the given DataFrame.
+    
+    Args:
+        df: Polars DataFrame with 'high', 'low', 'volume' columns
+        bins: Number of price bins
+        
+    Returns:
+        Dictionary with 'price_levels' (list) and 'volumes' (list)
+    """
+    if df.height == 0:
+        return {"price_levels": [], "volumes": []}
+        
+    min_price = df["low"].min()
+    max_price = df["high"].max()
+    
+    if min_price == max_price:
+        return {"price_levels": [min_price], "volumes": [df["volume"].sum()]}
+        
+    price_step = (max_price - min_price) / bins
+    
+    # Use typical price (High + Low + Close) / 3 for binning
+    df = df.with_columns(
+        ((pl.col("high") + pl.col("low") + pl.col("close")) / 3).alias("typical_price")
+    )
+    
+    # Create bin index
+    df = df.with_columns(
+        ((pl.col("typical_price") - min_price) / price_step).floor().cast(pl.Int32).alias("bin_index")
+    )
+    
+    # Clip bin index to be within [0, bins-1]
+    df = df.with_columns(
+        pl.col("bin_index").clip(0, bins - 1)
+    )
+    
+    # Group by bin index and sum volume
+    profile = df.group_by("bin_index").agg(pl.col("volume").sum()).sort("bin_index")
+    
+    # Construct result
+    volumes = [0.0] * bins
+    price_levels = [min_price + i * price_step for i in range(bins)]
+    
+    for row in profile.iter_rows(named=True):
+        idx = row["bin_index"]
+        if 0 <= idx < bins:
+            volumes[idx] = row["volume"]
+            
+    return {
+        "price_levels": price_levels,
+        "volumes": volumes,
+        "max_volume": max(volumes) if volumes else 0
+    }

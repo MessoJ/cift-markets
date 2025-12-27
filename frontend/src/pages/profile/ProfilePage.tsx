@@ -1,20 +1,16 @@
 import { createSignal, createEffect, Show, onMount, For } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { 
-  User, 
   Mail, 
-  Calendar, 
   Shield, 
   Settings, 
   Save, 
-  X,
   CheckCircle2,
   AlertTriangle,
   FileText,
   Upload,
   CreditCard,
-  BadgeCheck,
-  Clock
+  BadgeCheck
 } from 'lucide-solid';
 import { apiClient } from '~/lib/api/client';
 

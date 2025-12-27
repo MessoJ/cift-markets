@@ -1,5 +1,4 @@
 import { createStore, produce } from "solid-js/store";
-import { createSignal } from "solid-js";
 
 // Types
 export interface MarketTicker {
@@ -30,9 +29,6 @@ const [state, setState] = createStore<MarketDataState>({
 let socket: WebSocket | null = null;
 let reconnectTimer: any = null;
 let heartbeatTimer: any = null;
-
-// Configuration
-const WS_URL = (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/v1/ws').replace('http', 'ws');
 
 export const marketStore = {
   // Getters

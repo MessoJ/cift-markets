@@ -11,7 +11,7 @@
  * - Responsive sizing
  */
 
-import { onMount, onCleanup, createSignal, Show } from 'solid-js';
+import { onMount, onCleanup, createSignal, Show, For } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';

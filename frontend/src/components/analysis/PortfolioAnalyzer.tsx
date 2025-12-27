@@ -10,7 +10,7 @@
 
 import { createSignal, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Target, AlertTriangle } from 'lucide-solid';
+import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Target, AlertTriangle, Activity } from 'lucide-solid';
 import { AIIcon } from '~/components/icons/AIIcon';
 import { apiClient } from '~/lib/api/client';
 import { formatCurrency } from '~/lib/utils/format';

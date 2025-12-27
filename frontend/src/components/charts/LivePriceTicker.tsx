@@ -128,23 +128,23 @@ export default function LivePriceTicker(props: LivePriceTickerProps) {
           </div>
         </Show>
 
-        {/* OHLC Stats */}
-        <div class="hidden md:flex gap-4 text-xs border-l border-terminal-750 pl-3">
+        {/* OHLC Stats - Compact on mobile, expanded on desktop */}
+        <div class="flex gap-2 sm:gap-4 text-xs border-l border-terminal-750 pl-2 sm:pl-3">
           <div class="flex flex-col">
             <span class="text-gray-500">O</span>
-            <span class="text-white font-mono">{props.open > 0 ? props.open.toFixed(2) : '--'}</span>
+            <span class="text-white font-mono text-[11px] sm:text-xs">{props.open > 0 ? props.open.toFixed(2) : '--'}</span>
           </div>
           <div class="flex flex-col">
             <span class="text-gray-500">H</span>
-            <span class="text-green-400 font-mono">{props.high > 0 ? props.high.toFixed(2) : '--'}</span>
+            <span class="text-green-400 font-mono text-[11px] sm:text-xs">{props.high > 0 ? props.high.toFixed(2) : '--'}</span>
           </div>
           <div class="flex flex-col">
             <span class="text-gray-500">L</span>
-            <span class="text-red-400 font-mono">{props.low > 0 ? props.low.toFixed(2) : '--'}</span>
+            <span class="text-red-400 font-mono text-[11px] sm:text-xs">{props.low > 0 ? props.low.toFixed(2) : '--'}</span>
           </div>
           <div class="flex flex-col">
             <span class="text-gray-500">V</span>
-            <span class="text-white font-mono">{formatVolume(props.volume)}</span>
+            <span class="text-white font-mono text-[11px] sm:text-xs">{formatVolume(props.volume)}</span>
           </div>
         </div>
 
@@ -194,8 +194,8 @@ export default function LivePriceTicker(props: LivePriceTickerProps) {
   );
 }
 
-function formatVolume(volume: number): string {
-  if (!volume || volume === 0) return '--';
+function formatVolume(volume: number | undefined | null): string {
+  if (volume === undefined || volume === null || volume === 0) return '--';
   if (volume >= 1_000_000_000) {
     return `${(volume / 1_000_000_000).toFixed(2)}B`;
   } else if (volume >= 1_000_000) {

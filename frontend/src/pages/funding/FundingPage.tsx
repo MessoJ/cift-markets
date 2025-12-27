@@ -11,7 +11,6 @@ import {
   ArrowDownRight, 
   CreditCard, 
   Clock, 
-  AlertCircle, 
   Zap,
   Wallet,
   Activity,
@@ -63,8 +62,8 @@ const SummaryCard = (props: { title: string; value: number; type: 'cash' | 'powe
 
 export default function FundingPage() {
   const [activeTab, setActiveTab] = createSignal<TabType>('deposit');
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal<string | null>(null);
+  const [_loading, setLoading] = createSignal(false);
+  const [_error, setError] = createSignal<string | null>(null);
   const [transactions, setTransactions] = createSignal<FundingTransaction[]>([]);
   const [paymentMethods, setPaymentMethods] = createSignal<PaymentMethod[]>([]);
   const [limits, setLimits] = createSignal<TransferLimit | null>(null);

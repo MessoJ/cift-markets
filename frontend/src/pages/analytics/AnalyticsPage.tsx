@@ -291,9 +291,9 @@ export default function AnalyticsPage() {
             </h3>
             <div class="flex-1 flex items-center justify-center">
               <DonutChart 
-                data={assetAllocation()} 
-                height={220} 
-                innerRadius={0.6}
+                segments={assetAllocation()} 
+                size={220} 
+                thickness={30}
               />
             </div>
             <div class="mt-4 space-y-2">

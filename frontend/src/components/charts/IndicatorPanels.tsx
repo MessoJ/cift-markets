@@ -9,7 +9,7 @@
 
 import { createEffect, onMount, onCleanup, Show } from 'solid-js';
 import * as echarts from 'echarts';
-import type { IndicatorData } from '~/types/chart.types';
+import type { IndicatorData } from '~/hooks/useIndicators';
 import { DARK_THEME } from '~/types/chart.types';
 
 export interface IndicatorPanelsProps {

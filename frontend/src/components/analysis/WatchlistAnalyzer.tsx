@@ -8,9 +8,9 @@
  * Brand Colors: Orange accent (#f97316), terminal blacks, success green, danger red
  */
 
-import { createSignal, Show, onMount, onCleanup, createEffect } from 'solid-js';
+import { createSignal, Show, onCleanup, createEffect } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { ChevronRight, TrendingUp, TrendingDown, Gauge, Shield, Zap, X } from 'lucide-solid';
+import { ChevronRight, Gauge, Shield, Zap, X } from 'lucide-solid';
 import { AIIcon } from '~/components/icons/AIIcon';
 import { apiClient } from '~/lib/api/client';
 
@@ -161,7 +161,7 @@ export function WatchlistAnalyzer(props: WatchlistAnalyzerProps) {
             stroke-width={strokeWidth}
             fill="none"
             stroke-linecap="round"
-            stroke-dasharray={circumference}
+            stroke-dasharray={String(circumference)}
             stroke-dashoffset={circumference - progress}
             class="transition-all duration-700 ease-out"
           />

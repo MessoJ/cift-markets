@@ -22,8 +22,7 @@
 import { createSignal, createEffect, on, Show, onMount, onCleanup } from 'solid-js';
 import { 
   LayoutGrid, Maximize2, PanelLeftClose, PanelLeft, Settings, 
-  Camera, Download, Keyboard, Layers, ShoppingCart, TrendingUp,
-  Crosshair, ZoomIn, ZoomOut, RotateCcw
+  Camera, Download, Keyboard, ShoppingCart
 } from 'lucide-solid';
 import CandlestickChart from '~/components/charts/CandlestickChart';
 import ChartControls from '~/components/charts/ChartControls';
@@ -38,13 +37,18 @@ import DrawingToolbar from '~/components/charts/DrawingToolbar';
 import MultiTimeframeView from '~/components/charts/MultiTimeframeView';
 import TemplateManager from '~/components/charts/TemplateManager';
 import AlertManager from '~/components/charts/AlertManager';
+import PredictionControls from '~/components/charts/PredictionControls';
+import PredictionAccuracyPanel from '~/components/charts/PredictionAccuracyPanel';
 import { useIndicators } from '~/hooks/useIndicators';
 import { useMarketDataWebSocket } from '~/hooks/useMarketDataWebSocket';
 import type { IndicatorConfig } from '~/components/charts/IndicatorPanel';
 import type { DrawingType, Drawing } from '~/types/drawing.types';
+import type { PredictedBar } from '~/types/prediction.types';
+import type { OHLCVBar } from '~/types/chart.types';
 import { getDrawings, createDrawing, deleteDrawing, deleteAllDrawings } from '~/lib/api/drawings';
 import { apiClient } from '~/lib/api/client';
 import { authStore } from '~/stores/auth.store';
+import { generatePrediction, startPredictionSession, clearPrediction } from '~/services/prediction.service';
 
 export default function ChartsPage() {
   const [symbol, setSymbol] = createSignal('AAPL');
@@ -85,6 +89,13 @@ export default function ChartsPage() {
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
   
+  // Prediction state
+  const [predictedBars, setPredictedBars] = createSignal<PredictedBar[]>([]);
+  const [predictionStartIndex, setPredictionStartIndex] = createSignal<number | undefined>(undefined);
+  const [showPrediction, setShowPrediction] = createSignal(false);
+  const [showAccuracyPanel, setShowAccuracyPanel] = createSignal(false);
+  const [chartBars, setChartBars] = createSignal<OHLCVBar[]>([]);
+  
   // Live price data
   const [livePrice, setLivePrice] = createSignal<number | null>(null);
   const [priceStats, setPriceStats] = createSignal({
@@ -101,30 +112,40 @@ export default function ChartsPage() {
   // Fetch initial quote data
   const fetchQuoteData = async (sym: string) => {
     try {
-      // Fetch quote
+      // Fetch quote - this is the primary source for OHLCV data
       const quoteRes = await fetch(`/api/v1/market-data/quote/${sym}`, { credentials: 'include' });
       if (quoteRes.ok) {
         const quote = await quoteRes.json();
         setLivePrice(quote.price);
+        // Use quote data for price stats (more reliable than company summary)
+        setPriceStats({
+          open: quote.open || 0,
+          high: quote.high || 0,
+          low: quote.low || 0,
+          volume: quote.volume || 0,
+          change: quote.change || 0,
+          changePercent: quote.change_pct || 0,
+          high52w: quote.high_52w || 0,
+          low52w: quote.low_52w || 0,
+        });
       }
 
-      // Fetch summary from company endpoint for more data
-      const summaryRes = await fetch(`/api/v1/company/${sym}/summary`, { credentials: 'include' });
-      if (summaryRes.ok) {
-        const summary = await summaryRes.json();
-        setPriceStats({
-          open: summary.open || 0,
-          high: summary.high || 0,
-          low: summary.low || 0,
-          volume: summary.volume || 0,
-          change: summary.change || 0,
-          changePercent: summary.change_pct || 0,
-          high52w: summary.high_52w || 0,
-          low52w: summary.low_52w || 0,
-        });
-        if (summary.price) {
-          setLivePrice(summary.price);
+      // Also fetch summary for any additional data (52w, etc.)
+      try {
+        const summaryRes = await fetch(`/api/v1/company/${sym}/summary`, { credentials: 'include' });
+        if (summaryRes.ok) {
+          const summary = await summaryRes.json();
+          // Only update if we got additional data that quote didn't have
+          if (summary.high_52w || summary.low_52w) {
+            setPriceStats(prev => ({
+              ...prev,
+              high52w: summary.high_52w || prev.high52w,
+              low52w: summary.low_52w || prev.low52w,
+            }));
+          }
         }
+      } catch {
+        // Company summary endpoint may fail - that's okay, we have quote data
       }
     } catch (err) {
       console.error('Failed to fetch quote data:', err);
@@ -161,6 +182,8 @@ export default function ChartsPage() {
           ...prev,
           change: tick.price - prev.open,
           changePercent: prev.open > 0 ? ((tick.price - prev.open) / prev.open) * 100 : 0,
+          high52w: prev.high52w,
+          low52w: prev.low52w,
         }));
       }
     });
@@ -168,14 +191,16 @@ export default function ChartsPage() {
     const candleCleanup = ws.onCandle((candle) => {
       if (candle.symbol === symbol() && candle.timeframe === timeframe()) {
         // Update price stats with latest candle data
-        setPriceStats({
+        setPriceStats(prev => ({
           open: candle.open,
           high: candle.high,
           low: candle.low,
           volume: candle.volume,
           change: candle.close - candle.open,
           changePercent: ((candle.close - candle.open) / candle.open) * 100,
-        });
+          high52w: prev.high52w,
+          low52w: prev.low52w,
+        }));
         
         setLivePrice(candle.close);
       }
@@ -283,6 +308,59 @@ export default function ChartsPage() {
     setSelectedDrawingId(drawingId);
     setActiveTool(null); // Deselect tool when selecting drawing
     console.log('Drawing selected:', drawingId);
+  };
+
+  /**
+   * Handle prediction generation
+   */
+  const handlePredict = async () => {
+    const bars = chartBars();
+    if (bars.length < 20) {
+      console.error('Need at least 20 bars to generate prediction');
+      return;
+    }
+
+    try {
+      const predictions = await generatePrediction(symbol(), timeframe(), bars, 5);
+      setPredictedBars(predictions);
+      setPredictionStartIndex(bars.length - 1);
+      setShowPrediction(true);
+      
+      // Start prediction session in store
+      startPredictionSession(symbol(), timeframe(), predictions, bars.length - 1);
+      
+      console.log(`🔮 Prediction generated: ${predictions.length} bars for ${symbol()} ${timeframe()}`);
+    } catch (err) {
+      console.error('Prediction failed:', err);
+    }
+  };
+
+  /**
+   * Handle prediction clear
+   */
+  const handleClearPrediction = () => {
+    setPredictedBars([]);
+    setPredictionStartIndex(undefined);
+    setShowPrediction(false);
+    setShowAccuracyPanel(false);
+    clearPrediction(symbol(), timeframe());
+    console.log('🗑️ Prediction cleared');
+  };
+
+  /**
+   * Handle prediction comparison
+   */
+  const handleCompare = () => {
+    setShowAccuracyPanel(true);
+    console.log('📊 Showing prediction accuracy panel');
+  };
+
+  /**
+   * Handle bars loaded from chart component
+   */
+  const handleBarsLoaded = (bars: OHLCVBar[]) => {
+    setChartBars(bars);
+    console.log(`📊 Chart loaded ${bars.length} bars`);
   };
 
   /**
@@ -466,10 +544,11 @@ export default function ChartsPage() {
   };
 
   return (
-    <div class="h-full flex flex-col gap-0">
+    <div class="h-full flex flex-col gap-0 overflow-hidden">
       {/* Chart Controls with Connection Status */}
-      <div class="bg-terminal-900 border-b border-terminal-750">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 px-2 sm:px-3 py-2 sm:py-0">
+      <div class="bg-terminal-900 border-b border-terminal-750 shrink-0">
+        <div class="flex flex-col gap-2 px-2 py-2">
+          {/* Top row: Symbol + Timeframes */}
           <ChartControls
             symbol={symbol()}
             timeframe={timeframe()}
@@ -483,75 +562,95 @@ export default function ChartsPage() {
             onToggleSidebar={() => setSidebarCollapsed(prev => !prev)}
             onFullscreen={handleFullscreen}
           />
-          {/* Connection Status Indicator */}
-          <ConnectionStatusIndicator
-            status={ws.status()}
-            subscribedSymbols={ws.subscribedSymbols()}
-            onReconnect={() => ws.connect()}
-          />
           
-          {/* View Mode Toggle */}
-          <button
-            class="px-3 py-1.5 text-sm rounded transition-colors flex items-center gap-2"
-            classList={{
-              'bg-primary-600 text-white': viewMode() === 'multi',
-              'bg-terminal-800 text-gray-400 hover:bg-terminal-750': viewMode() === 'single',
-            }}
-            onClick={() => setViewMode(prev => prev === 'single' ? 'multi' : 'single')}
-            title="Toggle Multi-Timeframe View (M)"
-          >
-            {viewMode() === 'single' ? <LayoutGrid size={16} /> : <Maximize2 size={16} />}
-            <span class="hidden sm:inline">{viewMode() === 'single' ? 'Multi' : 'Single'}</span>
-          </button>
-          
-          {/* NEW: Chart Action Buttons */}
-          <div class="flex items-center gap-1 ml-2 border-l border-terminal-750 pl-2">
-            {/* Quick Trade Button */}
-            <button
-              class="p-2 rounded transition-colors"
-              classList={{
-                'bg-green-600 text-white': showQuickTrade(),
-                'bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white': !showQuickTrade(),
-              }}
-              onClick={() => setShowQuickTrade(prev => !prev)}
-              title="Quick Trade (B)"
-            >
-              <ShoppingCart size={16} />
-            </button>
+          {/* Bottom row: Connection + Actions (mobile: stacked) */}
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            {/* Connection Status Indicator */}
+            <ConnectionStatusIndicator
+              status={ws.status()}
+              subscribedSymbols={ws.subscribedSymbols()}
+              onReconnect={() => ws.connect()}
+            />
             
-            {/* Screenshot */}
-            <button
-              class="p-2 bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white rounded transition-colors"
-              onClick={exportChartAsImage}
-              title="Screenshot Chart"
-            >
-              <Camera size={16} />
-            </button>
-            
-            {/* Export Data */}
-            <button
-              class="p-2 bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white rounded transition-colors"
-              onClick={exportChartData}
-              title="Export CSV"
-            >
-              <Download size={16} />
-            </button>
-            
-            {/* Keyboard Shortcuts Help */}
-            <button
-              class="p-2 bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white rounded transition-colors"
-              onClick={() => setShowShortcutsHelp(prev => !prev)}
-              title="Keyboard Shortcuts (?)"
-            >
-              <Keyboard size={16} />
-            </button>
+            {/* View Mode + Prediction + Actions */}
+            <div class="flex items-center gap-1 sm:gap-2 flex-wrap">
+              {/* Prediction Controls */}
+              <PredictionControls
+                symbol={symbol()}
+                timeframe={timeframe()}
+                onPredict={handlePredict}
+                onClear={handleClearPrediction}
+                onCompare={handleCompare}
+                disabled={chartBars().length < 20}
+              />
+
+              {/* Divider */}
+              <div class="h-6 w-px bg-terminal-750 mx-1" />
+
+              {/* View Mode Toggle */}
+              <button
+                class="px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded transition-colors flex items-center gap-1 sm:gap-2"
+                classList={{
+                  'bg-primary-600 text-white': viewMode() === 'multi',
+                  'bg-terminal-800 text-gray-400 hover:bg-terminal-750': viewMode() === 'single',
+                }}
+                onClick={() => setViewMode(prev => prev === 'single' ? 'multi' : 'single')}
+                title="Toggle Multi-Timeframe View (M)"
+              >
+                {viewMode() === 'single' ? <LayoutGrid size={14} /> : <Maximize2 size={14} />}
+                <span class="hidden sm:inline">{viewMode() === 'single' ? 'Multi' : 'Single'}</span>
+              </button>
+              
+              {/* Chart Action Buttons */}
+              <div class="flex items-center gap-1 border-l border-terminal-750 pl-2">
+                {/* Quick Trade Button */}
+                <button
+                  class="p-1.5 sm:p-2 rounded transition-colors"
+                  classList={{
+                    'bg-green-600 text-white': showQuickTrade(),
+                    'bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white': !showQuickTrade(),
+                  }}
+                  onClick={() => setShowQuickTrade(prev => !prev)}
+                  title="Quick Trade (B)"
+                >
+                  <ShoppingCart size={14} />
+                </button>
+                
+                {/* Screenshot - hidden on mobile */}
+                <button
+                  class="hidden sm:block p-2 bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white rounded transition-colors"
+                  onClick={exportChartAsImage}
+                  title="Screenshot Chart"
+                >
+                  <Camera size={14} />
+                </button>
+                
+                {/* Export Data - hidden on mobile */}
+                <button
+                  class="hidden sm:block p-2 bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white rounded transition-colors"
+                  onClick={exportChartData}
+                  title="Export CSV"
+                >
+                  <Download size={14} />
+                </button>
+                
+                {/* Keyboard Shortcuts Help - hidden on mobile */}
+                <button
+                  class="hidden sm:block p-2 bg-terminal-800 text-gray-400 hover:bg-terminal-750 hover:text-white rounded transition-colors"
+                  onClick={() => setShowShortcutsHelp(prev => !prev)}
+                  title="Keyboard Shortcuts (?)"
+                >
+                  <Keyboard size={14} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Quick Trade Panel (Overlay) */}
+      {/* Quick Trade Panel (Overlay) - Mobile friendly */}
       <Show when={showQuickTrade()}>
-        <div class="absolute top-16 right-4 z-30 bg-terminal-900 border border-terminal-750 rounded-lg shadow-xl p-4 w-72">
+        <div class="fixed inset-x-4 top-24 sm:absolute sm:inset-auto sm:top-16 sm:right-4 z-30 bg-terminal-900 border border-terminal-750 rounded-lg shadow-xl p-4 sm:w-72">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold text-white flex items-center gap-2">
               <ShoppingCart size={16} class="text-green-500" />
@@ -689,26 +788,28 @@ export default function ChartsPage() {
       />
 
       {/* Main Content Area with Sidebar */}
-      <div class="flex-1 flex flex-col xl:flex-row gap-0 overflow-y-auto xl:overflow-hidden">
+      <div class="flex-1 flex flex-col lg:flex-row gap-0 overflow-y-auto lg:overflow-hidden min-h-0">
         <Show 
           when={viewMode() === 'single'}
           fallback={
-            /* Multi-Timeframe View */
-            <MultiTimeframeView
-              symbol={symbol()}
-              timeframes={multiTimeframes()}
-              layout={multiLayout()}
-              activeIndicators={activeIndicators()}
-              chartType={chartType()}
-              onLayoutChange={setMultiLayout}
-            />
+            /* Multi-Timeframe View - Takes FULL width */
+            <div class="flex-1 w-full">
+              <MultiTimeframeView
+                symbol={symbol()}
+                timeframes={multiTimeframes()}
+                layout={multiLayout()}
+                activeIndicators={activeIndicators()}
+                chartType={chartType()}
+                onLayoutChange={setMultiLayout}
+              />
+            </div>
           }
         >
           {/* Single Chart View */}
           {/* Chart Area - Main + Indicator Panels */}
-          <div class="flex-1 flex flex-col min-h-[60vh] xl:min-h-0">
+          <div class="flex-1 flex flex-col min-h-[400px] lg:min-h-0">
             {/* Main Candlestick Chart */}
-            <div class="h-[50vh] xl:h-auto xl:flex-1 chart-area relative">
+            <div class="h-[300px] sm:h-[400px] lg:h-auto lg:flex-1 chart-area relative">
           <CandlestickChart
             symbol={symbol()}
             timeframe={timeframe()}
@@ -720,6 +821,10 @@ export default function ChartsPage() {
             activeTool={activeTool()}
             drawings={drawings()}
             selectedDrawingId={selectedDrawingId()}
+            predictedBars={predictedBars()}
+            predictionStartIndex={predictionStartIndex()}
+            showPrediction={showPrediction()}
+            onBarsLoaded={handleBarsLoaded}
             onDrawingSelect={handleDrawingSelect}
             onDrawingComplete={async (drawing) => {
               console.log('Drawing completed:', drawing);
@@ -745,6 +850,17 @@ export default function ChartsPage() {
               drawingCount={drawings().length}
             />
           </Show>
+
+          {/* Prediction Accuracy Panel Overlay */}
+          <Show when={showAccuracyPanel()}>
+            <div class="absolute top-4 right-4 z-30 w-96 max-h-[calc(100%-2rem)] overflow-y-auto">
+              <PredictionAccuracyPanel
+                symbol={symbol()}
+                timeframe={timeframe()}
+                onClose={() => setShowAccuracyPanel(false)}
+              />
+            </div>
+          </Show>
           </div>
 
           {/* Indicator Panels Below Main Chart */}
@@ -757,7 +873,7 @@ export default function ChartsPage() {
 
           {/* Right Sidebar - Tools & Indicators */}
           <Show when={!sidebarCollapsed()}>
-            <div class="xl:w-80 bg-terminal-950 border-t xl:border-t-0 xl:border-l border-terminal-750 p-3 sm:p-4 overflow-y-auto space-y-3 sm:space-y-4">
+            <div class="w-full lg:w-72 xl:w-80 bg-terminal-950 border-t lg:border-t-0 lg:border-l border-terminal-750 p-3 overflow-y-auto space-y-3 max-h-[50vh] lg:max-h-none">
               {/* Sidebar Header */}
               <div class="flex items-center justify-between pb-2 border-b border-terminal-750">
                 <div class="flex items-center gap-2 text-xs font-mono text-gray-400 uppercase">
@@ -791,7 +907,7 @@ export default function ChartsPage() {
               <div class="pb-4 border-b border-terminal-750">
                 <AlertManager
                   symbol={symbol()}
-                  currentPrice={livePrice()}
+                  currentPrice={livePrice() ?? undefined}
                   onAlertTriggered={(alert) => {
                     console.log(`🚨 Alert triggered: ${alert.symbol} ${alert.alert_type} $${alert.price}`);
                   }}
@@ -826,7 +942,7 @@ export default function ChartsPage() {
           
           {/* Collapsed Sidebar Toggle */}
           <Show when={sidebarCollapsed()}>
-            <div class="hidden xl:flex bg-terminal-950 border-l border-terminal-750 p-2">
+            <div class="hidden lg:flex bg-terminal-950 border-l border-terminal-750 p-2">
               <button
                 onClick={() => setSidebarCollapsed(false)}
                 class="p-2 text-gray-500 hover:text-white transition-colors"

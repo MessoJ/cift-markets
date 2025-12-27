@@ -1,6 +1,6 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
 import { apiClient } from '~/lib/api/client';
-import { Building, Users, Globe, DollarSign, TrendingUp, Activity, FileText, BarChart3 } from 'lucide-solid';
+import { Building, Users, Globe, Activity, FileText, BarChart3 } from 'lucide-solid';
 import { formatCurrency, formatNumber } from '~/lib/utils/format';
 
 interface CompanyProfileWidgetProps {

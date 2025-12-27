@@ -1,6 +1,5 @@
-import { createSignal, For, Show, createMemo } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import { 
-  DollarSign, 
   CheckCircle2, 
   AlertTriangle,
   ArrowRight,

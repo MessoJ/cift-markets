@@ -169,3 +169,11 @@ export function getPulseSpeed(status: EventStatus): number {
       return 0; // No pulse
   }
 }
+
+/**
+ * Format percentage for display
+ */
+export function formatPercentage(value: number): string {
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}

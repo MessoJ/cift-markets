@@ -33,7 +33,7 @@ interface MarketInsight {
   title: string;
   description: string;
   confidence: number;
-  impact: 'high' | 'medium' | 'low';
+  impact: 'high' | 'medium' | 'low' | 'critical';
   region?: string;
   timestamp: Date;
 }

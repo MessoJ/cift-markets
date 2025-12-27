@@ -6,14 +6,14 @@
 
 import { createSignal, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { Mail, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-solid';
+import { Mail, ArrowRight, CheckCircle2 } from 'lucide-solid';
 import { Logo } from '~/components/layout/Logo';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = createSignal('');
   const [submitted, setSubmitted] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal('');
+  const [_error, setError] = createSignal('');
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();

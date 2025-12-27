@@ -129,7 +129,12 @@ export default function TimeSales(props: TimeSalesProps) {
         <div class="flex items-center gap-2">
           <h3 class="text-sm font-semibold text-white">Time & Sales</h3>
           <Show when={data()?._simulated}>
-            <span class="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">SIM</span>
+            <span 
+              class="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded cursor-help border border-yellow-500/30"
+              title="Simulated Data: Real-time trade data requires WebSocket subscription to exchange feeds. This visualization uses simulated trades based on recent price action."
+            >
+              SIMULATED
+            </span>
           </Show>
         </div>
         

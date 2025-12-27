@@ -247,8 +247,19 @@ const RatingBadge = (props: { rating: string }) => {
 };
 
 const MLPredictionCard = (props: { prediction: MLPrediction | null; loading: boolean }) => {
+  // Check if prediction is from an untrained/unloaded model
+  // Untrained models return: confidence=0, model_agreement=0, direction_probability≈0.5
+  const isModelUntrained = () => {
+    if (!props.prediction) return true;
+    return (
+      props.prediction.confidence === 0 &&
+      props.prediction.model_agreement === 0 &&
+      Math.abs(props.prediction.direction_probability - 0.5) < 0.01
+    );
+  };
+
   const directionConfig = () => {
-    if (!props.prediction) return { icon: Minus, color: 'text-slate-400', bg: 'bg-slate-500/10', label: 'N/A' };
+    if (!props.prediction || isModelUntrained()) return { icon: Minus, color: 'text-slate-400', bg: 'bg-slate-500/10', label: 'N/A' };
     switch (props.prediction.direction) {
       case 'long':
         return { icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'BULLISH' };
@@ -272,7 +283,7 @@ const MLPredictionCard = (props: { prediction: MLPrediction | null; loading: boo
           <h3 class="text-sm font-semibold text-white">AI Model Prediction</h3>
           <p class="text-xs text-slate-400">Ensemble ML Analysis</p>
         </div>
-        <Show when={props.prediction?.inference_latency_ms}>
+        <Show when={props.prediction?.inference_latency_ms && !isModelUntrained()}>
           <span class="ml-auto text-xs text-slate-500">{props.prediction!.inference_latency_ms.toFixed(0)}ms</span>
         </Show>
       </div>
@@ -283,14 +294,15 @@ const MLPredictionCard = (props: { prediction: MLPrediction | null; loading: boo
         </div>
       </Show>
 
-      <Show when={!props.loading && !props.prediction}>
+      <Show when={!props.loading && (!props.prediction || isModelUntrained())}>
         <div class="text-center py-6 text-slate-500">
           <Bot class="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p class="text-sm">ML prediction unavailable</p>
+          <p class="text-sm font-medium">ML Models Not Trained</p>
+          <p class="text-xs text-slate-600 mt-1">Models require training data to make predictions</p>
         </div>
       </Show>
 
-      <Show when={!props.loading && props.prediction}>
+      <Show when={!props.loading && props.prediction && !isModelUntrained()}>
         <div class="space-y-4">
           {/* Direction & Confidence */}
           <div class="flex items-center justify-between">

@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = createSignal<any>(null);
   const [apiKeys, setApiKeys] = createSignal<ApiKey[]>([]);
   const [sessions, setSessions] = createSignal<SessionLog[]>([]);
-  const [loading, setLoading] = createSignal(true);
+  const [_loading, setLoading] = createSignal(true);
   const [notification, setNotification] = createSignal<{type: 'success' | 'error', message: string} | null>(null);
 
   // API Key Form
@@ -119,7 +119,7 @@ export default function SettingsPage() {
         permissions: Object.keys(newKeyPermissions()).filter(k => newKeyPermissions()[k as keyof typeof newKeyPermissions]),
         ip_whitelist: ips.length > 0 ? ips : undefined
       });
-      setCreatedKeySecret(response.secret);
+      setCreatedKeySecret(response.secret || response.api_key);
       fetchApiKeys();
       setNotification({ type: 'success', message: 'API Key created successfully' });
     } catch (err: any) {
@@ -307,13 +307,13 @@ export default function SettingsPage() {
                           </div>
                           <div>
                             <div class="flex items-center gap-2">
-                              <span class="font-bold text-white font-mono">{session.device || 'Unknown Device'}</span>
+                              <span class="font-bold text-white font-mono">{session.device || session.device_type || 'Unknown Device'}</span>
                               <Show when={session.is_current}>
                                 <span class="text-[10px] bg-success-900/20 text-success-400 px-1.5 py-0.5 rounded border border-success-900/30 font-mono">CURRENT</span>
                               </Show>
                             </div>
                             <div class="text-xs text-gray-500 font-mono mt-1">
-                              {session.ip_address} • {session.location || 'Unknown Location'} • Last active: {new Date(session.last_active).toLocaleString()}
+                              {session.ip_address} • {session.location || session.city || 'Unknown Location'} • Last active: {new Date(session.last_active || session.last_activity_at).toLocaleString()}
                             </div>
                           </div>
                         </div>
@@ -542,7 +542,7 @@ export default function SettingsPage() {
                         <div class="flex items-center gap-3">
                           <span class="font-bold text-white font-mono">{key.name}</span>
                           <div class="flex gap-1">
-                            <For each={key.permissions}>
+                            <For each={key.permissions || key.scopes}>
                               {(perm) => (
                                 <span class="text-[10px] bg-terminal-800 text-gray-400 px-1.5 py-0.5 rounded border border-terminal-700 uppercase">{perm}</span>
                               )}
@@ -550,7 +550,7 @@ export default function SettingsPage() {
                           </div>
                         </div>
                         <div class="text-xs text-gray-500 font-mono mt-1 flex items-center gap-4">
-                          <span>Prefix: {key.prefix}****</span>
+                          <span>Prefix: {key.prefix || key.key_prefix}****</span>
                           <span>Created: {new Date(key.created_at).toLocaleDateString()}</span>
                           <span>Last Used: {key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'}</span>
                         </div>

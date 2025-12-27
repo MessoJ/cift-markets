@@ -108,7 +108,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
 FROM python-deps AS app-builder
 
 # Copy PyO3 wheels if they exist
-COPY --from=pyo3-builder /wheels/*.whl /wheels/ 2>/dev/null || true
+COPY --from=pyo3-builder /wheels/ /wheels/
 RUN pip install /wheels/*.whl 2>/dev/null || true
 
 # Copy application code

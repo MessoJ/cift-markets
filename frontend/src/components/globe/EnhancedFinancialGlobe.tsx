@@ -40,6 +40,8 @@ interface EnhancedFinancialGlobeProps {
   showBoundaries?: boolean;
   showAssets?: boolean;
   onExchangeClick?: (exchange: GlobeExchange) => void;
+  onAssetClick?: (asset: any) => void;
+  onCountryClick?: (country: any) => void;
 }
 
 interface MarkerData {

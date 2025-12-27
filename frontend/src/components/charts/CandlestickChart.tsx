@@ -33,23 +33,31 @@ import {
   requiresSeparatePanel,
 } from '~/lib/utils/indicator.utils';
 import { DARK_THEME } from '~/types/chart.types';
+import type { PredictedBar } from '~/types/prediction.types';
+import { DEFAULT_PREDICTION_STYLE } from '~/types/prediction.types';
 
 export interface CandlestickChartProps {
   symbol: string;
   timeframe: string;
   candleLimit?: number;
   showVolume?: boolean;
+  showVolumeProfile?: boolean;
   chartType?: 'candlestick' | 'line' | 'area' | 'heikin_ashi';
   enableRealTime?: boolean;
   activeIndicators?: IndicatorConfig[];
   activeTool?: DrawingType | null;
   drawings?: Drawing[];
   selectedDrawingId?: string | null;
+  // Prediction props
+  predictedBars?: PredictedBar[];
+  predictionStartIndex?: number;
+  showPrediction?: boolean;
   onSymbolChange?: (symbol: string) => void;
   onTimeframeChange?: (timeframe: string) => void;
   onIndicatorsChange?: (indicators: IndicatorConfig[]) => void;
   onDrawingComplete?: (drawing: Partial<Drawing>) => void;
   onDrawingSelect?: (drawingId: string | null) => void;
+  onBarsLoaded?: (bars: OHLCVBar[]) => void;
   height?: string;
 }
 
@@ -65,9 +73,70 @@ export default function CandlestickChart(props: CandlestickChartProps) {
   const [latestInfo, setLatestInfo] = createSignal<ReturnType<typeof getLatestBarInfo>>(null);
   const [livePrice, setLivePrice] = createSignal<number | null>(null);
 
+  // Volume Profile State
+  const [volumeProfile, setVolumeProfile] = createSignal<{price_levels: number[], volumes: number[], max_volume: number} | null>(null);
+  
+  const showVolumeProfile = () => props.activeIndicators?.some(i => i.id === 'volume_profile' && i.enabled) ?? props.showVolumeProfile ?? false;
+
+  // Fetch volume profile when enabled
+  createEffect(() => {
+    if (showVolumeProfile() && props.symbol) {
+      const fetchData = async () => {
+        try {
+          const end = new Date();
+          const start = new Date();
+          start.setDate(start.getDate() - 200); // Default 200 days
+          
+          const data = await apiClient.get(`/market-data/profile/${props.symbol}`, {
+            params: {
+              start_date: start.toISOString(),
+              end_date: end.toISOString(),
+              bins: 100 // High resolution
+            }
+          });
+          setVolumeProfile(data);
+        } catch (e) {
+          console.error("Failed to load volume profile", e);
+        }
+      };
+      fetchData();
+    } else {
+      setVolumeProfile(null);
+    }
+  });
+
   // Drawing tools state
   const [drawingPoints, setDrawingPoints] = createSignal<DrawingPoint[]>([]);
   const [tempDrawing, setTempDrawing] = createSignal<Partial<Drawing> | null>(null);
+
+  // Replay Mode State
+  const [isReplayMode, setIsReplayMode] = createSignal(false);
+  const [replayIndex, setReplayIndex] = createSignal(0);
+  const [isReplayPlaying, setIsReplayPlaying] = createSignal(false);
+  const [replaySpeed, setReplaySpeed] = createSignal(500); // ms per candle
+
+  // Replay Loop
+  createEffect(() => {
+    if (isReplayPlaying() && isReplayMode()) {
+      const timer = setInterval(() => {
+        setReplayIndex(prev => {
+          if (prev >= bars().length - 1) {
+            setIsReplayPlaying(false);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, replaySpeed());
+      onCleanup(() => clearInterval(timer));
+    }
+  });
+
+  const visibleBars = () => {
+    if (isReplayMode()) {
+      return bars().slice(0, replayIndex() + 1);
+    }
+    return bars();
+  };
 
   // ============================================================================
   // WEBSOCKET REAL-TIME UPDATES
@@ -248,6 +317,9 @@ export default function CandlestickChart(props: CandlestickChartProps) {
       setBars(validBars);
       setLatestInfo(getLatestBarInfo(validBars));
       
+      // Notify parent of loaded bars (for prediction feature)
+      props.onBarsLoaded?.(validBars);
+      
       console.info(`✅ Loaded ${validBars.length} bars from database`);
     } catch (err: any) {
       console.error('❌ Chart data fetch failed:', err);
@@ -273,7 +345,7 @@ export default function CandlestickChart(props: CandlestickChartProps) {
    * Optimized for performance with large datasets
    */
   const generateChartOptions = (): EChartsOption => {
-    const currentBars = bars();
+    const currentBars = visibleBars();
     
     if (currentBars.length === 0) {
       return {
@@ -293,7 +365,7 @@ export default function CandlestickChart(props: CandlestickChartProps) {
     }
 
     // Generate category labels (TradingView-style: no gaps for non-trading hours)
-    const categoryLabels = displayBars.map((bar) => {
+    let categoryLabels = displayBars.map((bar) => {
       const date = new Date(bar.timestamp);
       return date.toLocaleString('en-US', {
         month: 'short',
@@ -303,6 +375,21 @@ export default function CandlestickChart(props: CandlestickChartProps) {
         hour12: false,
       });
     });
+
+    // Add predicted bar labels to category axis
+    if (props.showPrediction && props.predictedBars && props.predictedBars.length > 0) {
+      const predictionLabels = props.predictedBars.map((bar) => {
+        const date = new Date(bar.timestamp);
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+      });
+      categoryLabels = [...categoryLabels, ...predictionLabels];
+    }
 
     // Transform to category-based data (index-based, not time-based)
     const candleData = displayBars.map((bar) => [bar.open, bar.close, bar.low, bar.high]);
@@ -665,8 +752,97 @@ export default function CandlestickChart(props: CandlestickChartProps) {
           console.log(`📈 Total indicator series added: ${series.length}`, series.map((s: any) => s.name));
           return series;
         })(),
+        // Volume Profile Series - rendered as markArea bars on the right side
+        ...(showVolumeProfile() && volumeProfile()
+          ? [
+              {
+                name: 'Volume Profile',
+                type: 'line',
+                data: [],
+                markArea: {
+                  silent: true,
+                  data: (() => {
+                    const profile = volumeProfile();
+                    if (!profile || profile.volumes.length === 0) return [];
+                    
+                    const maxVol = profile.max_volume || Math.max(...profile.volumes);
+                    const areas: any[] = [];
+                    const chartWidth = 0.15; // 15% of chart width for volume profile
+                    
+                    profile.price_levels.forEach((price, i) => {
+                      const vol = profile.volumes[i];
+                      if (vol <= 0) return;
+                      
+                      const nextPrice = profile.price_levels[i + 1] || 
+                        (price + (profile.price_levels[1] - profile.price_levels[0]));
+                      
+                      // Volume bar width normalized (0-1 scale) mapped to x-position
+                      const volRatio = vol / maxVol;
+                      
+                      // Point of Control (highest volume) gets special color
+                      const isPOC = vol === maxVol;
+                      
+                      areas.push([
+                        {
+                          yAxis: price,
+                          x: '85%', // Start from right
+                          itemStyle: {
+                            color: isPOC ? 'rgba(251, 191, 36, 0.4)' : 'rgba(59, 130, 246, 0.25)',
+                            borderColor: isPOC ? '#fbbf24' : '#3b82f6',
+                            borderWidth: isPOC ? 2 : 0.5,
+                          }
+                        },
+                        {
+                          yAxis: nextPrice,
+                          x: `${85 + volRatio * 14}%`, // Max 99%
+                        }
+                      ]);
+                    });
+                    return areas;
+                  })()
+                }
+              }
+            ]
+          : []),
+        // Pattern Recognition Series
+        ...(activeIndicators().some(i => i.id === 'patterns' && i.enabled)
+          ? [
+              {
+                name: 'Patterns',
+                type: 'scatter',
+                symbol: 'pin', // Use pin or circle
+                symbolSize: 15,
+                data: bars().map((bar, index) => {
+                  // Prioritize patterns
+                  if (bar.pattern_bullish_engulfing) return [index, bar.low * 0.999, 'Bull Engulf', 1];
+                  if (bar.pattern_bearish_engulfing) return [index, bar.high * 1.001, 'Bear Engulf', -1];
+                  if (bar.pattern_hammer) return [index, bar.low * 0.999, 'Hammer', 1];
+                  if (bar.pattern_shooting_star) return [index, bar.high * 1.001, 'Shoot Star', -1];
+                  if (bar.pattern_doji) return [index, bar.high * 1.001, 'Doji', 0];
+                  return null;
+                }).filter(Boolean),
+                itemStyle: {
+                  color: (params: any) => {
+                    const type = params.data[3];
+                    return type === 1 ? '#10b981' : (type === -1 ? '#ef4444' : '#fbbf24');
+                  }
+                },
+                label: {
+                  show: true,
+                  formatter: (params: any) => params.data[2],
+                  position: 'top',
+                  color: '#fff',
+                  fontSize: 9,
+                  distance: 5
+                },
+                z: 100
+              }
+            ]
+          : []),
         // Drawing tools (trendlines, shapes, annotations)
         ...generateDrawingSeries(),
+        // Prediction series (predicted candles + start line)
+        ...generatePredictionSeries(),
       ],
     };
 
@@ -835,9 +1011,305 @@ export default function CandlestickChart(props: CandlestickChartProps) {
           z: isSelected ? 20 : 15,
         };
       }
+
+      // Fibonacci Retracement
+      if (drawing.type === 'fibonacci' && 'points' in drawing) {
+        const p1 = drawing.points[0];
+        const p2 = drawing.points[1];
+        const diff = p2.price - p1.price;
+        const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+        
+        const markLineData = levels.map(level => {
+          const price = p1.price + diff * level;
+          return {
+            yAxis: price,
+            lineStyle: {
+              color: isSelected ? '#fbbf24' : (drawing.style?.color || '#f59e0b'),
+              width: 1,
+              type: 'solid',
+              opacity: 0.7,
+            },
+            label: {
+              show: true,
+              position: 'end',
+              formatter: `${level} (${price.toFixed(2)})`,
+              color: isSelected ? '#fbbf24' : (drawing.style?.color || '#f59e0b'),
+              fontSize: 10,
+            }
+          };
+        });
+
+        // Add diagonal trendline connecting start and end
+        return {
+          type: 'line',
+          name: `Fib-${drawing.id}`,
+          id: drawing.id,
+          data: [
+            [p1.timestamp, p1.price],
+            [p2.timestamp, p2.price]
+          ],
+          lineStyle: {
+            color: isSelected ? '#fbbf24' : (drawing.style?.color || '#f59e0b'),
+            width: 1,
+            type: 'dashed',
+            opacity: 0.5,
+          },
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            data: markLineData,
+            animation: false,
+          },
+          z: isSelected ? 20 : 15,
+        };
+      }
+
+      // Text Annotation
+      if (drawing.type === 'text' && 'point' in drawing) {
+        // For text, we use a scatter point with a label
+        // In a real implementation, we'd need a text input dialog
+        // For now, we'll use a placeholder or the drawing ID
+        const text = (drawing as any).text || 'Annotation';
+        
+        return {
+          type: 'scatter',
+          name: `Text-${drawing.id}`,
+          id: drawing.id,
+          data: [[drawing.point.timestamp, drawing.point.price]],
+          symbolSize: 1, // Invisible point
+          label: {
+            show: true,
+            formatter: text,
+            color: isSelected ? '#fbbf24' : (drawing.style?.color || '#e2e8f0'),
+            fontSize: 12,
+            fontWeight: 'bold',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            padding: [4, 8],
+            borderRadius: 4,
+            position: 'top',
+          },
+          z: isSelected ? 20 : 15,
+        };
+      }
+
+      // Price Ruler Tool
+      if (drawing.type === 'ruler' && 'points' in drawing) {
+        const p1 = drawing.points[0];
+        const p2 = drawing.points[1];
+        
+        // Calculate measurements
+        const priceChange = p2.price - p1.price;
+        const priceChangePercent = ((priceChange / p1.price) * 100).toFixed(2);
+        const barsCount = Math.abs(p2.timestamp - p1.timestamp);
+        const timeDiff = Math.abs(p2.timestamp - p1.timestamp);
+        const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+        const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        
+        const midPrice = (p1.price + p2.price) / 2;
+        const midTime = (p1.timestamp + p2.timestamp) / 2;
+        
+        return {
+          type: 'line',
+          name: `Ruler-${drawing.id}`,
+          id: drawing.id,
+          data: [
+            [p1.timestamp, p1.price],
+            [p2.timestamp, p2.price]
+          ],
+          lineStyle: {
+            color: isSelected ? '#fbbf24' : (drawing.style?.color || '#22d3ee'),
+            width: isSelected ? 3 : (drawing.style?.lineWidth || 2),
+            type: 'dashed',
+          },
+          symbol: ['circle', 'circle'],
+          symbolSize: 8,
+          // Add measurement label in the middle
+          label: {
+            show: true,
+            position: 'middle',
+            formatter: () => {
+              const sign = priceChange >= 0 ? '+' : '';
+              return `${sign}$${priceChange.toFixed(2)} (${sign}${priceChangePercent}%)\n${timeStr}`;
+            },
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 'bold',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            padding: [6, 10],
+            borderRadius: 4,
+            borderColor: isSelected ? '#fbbf24' : (drawing.style?.color || '#22d3ee'),
+            borderWidth: 1,
+          },
+          // Also add start/end labels
+          markPoint: {
+            symbol: 'circle',
+            symbolSize: 6,
+            data: [
+              {
+                coord: [p1.timestamp, p1.price],
+                itemStyle: { color: isSelected ? '#fbbf24' : '#22d3ee' },
+                label: {
+                  show: true,
+                  formatter: `$${p1.price.toFixed(2)}`,
+                  position: 'left',
+                  color: '#fff',
+                  fontSize: 9,
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  padding: [2, 4],
+                  borderRadius: 2,
+                }
+              },
+              {
+                coord: [p2.timestamp, p2.price],
+                itemStyle: { color: isSelected ? '#fbbf24' : '#22d3ee' },
+                label: {
+                  show: true,
+                  formatter: `$${p2.price.toFixed(2)}`,
+                  position: 'right',
+                  color: '#fff',
+                  fontSize: 9,
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  padding: [2, 4],
+                  borderRadius: 2,
+                }
+              }
+            ]
+          },
+          z: isSelected ? 20 : 15,
+        };
+      }
       
       return null;
     }).filter(Boolean);
+  };
+
+  /**
+   * Generate ECharts series for predictions
+   * Shows predicted bars with faded appearance and a dotted line at prediction start
+   */
+  const generatePredictionSeries = (): any[] => {
+    if (!props.showPrediction || !props.predictedBars || props.predictedBars.length === 0) {
+      return [];
+    }
+
+    const currentBars = bars();
+    if (currentBars.length === 0) return [];
+
+    const series: any[] = [];
+    const style = DEFAULT_PREDICTION_STYLE;
+
+    // Predicted candlestick data - positioned after actual bars
+    // We need to add null values for all actual bar indices, then add prediction values
+    const predictedCandleData: any[] = [];
+    
+    // Fill with null for actual bars (so predictions start after real data)
+    for (let i = 0; i < currentBars.length; i++) {
+      predictedCandleData.push('-'); // ECharts uses '-' for missing data
+    }
+    
+    // Add predicted bars
+    props.predictedBars.forEach((bar) => {
+      predictedCandleData.push({
+        value: [bar.open, bar.close, bar.low, bar.high],
+        itemStyle: {
+          color: bar.close >= bar.open 
+            ? style.bullishPredictColor 
+            : style.bearishPredictColor,
+          borderColor: bar.close >= bar.open 
+            ? style.bullishPredictColor 
+            : style.bearishPredictColor,
+          opacity: style.predictedBarOpacity,
+        },
+      });
+    });
+
+    // Add predicted candles series
+    series.push({
+      name: 'Prediction',
+      type: 'candlestick',
+      data: predictedCandleData,
+      itemStyle: {
+        color: style.bullishPredictColor,
+        color0: style.bearishPredictColor,
+        borderColor: style.bullishPredictColor,
+        borderColor0: style.bearishPredictColor,
+        opacity: style.predictedBarOpacity,
+      },
+      barMinWidth: 2,
+      barMaxWidth: 20,
+      z: 5, // Below main candles
+    });
+
+    // Add vertical dotted line at prediction start
+    const predictionStartIndex = props.predictionStartIndex ?? (currentBars.length - 1);
+    
+    series.push({
+      name: 'Prediction Start',
+      type: 'line',
+      markLine: {
+        silent: true,
+        symbol: ['none', 'none'],
+        animation: false,
+        data: [
+          {
+            xAxis: predictionStartIndex,
+            lineStyle: {
+              color: style.predictionLineColor,
+              width: style.predictionLineWidth,
+              type: 'dashed',
+              dashOffset: 5,
+            },
+            label: {
+              show: true,
+              position: 'start',
+              formatter: '{icon|◉} AI Prediction',
+              rich: {
+                icon: {
+                  color: '#f97316',
+                  fontSize: 14,
+                  fontWeight: 'bold',
+                },
+              },
+              color: style.predictionLineColor,
+              fontSize: 11,
+              fontWeight: 'bold',
+              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              padding: [4, 10],
+              borderRadius: 4,
+              borderColor: style.predictionLineColor,
+              borderWidth: 1,
+            },
+          },
+        ],
+      },
+      z: 25, // Above everything
+    });
+
+    // Add confidence indicators for high-confidence predictions
+    const highConfidenceBars = props.predictedBars
+      .map((bar, i) => ({ bar, index: currentBars.length + i }))
+      .filter(({ bar }) => bar.confidence >= style.confidenceShowThreshold);
+
+    if (highConfidenceBars.length > 0) {
+      series.push({
+        name: 'Confidence',
+        type: 'scatter',
+        data: highConfidenceBars.map(({ bar, index }) => ({
+          value: [index, bar.high + (bar.high * 0.002)], // Slightly above high
+          symbol: 'diamond',
+          symbolSize: 8 * bar.confidence, // Size based on confidence
+          itemStyle: {
+            color: bar.close >= bar.open ? '#22c55e' : '#ef4444',
+            opacity: bar.confidence,
+          },
+        })),
+        z: 10,
+      });
+    }
+
+    console.log('🔮 Rendering', props.predictedBars.length, 'predicted bars');
+    return series;
   };
 
   // Initialize ECharts
@@ -909,6 +1381,98 @@ export default function CandlestickChart(props: CandlestickChartProps) {
             </button>
           </div>
         </div>
+      </Show>
+
+      {/* Replay Controls */}
+      <Show when={isReplayMode()}>
+        <div class="absolute top-4 right-4 bg-terminal-900/90 backdrop-blur-sm border border-terminal-750 rounded-lg p-3 flex flex-col gap-2 z-50 shadow-lg">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold text-white">Replay Mode</span>
+            <button 
+              class="text-gray-400 hover:text-white"
+              onClick={() => {
+                setIsReplayMode(false);
+                setIsReplayPlaying(false);
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              class="p-1.5 rounded bg-terminal-800 hover:bg-terminal-700 text-white"
+              onClick={() => setReplayIndex(Math.max(0, replayIndex() - 1))}
+              title="Step Back"
+            >
+              ⏮
+            </button>
+            <button
+              class="p-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white w-8 flex justify-center"
+              onClick={() => setIsReplayPlaying(!isReplayPlaying())}
+              title={isReplayPlaying() ? 'Pause' : 'Play'}
+            >
+              {isReplayPlaying() ? '⏸' : '▶'}
+            </button>
+            <button
+              class="p-1.5 rounded bg-terminal-800 hover:bg-terminal-700 text-white"
+              onClick={() => setReplayIndex(Math.min(bars().length - 1, replayIndex() + 1))}
+              title="Step Forward"
+            >
+              ⏭
+            </button>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            <span>Speed:</span>
+            <select 
+              class="bg-terminal-800 border border-terminal-700 rounded px-1 py-0.5 text-white outline-none"
+              value={replaySpeed()}
+              onChange={(e) => setReplaySpeed(Number(e.currentTarget.value))}
+            >
+              <option value="1000">1x</option>
+              <option value="500">2x</option>
+              <option value="200">5x</option>
+              <option value="100">10x</option>
+            </select>
+          </div>
+          <div class="text-xs text-gray-500 text-center mt-1">
+            {bars()[replayIndex()] ? new Date(bars()[replayIndex()].timestamp).toLocaleString() : ''}
+          </div>
+        </div>
+      </Show>
+
+      {/* Screenshot Button */}
+      <button
+        class="absolute top-4 right-28 bg-terminal-900/80 hover:bg-terminal-800 border border-terminal-750 rounded-lg px-3 py-1.5 text-xs font-medium text-white z-40 flex items-center gap-2 shadow-lg backdrop-blur-sm transition-colors"
+        onClick={() => {
+          if (!chartInstance) return;
+          const url = chartInstance.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: DARK_THEME.background
+          });
+          if (url) {
+            const link = document.createElement('a');
+            link.download = `${props.symbol}_chart.png`;
+            link.href = url;
+            link.click();
+          }
+        }}
+        title="Take Screenshot"
+      >
+        <span class="text-gray-400">📷</span>
+      </button>
+
+      {/* Replay Toggle Button (when not in replay mode) */}
+      <Show when={!isReplayMode() && bars().length > 0}>
+        <button
+          class="absolute top-4 right-4 bg-terminal-900/80 hover:bg-terminal-800 border border-terminal-750 rounded-lg px-3 py-1.5 text-xs font-medium text-white z-40 flex items-center gap-2 shadow-lg backdrop-blur-sm transition-colors"
+          onClick={() => {
+            setIsReplayMode(true);
+            setReplayIndex(Math.max(0, bars().length - 100)); // Start 100 bars back
+          }}
+        >
+          <span class="text-blue-400">↺</span> Replay
+        </button>
       </Show>
 
       {/* Latest Price Info Overlay */}

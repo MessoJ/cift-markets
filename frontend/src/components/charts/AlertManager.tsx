@@ -114,7 +114,7 @@ export default function AlertManager(props: AlertManagerProps) {
    */
   const toggleAlert = async (id: string, currentState: boolean) => {
     try {
-      const updated = await apiClient.patch(`/price-alerts/${id}`, { enabled: !currentState });
+      const updated = await apiClient.patch(`/price-alerts/${id}`, { is_active: !currentState });
       setAlerts(alerts().map(a => a.id === id ? updated : a));
       console.log(`🔔 Toggled alert: ${id} → ${!currentState}`);
     } catch (error) {

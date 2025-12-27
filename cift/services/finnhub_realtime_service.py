@@ -15,10 +15,17 @@ Get your free API key at: https://finnhub.io/
 This service is COMPLEMENTARY to Polygon:
 - Polygon: Best for news, historical data
 - Finnhub: Best for real-time quotes (FREE WebSocket)
+
+Real-time trade data is:
+1. Stored in QuestDB for Time & Sales persistence
+2. Cached in Dragonfly for fast retrieval (last 200 trades per symbol)
+3. Broadcast to WebSocket clients for live updates
 """
 
 import asyncio
 import json
+import uuid
+from collections import defaultdict, deque
 from collections.abc import Callable
 from datetime import datetime
 
@@ -26,7 +33,7 @@ import aiohttp
 from loguru import logger
 
 from cift.core.config import settings
-from cift.core.database import get_postgres_pool
+from cift.core.database import get_postgres_pool, questdb_manager, redis_manager
 
 
 class FinnhubRealtimeService:
@@ -38,6 +45,8 @@ class FinnhubRealtimeService:
     - Up to 50 symbols per connection
     - Automatic reconnection
     - Price update callbacks for UI
+    - Real-time trade persistence to QuestDB
+    - In-memory trade cache for Time & Sales
     """
 
     # WebSocket endpoint
@@ -45,6 +54,14 @@ class FinnhubRealtimeService:
 
     # REST API endpoint
     REST_URL = "https://finnhub.io/api/v1"
+    
+    # Trade cache settings
+    MAX_TRADES_PER_SYMBOL = 200  # Keep last 200 trades per symbol in memory
+    CACHE_TTL_SECONDS = 3600    # Redis cache TTL (1 hour)
+    
+    # QuestDB batch settings
+    BATCH_SIZE = 100            # Batch inserts for performance
+    BATCH_INTERVAL = 1.0        # Flush every 1 second
 
     def __init__(self, api_key: str | None = None):
         """Initialize Finnhub service."""
@@ -64,6 +81,12 @@ class FinnhubRealtimeService:
         self._running = False
         self._callbacks: list[Callable] = []
         self._last_prices: dict[str, dict] = {}
+        
+        # Real-time trade storage
+        self._trade_cache: dict[str, deque] = defaultdict(lambda: deque(maxlen=self.MAX_TRADES_PER_SYMBOL))
+        self._trade_batch: list[dict] = []  # Batch for QuestDB inserts
+        self._batch_lock = asyncio.Lock()
+        self._flush_task: asyncio.Task | None = None
 
     @property
     def is_available(self) -> bool:
@@ -314,11 +337,27 @@ class FinnhubRealtimeService:
 
         # Start message loop
         asyncio.create_task(self._message_loop())
-        logger.success(f"Started real-time streaming for {len(symbols)} symbols")
+        
+        # Start periodic flush task for QuestDB batching
+        self._flush_task = asyncio.create_task(self._periodic_flush())
+        
+        logger.success(f"Started real-time streaming for {len(symbols)} symbols (trades -> QuestDB + Redis)")
 
     async def stop_streaming(self):
         """Stop streaming."""
         self._running = False
+        
+        # Cancel flush task
+        if self._flush_task:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Final flush of remaining trades
+        await self._flush_batch()
+        
         await self.disconnect_websocket()
         logger.info("Stopped real-time streaming")
 
@@ -381,11 +420,31 @@ class FinnhubRealtimeService:
                 for trade in trades:
                     symbol = trade.get("s")
                     price = trade.get("p")
-                    volume = trade.get("v")
-                    timestamp = trade.get("t")
+                    volume = trade.get("v", 0)
+                    timestamp = trade.get("t")  # Unix milliseconds
+                    conditions = trade.get("c", [])  # Trade conditions
 
                     if symbol and price:
-                        # Update last price cache
+                        # Create trade record
+                        trade_record = {
+                            "symbol": symbol,
+                            "price": float(price),
+                            "size": int(volume) if volume else 1,
+                            "timestamp": timestamp,
+                            "time": datetime.utcfromtimestamp(timestamp / 1000).isoformat() if timestamp else datetime.utcnow().isoformat(),
+                            "side": self._infer_trade_side(symbol, price),  # Infer buy/sell
+                            "exchange": "FINNHUB",
+                            "conditions": conditions,
+                            "trade_id": str(uuid.uuid4())[:8],  # Short unique ID
+                        }
+                        
+                        # 1. Update in-memory cache (instant access)
+                        self._trade_cache[symbol].appendleft(trade_record)
+                        
+                        # 2. Add to batch for QuestDB persistence
+                        await self._add_to_batch(trade_record)
+                        
+                        # 3. Update last price cache
                         self._last_prices[symbol] = {
                             "symbol": symbol,
                             "price": price,
@@ -394,15 +453,18 @@ class FinnhubRealtimeService:
                             "updated_at": datetime.utcnow(),
                         }
 
-                        # Call registered callbacks
+                        # 4. Call registered callbacks (for real-time UI updates)
                         for callback in self._callbacks:
                             try:
                                 await callback(symbol, price, volume, timestamp)
                             except Exception as e:
                                 logger.warning(f"Callback error: {e}")
 
-                        # Update database cache (throttled)
+                        # 5. Update market_data_cache (throttled)
                         await self._update_cache(symbol, price, volume)
+                        
+                        # 6. Cache in Redis/Dragonfly for fast Time & Sales retrieval
+                        await self._cache_trade_to_redis(symbol, trade_record)
 
             elif msg_type == "ping":
                 # Respond to ping
@@ -411,6 +473,112 @@ class FinnhubRealtimeService:
 
             elif msg_type == "error":
                 logger.error(f"Finnhub error: {message.get('msg', 'Unknown')}")
+
+        except json.JSONDecodeError:
+            logger.warning(f"Invalid Finnhub message: {data[:100]}")
+        except Exception as e:
+            logger.error(f"Message handling error: {e}")
+    
+    def _infer_trade_side(self, symbol: str, price: float) -> str:
+        """Infer trade side based on price movement (tick rule)."""
+        last = self._last_prices.get(symbol)
+        if last:
+            last_price = last.get("price", 0)
+            if price > last_price:
+                return "buy"
+            elif price < last_price:
+                return "sell"
+        return "unknown"
+    
+    async def _add_to_batch(self, trade: dict):
+        """Add trade to batch for QuestDB insert."""
+        async with self._batch_lock:
+            self._trade_batch.append(trade)
+            if len(self._trade_batch) >= self.BATCH_SIZE:
+                await self._flush_batch()
+    
+    async def _flush_batch(self):
+        """Flush trade batch to QuestDB."""
+        if not self._trade_batch:
+            return
+            
+        trades_to_insert = self._trade_batch.copy()
+        self._trade_batch.clear()
+        
+        try:
+            await questdb_manager.initialize()
+            
+            # Build batch INSERT
+            values_parts = []
+            for t in trades_to_insert:
+                # Convert timestamp to datetime string for QuestDB
+                ts = datetime.utcfromtimestamp(t["timestamp"] / 1000) if t.get("timestamp") else datetime.utcnow()
+                ts_str = ts.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+                
+                values_parts.append(
+                    f"('{ts_str}', '{t['symbol']}', {t['price']}, {t['size']}, "
+                    f"'{t['side']}', '{t['trade_id']}', '{t['exchange']}', '{t['side']}')"
+                )
+            
+            if values_parts:
+                query = f"""
+                    INSERT INTO trade_executions 
+                    (timestamp, symbol, price, size, side, trade_id, exchange, aggressive_side)
+                    VALUES {', '.join(values_parts)}
+                """
+                await questdb_manager.execute(query)
+                logger.debug(f"Flushed {len(trades_to_insert)} trades to QuestDB")
+                
+        except Exception as e:
+            logger.error(f"Failed to flush trades to QuestDB: {e}")
+            # Re-add failed trades to batch for retry
+            async with self._batch_lock:
+                self._trade_batch.extend(trades_to_insert[:50])  # Limit retry size
+    
+    async def _periodic_flush(self):
+        """Periodically flush trade batch."""
+        while self._running:
+            await asyncio.sleep(self.BATCH_INTERVAL)
+            async with self._batch_lock:
+                if self._trade_batch:
+                    await self._flush_batch()
+    
+    async def _cache_trade_to_redis(self, symbol: str, trade: dict):
+        """Cache trade in Redis/Dragonfly for fast Time & Sales retrieval."""
+        try:
+            await redis_manager.initialize()
+            
+            # Use Redis list with capped size
+            key = f"timesales:{symbol}"
+            trade_json = json.dumps(trade)
+            
+            # LPUSH + LTRIM to keep last N trades
+            await redis_manager.client.lpush(key, trade_json)
+            await redis_manager.client.ltrim(key, 0, self.MAX_TRADES_PER_SYMBOL - 1)
+            await redis_manager.client.expire(key, self.CACHE_TTL_SECONDS)
+            
+        except Exception as e:
+            # Non-critical - log and continue
+            logger.debug(f"Redis cache error for {symbol}: {e}")
+    
+    def get_recent_trades(self, symbol: str, limit: int = 50) -> list[dict]:
+        """Get recent trades from in-memory cache."""
+        trades = list(self._trade_cache.get(symbol, []))
+        return trades[:limit]
+    
+    async def get_trades_from_cache(self, symbol: str, limit: int = 50) -> list[dict]:
+        """Get trades from Redis cache."""
+        try:
+            await redis_manager.initialize()
+            key = f"timesales:{symbol}"
+            
+            trades_json = await redis_manager.client.lrange(key, 0, limit - 1)
+            return [json.loads(t) for t in trades_json]
+            
+        except Exception as e:
+            logger.debug(f"Redis read error for {symbol}: {e}")
+            # Fallback to in-memory cache
+            return self.get_recent_trades(symbol, limit)
 
         except json.JSONDecodeError:
             logger.warning(f"Invalid Finnhub message: {data[:100]}")

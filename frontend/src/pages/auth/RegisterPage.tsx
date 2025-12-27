@@ -11,7 +11,6 @@ import {
   Lock, 
   User, 
   AlertCircle, 
-  CheckCircle2, 
   ArrowRight, 
   ShieldCheck,
   Globe,

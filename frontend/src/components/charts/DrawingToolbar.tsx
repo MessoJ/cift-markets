@@ -16,6 +16,7 @@ import {
   Unlock,
   Eye,
   EyeOff,
+  Ruler,
 } from 'lucide-solid';
 import type { DrawingType } from '~/types/drawing.types';
 
@@ -78,6 +79,13 @@ const DRAWING_TOOLS: DrawingTool[] = [
     icon: ArrowRight,
     shortcut: 'W',
     description: 'Draw directional arrow',
+  },
+  {
+    id: 'ruler',
+    name: 'Ruler',
+    icon: Ruler,
+    shortcut: 'M',
+    description: 'Measure price and time distance',
   },
 ];
 
