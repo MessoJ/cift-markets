@@ -303,7 +303,23 @@ class StockAnalyzer:
         if not self._initialized:
             await self.initialize()
         
+        # Handle common index aliases
+        symbol_map = {
+            "S&P": "SPY",
+            "S&P500": "SPY",
+            "SPX": "SPY",
+            "DOW": "DIA",
+            "DJIA": "DIA",
+            "NASDAQ": "QQQ",
+            "NDX": "QQQ",
+            "RUSSELL": "IWM",
+            "RUT": "IWM",
+            "VIX": "VXX"
+        }
+        
         symbol = symbol.upper()
+        if symbol in symbol_map:
+            symbol = symbol_map[symbol]
         
         # Fetch all data concurrently
         quote_task = self._get_quote(symbol)
