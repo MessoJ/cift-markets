@@ -3,7 +3,6 @@ Payment Processor Service - RULES COMPLIANT
 Unified payment processing facade that routes to appropriate processor
 Supports: Stripe (cards), M-Pesa, PayPal, Crypto (Bitcoin/Ethereum)
 """
-
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -46,9 +45,7 @@ class PaymentProcessor:
         config = PaymentConfig.get_config_for_payment_type(payment_method_type)
 
         if not config or not PaymentConfig.is_payment_type_configured(payment_method_type):
-            logger.warning(
-                f"Payment method {payment_method_type} not configured - using simulation mode"
-            )
+            logger.warning(f"Payment method {payment_method_type} not configured - using simulation mode")
             return None
 
         try:
@@ -62,7 +59,7 @@ class PaymentProcessor:
         amount: Decimal,
         currency: str = "usd",
         payment_method_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Create payment intent for card payments (routes to Stripe)
@@ -76,42 +73,45 @@ class PaymentProcessor:
         Returns:
             Dict with payment intent details
         """
-        processor = self._get_processor("credit_card")
+        processor = self._get_processor('credit_card')
 
         if not processor:
             # Simulation mode
             logger.info("Stripe not configured - simulating card payment")
             return {
-                "id": "pi_simulated",
-                "status": "succeeded",
-                "amount": int(amount * 100),
-                "currency": currency,
-                "simulation": True,
+                'id': 'pi_simulated',
+                'status': 'succeeded',
+                'amount': int(amount * 100),
+                'currency': currency,
+                'simulation': True
             }
 
         try:
             # Use new Stripe processor
-            user_id = UUID(metadata.get("user_id")) if metadata and "user_id" in metadata else None
+            user_id = UUID(metadata.get('user_id')) if metadata and 'user_id' in metadata else None
             result = await processor.process_deposit(
                 user_id=user_id,
                 amount=amount,
                 payment_method_id=UUID(payment_method_id) if payment_method_id else None,
-                metadata=metadata,
+                metadata=metadata
             )
 
             return {
-                "id": result.get("transaction_id"),
-                "status": result.get("status"),
-                "amount": int(amount * 100),
-                "currency": currency,
-                "simulation": False,
+                'id': result.get('transaction_id'),
+                'status': result.get('status'),
+                'amount': int(amount * 100),
+                'currency': currency,
+                'simulation': False
             }
         except PaymentProcessorError as e:
             logger.error(f"Card payment failed: {str(e)}")
             raise RuntimeError(f"Card payment error: {str(e)}") from e
 
     async def create_bank_transfer(
-        self, amount: Decimal, bank_account_id: str, metadata: dict[str, Any] | None = None
+        self,
+        amount: Decimal,
+        bank_account_id: str,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Create ACH bank transfer via Alpaca
@@ -124,35 +124,36 @@ class PaymentProcessor:
         Returns:
             Dict with transfer details
         """
-        processor = self._get_processor("bank_account")
+        processor = self._get_processor('bank_account')
 
         if not processor:
             # Simulation mode
-            logger.info(
-                f"Alpaca not configured - simulating bank transfer: ${amount} to {bank_account_id}"
-            )
+            logger.info(f"Alpaca not configured - simulating bank transfer: ${amount} to {bank_account_id}")
             return {
-                "id": f"ba_sim_{bank_account_id[:8]}",
-                "status": "pending",
-                "amount": int(amount * 100),
-                "simulation": True,
-                "expected_arrival_days": 3,
+                'id': f'ba_sim_{bank_account_id[:8]}',
+                'status': 'pending',
+                'amount': int(amount * 100),
+                'simulation': True,
+                'expected_arrival_days': 3
             }
 
         try:
-            user_id = UUID(metadata.get("user_id")) if metadata and "user_id" in metadata else None
+            user_id = UUID(metadata.get('user_id')) if metadata and 'user_id' in metadata else None
             result = await processor.process_deposit(
                 user_id=user_id,
                 amount=amount,
                 payment_method_id=UUID(bank_account_id),
-                metadata=metadata,
+                metadata=metadata
             )
             return result
         except Exception as e:
             logger.error(f"Bank transfer failed: {str(e)}")
             raise RuntimeError(f"Bank transfer error: {str(e)}") from e
 
-    async def create_brokerage_account(self, user_details: dict[str, Any]) -> dict[str, Any]:
+    async def create_brokerage_account(
+        self,
+        user_details: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Create a brokerage account for the user (Alpaca)
 
@@ -162,12 +163,12 @@ class PaymentProcessor:
         Returns:
             Dict with account details
         """
-        processor = self._get_processor("bank_account")  # Alpaca is mapped to bank_account
+        processor = self._get_processor('bank_account') # Alpaca is mapped to bank_account
         if not processor:
             logger.info("Alpaca not configured - simulating account creation")
-            return {"id": "sim_alpaca_id", "status": "ACTIVE", "simulation": True}
+            return {'id': 'sim_alpaca_id', 'status': 'ACTIVE', 'simulation': True}
 
-        if hasattr(processor, "create_account"):
+        if hasattr(processor, 'create_account'):
             return await processor.create_account(user_details)
         else:
             raise NotImplementedError("Processor does not support account creation")
@@ -177,7 +178,7 @@ class PaymentProcessor:
         user_id: UUID,
         payment_type: str,
         account_details: dict[str, Any],
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Link an external account via the appropriate processor
@@ -194,12 +195,14 @@ class PaymentProcessor:
         processor = self._get_processor(payment_type)
         if not processor:
             logger.info(f"Processor for {payment_type} not configured - simulating link")
-            return {"id": "sim_linked_id", "status": "verified", "simulation": True}
+            return {'id': 'sim_linked_id', 'status': 'verified', 'simulation': True}
 
         return await processor.link_account(user_id, account_details, metadata)
 
     async def verify_micro_deposits(
-        self, bank_account_id: str, amounts: tuple[int, int]
+        self,
+        bank_account_id: str,
+        amounts: tuple[int, int]
     ) -> dict[str, Any]:
         """
         Verify bank account with micro-deposit amounts (simulated)
@@ -213,14 +216,17 @@ class PaymentProcessor:
         """
         # Bank verification simulated
         logger.info(f"Bank account verification: {bank_account_id}, amounts: {amounts}")
-        return {"verified": True, "simulation": True}
+        return {
+            'verified': True,
+            'simulation': True
+        }
 
     async def process_withdrawal(
         self,
         amount: Decimal,
         payment_method_type: str,
         payment_method_id: str,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Process withdrawal to user's payment method
@@ -240,36 +246,38 @@ class PaymentProcessor:
             # Simulation mode
             logger.info(f"Simulating {payment_method_type} withdrawal: ${amount}")
             return {
-                "id": f"withdrawal_sim_{payment_method_id[:8]}",
-                "status": "processing",
-                "amount": float(amount),
-                "simulation": True,
-                "expected_completion_days": 2,
+                'id': f'withdrawal_sim_{payment_method_id[:8]}',
+                'status': 'processing',
+                'amount': float(amount),
+                'simulation': True,
+                'expected_completion_days': 2
             }
 
         try:
             # Use appropriate processor
-            user_id = UUID(metadata.get("user_id")) if metadata and "user_id" in metadata else None
+            user_id = UUID(metadata.get('user_id')) if metadata and 'user_id' in metadata else None
             result = await processor.process_withdrawal(
                 user_id=user_id,
                 amount=amount,
                 payment_method_id=UUID(payment_method_id),
-                metadata=metadata,
+                metadata=metadata
             )
 
             return {
-                "id": result.get("transaction_id"),
-                "status": result.get("status"),
-                "amount": float(amount),
-                "simulation": False,
-                "expected_completion_days": 2,
+                'id': result.get('transaction_id'),
+                'status': result.get('status'),
+                'amount': float(amount),
+                'simulation': False,
+                'expected_completion_days': 2
             }
         except PaymentProcessorError as e:
             logger.error(f"Withdrawal failed ({payment_method_type}): {str(e)}")
             raise RuntimeError(f"Withdrawal error: {str(e)}") from e
 
     async def get_transaction_status(
-        self, external_id: str, transaction_type: str = "payment_intent"
+        self,
+        external_id: str,
+        transaction_type: str = 'payment_intent'
     ) -> dict[str, Any]:
         """
         Check status of external transaction (simulated)
@@ -282,10 +290,16 @@ class PaymentProcessor:
             Dict with current status
         """
         logger.info(f"Checking transaction status: {external_id}")
-        return {"status": "completed", "simulation": True}
+        return {
+            'status': 'completed',
+            'simulation': True
+        }
 
     def calculate_fee(
-        self, amount: Decimal, payment_method_type: str, transfer_type: str = "standard"
+        self,
+        amount: Decimal,
+        payment_method_type: str,
+        transfer_type: str = 'standard'
     ) -> Decimal:
         """
         Calculate transaction fee using appropriate processor
@@ -300,17 +314,15 @@ class PaymentProcessor:
         """
         # Fallback fee calculation if processor not available
         fee_schedule = {
-            "bank_account": (
-                Decimal("0.00") if transfer_type == "standard" else amount * Decimal("0.015")
-            ),
-            "debit_card": amount * Decimal("0.029") + Decimal("0.30"),
-            "credit_card": amount * Decimal("0.029") + Decimal("0.30"),
-            "paypal": amount * Decimal("0.0299") + Decimal("0.49"),
-            "mpesa": amount * Decimal("0.025"),  # 2.5%
-            "crypto_wallet": Decimal("5.00"),  # Flat fee
+            'bank_account': Decimal('0.00') if transfer_type == 'standard' else amount * Decimal('0.015'),
+            'debit_card': amount * Decimal('0.029') + Decimal('0.30'),
+            'credit_card': amount * Decimal('0.029') + Decimal('0.30'),
+            'paypal': amount * Decimal('0.0299') + Decimal('0.49'),
+            'mpesa': amount * Decimal('0.025'),  # 2.5%
+            'crypto_wallet': Decimal('5.00')  # Flat fee
         }
 
-        return fee_schedule.get(payment_method_type, Decimal("0.00"))
+        return fee_schedule.get(payment_method_type, Decimal('0.00'))
 
 
 # Global instance

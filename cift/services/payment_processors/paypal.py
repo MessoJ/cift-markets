@@ -2,7 +2,6 @@
 PayPal Payment Processor - RULES COMPLIANT
 Integrates with PayPal REST API v2 for PayPal payments
 """
-
 import base64
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -31,13 +30,13 @@ class PayPalProcessor(PaymentProcessor):
 
     def _validate_config(self) -> None:
         """Validate PayPal configuration"""
-        required = ["client_id", "client_secret", "environment"]
+        required = ['client_id', 'client_secret', 'environment']
 
         for key in required:
             if key not in self.config:
                 raise PaymentProcessorError(f"Missing PayPal configuration: {key}")
 
-        if self.config["environment"] not in ["sandbox", "production"]:
+        if self.config['environment'] not in ['sandbox', 'production']:
             raise PaymentProcessorError("PayPal environment must be 'sandbox' or 'production'")
 
     @property
@@ -45,7 +44,7 @@ class PayPalProcessor(PaymentProcessor):
         """Get base URL based on environment"""
         return (
             self.PRODUCTION_BASE_URL
-            if self.config["environment"] == "production"
+            if self.config['environment'] == 'production'
             else self.SANDBOX_BASE_URL
         )
 
@@ -67,24 +66,29 @@ class PayPalProcessor(PaymentProcessor):
 
         headers = {
             "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Type": "application/x-www-form-urlencoded"
         }
 
-        data = {"grant_type": "client_credentials"}
+        data = {
+            "grant_type": "client_credentials"
+        }
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, headers=headers, data=data, timeout=30.0)
                 response.raise_for_status()
                 result = response.json()
-                return result["access_token"]
+                return result['access_token']
         except httpx.HTTPError as e:
             raise PaymentProcessorError(f"Failed to get PayPal access token: {str(e)}") from e
         except KeyError as e:
             raise PaymentProcessorError("Invalid PayPal authentication response") from e
 
     async def _make_request(
-        self, method: str, endpoint: str, data: dict[str, Any] | None = None
+        self,
+        method: str,
+        endpoint: str,
+        data: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Make authenticated request to PayPal API
@@ -104,7 +108,7 @@ class PayPalProcessor(PaymentProcessor):
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
-            "Prefer": "return=representation",
+            "Prefer": "return=representation"
         }
 
         try:
@@ -130,10 +134,10 @@ class PayPalProcessor(PaymentProcessor):
             error_msg = f"PayPal API request failed: {str(e)}"
             try:
                 error_data = e.response.json()
-                if "message" in error_data:
-                    error_msg = error_data["message"]
-                elif "error_description" in error_data:
-                    error_msg = error_data["error_description"]
+                if 'message' in error_data:
+                    error_msg = error_data['message']
+                elif 'error_description' in error_data:
+                    error_msg = error_data['error_description']
             except Exception:
                 pass
 
@@ -154,13 +158,13 @@ class PayPalProcessor(PaymentProcessor):
                 FROM payment_methods
                 WHERE id = $1
                 """,
-                payment_method_id,
+                payment_method_id
             )
 
             if not row:
                 raise PaymentProcessorError("Payment method not found")
 
-            if row["type"] != "paypal":
+            if row['type'] != 'paypal':
                 raise PaymentProcessorError("Payment method is not PayPal")
 
             return dict(row)
@@ -170,7 +174,7 @@ class PayPalProcessor(PaymentProcessor):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Process PayPal deposit by creating an Order
@@ -181,30 +185,29 @@ class PayPalProcessor(PaymentProcessor):
         await self._fetch_payment_method(payment_method_id)
 
         # Calculate fee
-        fee = await self.calculate_fee(amount, "deposit", "paypal")
+        fee = await self.calculate_fee(amount, 'deposit', 'paypal')
 
         # Create PayPal Order
         order_data = {
             "intent": "CAPTURE",
             "purchase_units": [
                 {
-                    "amount": {"currency_code": "USD", "value": str(amount)},
+                    "amount": {
+                        "currency_code": "USD",
+                        "value": str(amount)
+                    },
                     "description": f"CIFT Markets Deposit - User {user_id}",
                     "custom_id": str(payment_method_id),
-                    "invoice_id": f"CIFT-DEP-{datetime.now().timestamp()}",
+                    "invoice_id": f"CIFT-DEP-{datetime.now().timestamp()}"
                 }
             ],
             "application_context": {
                 "brand_name": "CIFT Markets",
                 "landing_page": "BILLING",
                 "user_action": "PAY_NOW",
-                "return_url": self.config.get(
-                    "return_url", "https://ciftmarkets.com/funding/success"
-                ),
-                "cancel_url": self.config.get(
-                    "cancel_url", "https://ciftmarkets.com/funding/cancelled"
-                ),
-            },
+                "return_url": self.config.get('return_url', 'https://ciftmarkets.com/funding/success'),
+                "cancel_url": self.config.get('cancel_url', 'https://ciftmarkets.com/funding/cancelled')
+            }
         }
 
         try:
@@ -212,23 +215,23 @@ class PayPalProcessor(PaymentProcessor):
 
             # Extract approval URL for user to complete payment
             approval_url = None
-            if "links" in order:
-                for link in order["links"]:
-                    if link["rel"] == "approve":
-                        approval_url = link["href"]
+            if 'links' in order:
+                for link in order['links']:
+                    if link['rel'] == 'approve':
+                        approval_url = link['href']
                         break
 
             return {
-                "transaction_id": order["id"],
-                "status": "pending",  # Waiting for user approval
-                "fee": fee,
-                "estimated_arrival": datetime.now() + timedelta(minutes=5),
-                "redirect_url": approval_url,
-                "additional_data": {
-                    "order_id": order["id"],
-                    "status": order["status"],
-                    "approval_url": approval_url,
-                },
+                'transaction_id': order['id'],
+                'status': 'pending',  # Waiting for user approval
+                'fee': fee,
+                'estimated_arrival': datetime.now() + timedelta(minutes=5),
+                'redirect_url': approval_url,
+                'additional_data': {
+                    'order_id': order['id'],
+                    'status': order['status'],
+                    'approval_url': approval_url
+                }
             }
 
         except PaymentProcessorError as e:
@@ -248,19 +251,20 @@ class PayPalProcessor(PaymentProcessor):
             result = await self._make_request("POST", f"v2/checkout/orders/{order_id}/capture", {})
 
             # Extract capture details
-            if result.get("status") == "COMPLETED":
-                capture = result["purchase_units"][0]["payments"]["captures"][0]
+            if result.get('status') == 'COMPLETED':
+                capture = result['purchase_units'][0]['payments']['captures'][0]
 
                 return {
-                    "status": "completed",
-                    "capture_id": capture["id"],
-                    "amount": Decimal(capture["amount"]["value"]),
-                    "completed_at": datetime.fromisoformat(
-                        capture["create_time"].replace("Z", "+00:00")
-                    ),
+                    'status': 'completed',
+                    'capture_id': capture['id'],
+                    'amount': Decimal(capture['amount']['value']),
+                    'completed_at': datetime.fromisoformat(capture['create_time'].replace('Z', '+00:00'))
                 }
             else:
-                return {"status": "processing", "additional_data": result}
+                return {
+                    'status': 'processing',
+                    'additional_data': result
+                }
 
         except PaymentProcessorError as e:
             raise PaymentProcessorError(f"PayPal capture failed: {str(e)}") from e
@@ -270,7 +274,7 @@ class PayPalProcessor(PaymentProcessor):
         user_id: UUID,
         amount: Decimal,
         payment_method_id: UUID,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Process PayPal withdrawal using Payouts API
@@ -279,53 +283,58 @@ class PayPalProcessor(PaymentProcessor):
         """
         # Fetch payment method
         payment_method = await self._fetch_payment_method(payment_method_id)
-        paypal_email = payment_method["paypal_email"]
+        paypal_email = payment_method['paypal_email']
 
         if not paypal_email:
             raise PaymentProcessorError("PayPal email not found")
 
         # Calculate fee
-        fee = await self.calculate_fee(amount, "withdrawal", "paypal")
+        fee = await self.calculate_fee(amount, 'withdrawal', 'paypal')
 
         # Create Payout
         payout_data = {
             "sender_batch_header": {
                 "sender_batch_id": f"CIFT-PAYOUT-{datetime.now().timestamp()}",
                 "email_subject": "You have received a payment from CIFT Markets",
-                "email_message": "You have received a withdrawal from your CIFT Markets account.",
+                "email_message": "You have received a withdrawal from your CIFT Markets account."
             },
             "items": [
                 {
                     "recipient_type": "EMAIL",
-                    "amount": {"value": str(amount), "currency": "USD"},
+                    "amount": {
+                        "value": str(amount),
+                        "currency": "USD"
+                    },
                     "receiver": paypal_email,
                     "note": f"CIFT Markets withdrawal - User {user_id}",
-                    "sender_item_id": f"{user_id}-{datetime.now().timestamp()}",
+                    "sender_item_id": f"{user_id}-{datetime.now().timestamp()}"
                 }
-            ],
+            ]
         }
 
         try:
             payout = await self._make_request("POST", "v1/payments/payouts", payout_data)
 
-            batch_id = payout.get("batch_header", {}).get("payout_batch_id")
+            batch_id = payout.get('batch_header', {}).get('payout_batch_id')
 
             return {
-                "transaction_id": batch_id,
-                "status": "processing",
-                "fee": fee,
-                "estimated_arrival": datetime.now() + timedelta(hours=1),
-                "additional_data": {
-                    "payout_batch_id": batch_id,
-                    "batch_status": payout.get("batch_header", {}).get("batch_status"),
-                },
+                'transaction_id': batch_id,
+                'status': 'processing',
+                'fee': fee,
+                'estimated_arrival': datetime.now() + timedelta(hours=1),
+                'additional_data': {
+                    'payout_batch_id': batch_id,
+                    'batch_status': payout.get('batch_header', {}).get('batch_status')
+                }
             }
 
         except PaymentProcessorError as e:
             raise PaymentProcessorError(f"PayPal payout failed: {str(e)}") from e
 
     async def verify_payment_method(
-        self, payment_method_id: UUID, verification_data: dict[str, Any]
+        self,
+        payment_method_id: UUID,
+        verification_data: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Verify PayPal payment method
@@ -334,20 +343,29 @@ class PayPalProcessor(PaymentProcessor):
         or by checking if the email is a valid PayPal account
         """
         payment_method = await self._fetch_payment_method(payment_method_id)
-        paypal_email = payment_method["paypal_email"]
+        paypal_email = payment_method['paypal_email']
 
-        if not paypal_email or "@" not in paypal_email:
-            return {"verified": False, "message": "Invalid PayPal email", "additional_data": {}}
+        if not paypal_email or '@' not in paypal_email:
+            return {
+                'verified': False,
+                'message': 'Invalid PayPal email',
+                'additional_data': {}
+            }
 
         # In production, you could use PayPal's API to verify the email exists
         # For now, basic email validation
         return {
-            "verified": True,
-            "message": "PayPal account verified",
-            "additional_data": {"email": paypal_email},
+            'verified': True,
+            'message': 'PayPal account verified',
+            'additional_data': {
+                'email': paypal_email
+            }
         }
 
-    async def get_transaction_status(self, external_transaction_id: str) -> dict[str, Any]:
+    async def get_transaction_status(
+        self,
+        external_transaction_id: str
+    ) -> dict[str, Any]:
         """
         Query PayPal transaction status
 
@@ -357,60 +375,60 @@ class PayPalProcessor(PaymentProcessor):
         try:
             # Try as Order first
             try:
-                order = await self._make_request(
-                    "GET", f"v2/checkout/orders/{external_transaction_id}"
-                )
+                order = await self._make_request("GET", f"v2/checkout/orders/{external_transaction_id}")
 
                 status_map = {
-                    "CREATED": "pending",
-                    "SAVED": "pending",
-                    "APPROVED": "processing",
-                    "VOIDED": "cancelled",
-                    "COMPLETED": "completed",
-                    "PAYER_ACTION_REQUIRED": "pending",
+                    'CREATED': 'pending',
+                    'SAVED': 'pending',
+                    'APPROVED': 'processing',
+                    'VOIDED': 'cancelled',
+                    'COMPLETED': 'completed',
+                    'PAYER_ACTION_REQUIRED': 'pending'
                 }
 
-                internal_status = status_map.get(order["status"], "processing")
+                internal_status = status_map.get(order['status'], 'processing')
 
                 return {
-                    "status": internal_status,
-                    "completed_at": (
-                        datetime.fromisoformat(order["update_time"].replace("Z", "+00:00"))
-                        if internal_status == "completed"
-                        else None
-                    ),
-                    "failure_reason": None,
-                    "additional_data": order,
+                    'status': internal_status,
+                    'completed_at': datetime.fromisoformat(
+                        order['update_time'].replace('Z', '+00:00')
+                    ) if internal_status == 'completed' else None,
+                    'failure_reason': None,
+                    'additional_data': order
                 }
             except Exception:
                 # Try as Payout Batch
                 payout = await self._make_request(
-                    "GET", f"v1/payments/payouts/{external_transaction_id}"
+                    "GET",
+                    f"v1/payments/payouts/{external_transaction_id}"
                 )
 
                 status_map = {
-                    "PENDING": "pending",
-                    "PROCESSING": "processing",
-                    "SUCCESS": "completed",
-                    "DENIED": "failed",
-                    "CANCELED": "cancelled",
+                    'PENDING': 'pending',
+                    'PROCESSING': 'processing',
+                    'SUCCESS': 'completed',
+                    'DENIED': 'failed',
+                    'CANCELED': 'cancelled'
                 }
 
-                batch_status = payout.get("batch_header", {}).get("batch_status")
-                internal_status = status_map.get(batch_status, "processing")
+                batch_status = payout.get('batch_header', {}).get('batch_status')
+                internal_status = status_map.get(batch_status, 'processing')
 
                 return {
-                    "status": internal_status,
-                    "completed_at": None,
-                    "failure_reason": None,
-                    "additional_data": payout,
+                    'status': internal_status,
+                    'completed_at': None,
+                    'failure_reason': None,
+                    'additional_data': payout
                 }
 
         except PaymentProcessorError as e:
             raise PaymentProcessorError(f"Failed to query PayPal transaction: {str(e)}") from e
 
     async def calculate_fee(
-        self, amount: Decimal, transaction_type: str, payment_method_type: str
+        self,
+        amount: Decimal,
+        transaction_type: str,
+        payment_method_type: str
     ) -> Decimal:
         """
         Calculate PayPal processing fee
@@ -421,19 +439,22 @@ class PayPalProcessor(PaymentProcessor):
 
         Adjust based on your PayPal agreement
         """
-        if transaction_type == "deposit":
+        if transaction_type == 'deposit':
             # Receiving payment fee: 2.99% + $0.49
-            fee_percent = Decimal("0.0299")
-            fixed_fee = Decimal("0.49")
+            fee_percent = Decimal('0.0299')
+            fixed_fee = Decimal('0.49')
             fee = (amount * fee_percent) + fixed_fee
         else:
             # Payout fee: $0.25 flat
-            fee = Decimal("0.25")
+            fee = Decimal('0.25')
 
         return fee
 
     async def refund_transaction(
-        self, external_transaction_id: str, amount: Decimal | None = None, reason: str | None = None
+        self,
+        external_transaction_id: str,
+        amount: Decimal | None = None,
+        reason: str | None = None
     ) -> dict[str, Any]:
         """
         Refund a PayPal capture
@@ -449,21 +470,26 @@ class PayPalProcessor(PaymentProcessor):
         refund_data = {}
 
         if amount:
-            refund_data["amount"] = {"currency_code": "USD", "value": str(amount)}
+            refund_data['amount'] = {
+                'currency_code': 'USD',
+                'value': str(amount)
+            }
 
         if reason:
-            refund_data["note_to_payer"] = reason
+            refund_data['note_to_payer'] = reason
 
         try:
             refund = await self._make_request(
-                "POST", f"v2/payments/captures/{external_transaction_id}/refund", refund_data
+                "POST",
+                f"v2/payments/captures/{external_transaction_id}/refund",
+                refund_data
             )
 
             return {
-                "refund_id": refund["id"],
-                "status": refund["status"],
-                "amount": Decimal(refund["amount"]["value"]),
-                "created": datetime.fromisoformat(refund["create_time"].replace("Z", "+00:00")),
+                'refund_id': refund['id'],
+                'status': refund['status'],
+                'amount': Decimal(refund['amount']['value']),
+                'created': datetime.fromisoformat(refund['create_time'].replace('Z', '+00:00'))
             }
 
         except PaymentProcessorError as e:
@@ -479,47 +505,46 @@ class PayPalProcessor(PaymentProcessor):
         - CHECKOUT.ORDER.APPROVED
         - etc.
         """
-        event_type = payload.get("event_type")
-        resource = payload.get("resource", {})
+        event_type = payload.get('event_type')
+        resource = payload.get('resource', {})
 
-        if event_type == "PAYMENT.CAPTURE.COMPLETED":
+        if event_type == 'PAYMENT.CAPTURE.COMPLETED':
             return {
-                "event": "payment_success",
-                "transaction_id": resource.get("supplementary_data", {})
-                .get("related_ids", {})
-                .get("order_id"),
-                "capture_id": resource["id"],
-                "status": "completed",
-                "amount": Decimal(resource["amount"]["value"]),
-                "additional_data": resource,
+                'event': 'payment_success',
+                'transaction_id': resource.get('supplementary_data', {}).get('related_ids', {}).get('order_id'),
+                'capture_id': resource['id'],
+                'status': 'completed',
+                'amount': Decimal(resource['amount']['value']),
+                'additional_data': resource
             }
 
-        elif event_type == "PAYMENT.CAPTURE.DENIED":
+        elif event_type == 'PAYMENT.CAPTURE.DENIED':
             return {
-                "event": "payment_failed",
-                "transaction_id": resource.get("supplementary_data", {})
-                .get("related_ids", {})
-                .get("order_id"),
-                "status": "failed",
-                "failure_reason": "Payment capture denied",
-                "additional_data": resource,
+                'event': 'payment_failed',
+                'transaction_id': resource.get('supplementary_data', {}).get('related_ids', {}).get('order_id'),
+                'status': 'failed',
+                'failure_reason': 'Payment capture denied',
+                'additional_data': resource
             }
 
-        elif event_type == "CHECKOUT.ORDER.APPROVED":
+        elif event_type == 'CHECKOUT.ORDER.APPROVED':
             return {
-                "event": "order_approved",
-                "transaction_id": resource["id"],
-                "status": "approved",
-                "additional_data": resource,
+                'event': 'order_approved',
+                'transaction_id': resource['id'],
+                'status': 'approved',
+                'additional_data': resource
             }
 
-        elif event_type == "PAYMENT.PAYOUTS-ITEM.SUCCEEDED":
+        elif event_type == 'PAYMENT.PAYOUTS-ITEM.SUCCEEDED':
             return {
-                "event": "payout_success",
-                "transaction_id": resource.get("payout_batch_id"),
-                "status": "completed",
-                "amount": Decimal(resource["payout_item"]["amount"]["value"]),
-                "additional_data": resource,
+                'event': 'payout_success',
+                'transaction_id': resource.get('payout_batch_id'),
+                'status': 'completed',
+                'amount': Decimal(resource['payout_item']['amount']['value']),
+                'additional_data': resource
             }
 
-        return {"event": event_type, "additional_data": resource}
+        return {
+            'event': event_type,
+            'additional_data': resource
+        }

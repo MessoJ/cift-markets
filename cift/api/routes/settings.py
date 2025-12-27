@@ -39,10 +39,8 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 # MODELS
 # ============================================================================
 
-
 class UserSettings(BaseModel):
     """User settings and preferences"""
-
     # Profile
     full_name: str | None = None
     phone_number: str | None = None
@@ -94,7 +92,6 @@ class UserSettings(BaseModel):
 
 class UserSettingsUpdate(BaseModel):
     """Partial update for user settings"""
-
     full_name: str | None = None
     phone_number: str | None = None
     default_order_type: str | None = None
@@ -131,7 +128,6 @@ class UserSettingsUpdate(BaseModel):
 
 class ApiKeyResponse(BaseModel):
     """API key information (excluding full key)"""
-
     id: str
     name: str | None
     key_prefix: str
@@ -146,7 +142,6 @@ class ApiKeyResponse(BaseModel):
 
 class ApiKeyCreateRequest(BaseModel):
     """Request to create new API key"""
-
     name: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
     scopes: list[str] = Field(default=["read"], description="Permissions: read, trade, withdraw")
@@ -155,7 +150,6 @@ class ApiKeyCreateRequest(BaseModel):
 
 class ApiKeyCreateResponse(BaseModel):
     """Response after creating API key (includes full key once)"""
-
     api_key: str = Field(..., description="Full API key - SAVE THIS! Won't be shown again")
     key_id: str
     name: str
@@ -165,7 +159,6 @@ class ApiKeyCreateResponse(BaseModel):
 
 class SessionLog(BaseModel):
     """User session information"""
-
     id: str
     ip_address: str | None
     user_agent: str | None
@@ -184,26 +177,19 @@ class SessionLog(BaseModel):
 
 class TwoFactorSetup(BaseModel):
     """2FA setup information"""
-
     secret: str
     qr_code_url: str
     backup_codes: list[str]
-    message: str = (
-        "Save backup codes securely. They can be used if you lose access to your authenticator."
-    )
+    message: str = "Save backup codes securely. They can be used if you lose access to your authenticator."
 
 
 class TwoFactorVerifyRequest(BaseModel):
     """2FA verification request"""
-
-    code: str = Field(
-        ..., min_length=6, max_length=6, description="6-digit code from authenticator"
-    )
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit code from authenticator")
 
 
 class SecurityAuditLog(BaseModel):
     """Security audit log entry"""
-
     id: str
     event_type: str
     event_category: str
@@ -217,7 +203,6 @@ class SecurityAuditLog(BaseModel):
 # ============================================================================
 # USER SETTINGS ENDPOINTS
 # ============================================================================
-
 
 @router.get("", response_model=UserSettings)
 async def get_user_settings(
@@ -235,7 +220,7 @@ async def get_user_settings(
             # Ensure user settings row exists
             await conn.execute(
                 "INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-                user.id,
+                user.id
             )
 
             # Get user settings
@@ -269,8 +254,8 @@ async def get_user_settings(
                 if field in row.keys():
                     value = row[field]
                     # Convert time objects to strings
-                    if field in ("quiet_start_time", "quiet_end_time") and value is not None:
-                        value = value.isoformat() if hasattr(value, "isoformat") else str(value)
+                    if field in ('quiet_start_time', 'quiet_end_time') and value is not None:
+                        value = value.isoformat() if hasattr(value, 'isoformat') else str(value)
                     settings_dict[field] = value
 
             return UserSettings(**settings_dict)
@@ -348,7 +333,8 @@ async def update_user_settings(
 
         if not row:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User settings not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User settings not found"
             )
 
         # Log security event (if function exists)
@@ -363,14 +349,12 @@ async def update_user_settings(
                 """,
                 user_id,
                 updates.dict(exclude_unset=True),
-                request.client.host if request else None,
+                request.client.host if request else None
             )
         except Exception as e:
             logger.warning(f"Failed to log security event: {e}")
 
-        logger.info(
-            f"User {user_id} updated settings: {list(updates.dict(exclude_unset=True).keys())}"
-        )
+        logger.info(f"User {user_id} updated settings: {list(updates.dict(exclude_unset=True).keys())}")
 
         return UserSettings(**dict(row))
 
@@ -388,11 +372,11 @@ async def upload_avatar(
     Stores the file and updates user profile with avatar URL.
     """
     # Validate file type
-    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]
+    allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
     if avatar.content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only image files (JPG, PNG, GIF, WebP) are allowed",
+            detail="Only image files (JPG, PNG, GIF, WebP) are allowed"
         )
 
     # Validate file size (5MB max)
@@ -400,7 +384,7 @@ async def upload_avatar(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File size must be less than 5MB",
+            detail="File size must be less than 5MB"
         )
 
     try:
@@ -409,7 +393,7 @@ async def upload_avatar(
         os.makedirs(upload_dir, exist_ok=True)
 
         # Generate unique filename
-        file_extension = avatar.filename.split(".")[-1] if avatar.filename else "jpg"
+        file_extension = avatar.filename.split('.')[-1] if avatar.filename else 'jpg'
         filename = f"{user_id}.{file_extension}"
         file_path = os.path.join(upload_dir, filename)
 
@@ -426,7 +410,7 @@ async def upload_avatar(
                 await conn.execute(
                     "UPDATE user_settings SET avatar_url = $1 WHERE user_id = $2",
                     avatar_url,
-                    user_id,
+                    user_id
                 )
             except Exception as e:
                 # Table might not have avatar_url column, that's okay for now
@@ -437,20 +421,20 @@ async def upload_avatar(
         return {
             "message": "Avatar uploaded successfully",
             "avatar_url": avatar_url,
-            "filename": filename,
+            "filename": filename
         }
 
     except Exception as e:
         logger.error(f"Failed to upload avatar for user {user_id}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload avatar"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload avatar"
         ) from e
 
 
 # ============================================================================
 # API KEY MANAGEMENT ENDPOINTS
 # ============================================================================
-
 
 @router.get("/api-keys", response_model=list[ApiKeyResponse])
 async def list_api_keys(
@@ -523,7 +507,7 @@ async def create_api_key(
                 logger.warning("api_keys table does not exist - denying key creation")
                 raise HTTPException(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                    detail="API key management is not available yet. Please contact your administrator.",
+                    detail="API key management is not available yet. Please contact your administrator."
                 )
 
             # Generate secure random API key
@@ -537,7 +521,7 @@ async def create_api_key(
                 logger.error(f"Failed to hash API key: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to generate secure key",
+                    detail="Failed to generate secure key"
                 ) from e
 
             # Calculate expiry
@@ -563,13 +547,13 @@ async def create_api_key(
                     key_request.name,
                     key_request.description,
                     key_request.scopes,
-                    expires_at,
+                    expires_at
                 )
             except Exception as e:
                 logger.error(f"Failed to insert API key: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Database error: {str(e)}",
+                    detail=f"Database error: {str(e)}"
                 ) from e
 
             # Log security event (if function exists)
@@ -585,24 +569,26 @@ async def create_api_key(
                     user.id,
                     f"Created API key: {key_request.name}",
                     {"name": key_request.name, "scopes": key_request.scopes},
-                    request.client.host if request else None,
+                    request.client.host if request else None
                 )
             except Exception as e:
                 logger.warning(f"Failed to log security event: {e}")
 
-            logger.info(
-                f"User {user.id} created API key: {key_request.name} (scopes: {key_request.scopes})"
-            )
+            logger.info(f"User {user.id} created API key: {key_request.name} (scopes: {key_request.scopes})")
 
             return ApiKeyCreateResponse(
-                api_key=api_key, key_id=row["id"], name=row["name"], expires_at=row["expires_at"]
+                api_key=api_key,
+                key_id=row['id'],
+                name=row['name'],
+                expires_at=row['expires_at']
             )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Unexpected error creating API key for user {user.id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unexpected error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error: {str(e)}"
         ) from e
 
 
@@ -629,7 +615,10 @@ async def revoke_api_key(
         row = await conn.fetchrow(query, key_id, user.id)
 
         if not row:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="API key not found"
+            )
 
         # Log security event
         await conn.execute(
@@ -642,8 +631,8 @@ async def revoke_api_key(
             """,
             user.id,
             f"Revoked API key: {row['name']}",
-            {"key_id": str(key_id), "name": row["name"]},
-            request.client.host if request else None,
+            {"key_id": str(key_id), "name": row['name']},
+            request.client.host if request else None
         )
 
         logger.warning(f"User {user.id} revoked API key: {row['name']}")
@@ -652,7 +641,6 @@ async def revoke_api_key(
 # ============================================================================
 # SESSION MANAGEMENT ENDPOINTS
 # ============================================================================
-
 
 @router.get("/sessions", response_model=list[SessionLog])
 async def get_session_history(
@@ -707,7 +695,8 @@ async def terminate_session(
 
         if not row:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Active session not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Active session not found"
             )
 
         logger.info(f"User {user.id} terminated session {session_id}")
@@ -716,7 +705,6 @@ async def terminate_session(
 # ============================================================================
 # TWO-FACTOR AUTHENTICATION ENDPOINTS
 # ============================================================================
-
 
 @router.post("/2fa/enable", response_model=TwoFactorSetup)
 async def enable_2fa(
@@ -743,24 +731,28 @@ async def enable_2fa(
     async with pool.acquire() as conn:
         # Check if 2FA already enabled
         existing = await conn.fetchrow(
-            "SELECT enabled FROM two_factor_auth WHERE user_id = $1", user.id
+            "SELECT enabled FROM two_factor_auth WHERE user_id = $1",
+            user.id
         )
 
-        if existing and existing["enabled"]:
+        if existing and existing['enabled']:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="2FA is already enabled"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="2FA is already enabled"
             )
 
         # Generate TOTP secret
         secret = pyotp.random_base32()
         totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
-            name=user.email, issuer_name="CIFT Markets"
+            name=user.email,
+            issuer_name="CIFT Markets"
         )
 
         # Generate backup codes
         backup_codes = [secrets.token_hex(4).upper() for _ in range(10)]
         backup_codes_hashed = [
-            bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode() for code in backup_codes
+            bcrypt.hashpw(code.encode(), bcrypt.gensalt()).decode()
+            for code in backup_codes
         ]
 
         # TODO: Encrypt secret in production
@@ -779,9 +771,7 @@ async def enable_2fa(
                 backup_codes_remaining = 10,
                 enabled = false;
             """,
-            user.id,
-            secret_encrypted,
-            backup_codes_hashed,
+            user.id, secret_encrypted, backup_codes_hashed
         )
 
         # Generate QR code
@@ -791,13 +781,17 @@ async def enable_2fa(
         img = qr.make_image(fill_color="black", back_color="white")
 
         buffer = io.BytesIO()
-        img.save(buffer, format="PNG")
+        img.save(buffer, format='PNG')
         qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
         qr_code_url = f"data:image/png;base64,{qr_code_base64}"
 
         logger.info(f"User {user.id} initiated 2FA setup")
 
-        return TwoFactorSetup(secret=secret, qr_code_url=qr_code_url, backup_codes=backup_codes)
+        return TwoFactorSetup(
+            secret=secret,
+            qr_code_url=qr_code_url,
+            backup_codes=backup_codes
+        )
 
 
 @router.post("/2fa/verify", status_code=status.HTTP_200_OK)
@@ -816,20 +810,22 @@ async def verify_2fa(
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT secret_encrypted FROM two_factor_auth WHERE user_id = $1", user.id
+            "SELECT secret_encrypted FROM two_factor_auth WHERE user_id = $1",
+            user.id
         )
 
         if not row:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="2FA not initialized. Call /2fa/enable first.",
+                detail="2FA not initialized. Call /2fa/enable first."
             )
 
         # Verify code
-        totp = pyotp.TOTP(row["secret_encrypted"])
+        totp = pyotp.TOTP(row['secret_encrypted'])
         if not totp.verify(verify_request.code, valid_window=1):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code"
             )
 
         # Enable 2FA
@@ -839,13 +835,13 @@ async def verify_2fa(
             SET enabled = true, verified_at = NOW()
             WHERE user_id = $1;
             """,
-            user.id,
+            user.id
         )
 
         # Log security event
         await conn.execute(
             "SELECT log_security_event($1, '2fa_enabled', 'security', '2FA enabled successfully', 'info')",
-            user.id,
+            user.id
         )
 
         logger.info(f"User {user.id} enabled 2FA successfully")
@@ -874,40 +870,45 @@ async def disable_2fa(
             FROM two_factor_auth
             WHERE user_id = $1 AND enabled = true;
             """,
-            user.id,
+            user.id
         )
 
         if not row:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="2FA is not enabled"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="2FA is not enabled"
             )
 
         # Verify code (TOTP or backup code)
         code_valid = False
 
         # Check TOTP code
-        totp = pyotp.TOTP(row["secret_encrypted"])
+        totp = pyotp.TOTP(row['secret_encrypted'])
         if totp.verify(verify_request.code, valid_window=1):
             code_valid = True
         else:
             # Check backup codes
-            for backup_hash in row["backup_codes_encrypted"]:
+            for backup_hash in row['backup_codes_encrypted']:
                 if bcrypt.checkpw(verify_request.code.encode(), backup_hash.encode()):
                     code_valid = True
                     break
 
         if not code_valid:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid code"
+            )
 
         # Disable 2FA
         await conn.execute(
-            "UPDATE two_factor_auth SET enabled = false WHERE user_id = $1;", user.id
+            "UPDATE two_factor_auth SET enabled = false WHERE user_id = $1;",
+            user.id
         )
 
         # Log security event
         await conn.execute(
             "SELECT log_security_event($1, '2fa_disabled', 'security', '2FA disabled by user', 'warning')",
-            user.id,
+            user.id
         )
 
         logger.warning(f"User {user.id} disabled 2FA")
@@ -918,7 +919,6 @@ async def disable_2fa(
 # ============================================================================
 # SECURITY AUDIT LOG ENDPOINTS
 # ============================================================================
-
 
 @router.get("/security/audit", response_model=list[SecurityAuditLog])
 async def get_security_audit_log(

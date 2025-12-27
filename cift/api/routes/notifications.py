@@ -32,10 +32,8 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 # MODELS
 # ============================================================================
 
-
 class Notification(BaseModel):
     """User notification model"""
-
     id: str
     user_id: str
     type: str  # alert, order, news, system
@@ -49,14 +47,12 @@ class Notification(BaseModel):
 
 class UnreadCount(BaseModel):
     """Unread notification count"""
-
     count: int
 
 
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
-
 
 @router.get("", response_model=list[Notification])
 async def get_notifications(
@@ -132,7 +128,8 @@ async def get_unread_count(
                 return UnreadCount(count=0)
 
             count = await conn.fetchval(
-                "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false", user_id
+                "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false",
+                user_id
             )
 
             return UnreadCount(count=count or 0)
@@ -162,7 +159,7 @@ async def mark_notification_read(
             if not table_exists:
                 raise HTTPException(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                    detail="Notifications not available",
+                    detail="Notifications not available"
                 )
 
             result = await conn.execute(
@@ -172,13 +169,13 @@ async def mark_notification_read(
                 WHERE id = $1 AND user_id = $2 AND is_read = false
                 """,
                 notification_id,
-                user_id,
+                user_id
             )
 
             if result == "UPDATE 0":
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Notification not found or already read",
+                    detail="Notification not found or already read"
                 )
     except HTTPException:
         raise
@@ -186,7 +183,7 @@ async def mark_notification_read(
         logger.error(f"Error marking notification {notification_id} as read: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to mark notification as read",
+            detail="Failed to mark notification as read"
         ) from e
 
 
@@ -216,11 +213,11 @@ async def mark_all_notifications_read(
                 SET is_read = true, read_at = NOW()
                 WHERE user_id = $1 AND is_read = false
                 """,
-                user_id,
+                user_id
             )
     except Exception as e:
         logger.error(f"Error marking all notifications as read for user {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to mark notifications as read",
+            detail="Failed to mark notifications as read"
         ) from e

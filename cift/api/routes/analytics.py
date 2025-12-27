@@ -25,8 +25,9 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 # DEPENDENCY INJECTION
 # ============================================================================
 
-
-async def get_current_user_id(current_user: User = Depends(get_current_active_user)) -> UUID:
+async def get_current_user_id(
+    current_user: User = Depends(get_current_active_user)
+) -> UUID:
     """Get current authenticated user ID."""
     return current_user.id
 
@@ -35,10 +36,8 @@ async def get_current_user_id(current_user: User = Depends(get_current_active_us
 # MODELS
 # ============================================================================
 
-
 class PerformanceMetrics(BaseModel):
     """Performance analytics response."""
-
     period: dict
     returns: dict
     risk_metrics: dict
@@ -47,7 +46,6 @@ class PerformanceMetrics(BaseModel):
 
 class PnLBreakdownItem(BaseModel):
     """P&L breakdown item."""
-
     symbol: str | None = None
     date: datetime | None = None
     month: datetime | None = None
@@ -62,7 +60,6 @@ class PnLBreakdownItem(BaseModel):
 # ============================================================================
 # PERFORMANCE ANALYTICS
 # ============================================================================
-
 
 @router.get("/performance", response_model=PerformanceMetrics)
 async def get_performance_metrics(
@@ -106,19 +103,21 @@ async def get_performance_metrics(
         if metrics.get("insufficient_data"):
             return {
                 "period": {
-                    "start_date": (
-                        start_date or datetime.utcnow() - timedelta(days=30)
-                    ).isoformat(),
+                    "start_date": (start_date or datetime.utcnow() - timedelta(days=30)).isoformat(),
                     "end_date": (end_date or datetime.utcnow()).isoformat(),
-                    "days": 0,
+                    "days": 0
                 },
                 "returns": {
                     "total_return_pct": 0,
                     "initial_value": 0,
                     "final_value": 0,
-                    "total_pnl": 0,
+                    "total_pnl": 0
                 },
-                "risk_metrics": {"sharpe_ratio": 0, "max_drawdown_pct": 0, "volatility_pct": 0},
+                "risk_metrics": {
+                    "sharpe_ratio": 0,
+                    "max_drawdown_pct": 0,
+                    "volatility_pct": 0
+                },
                 "trade_statistics": {
                     "total_trades": 0,
                     "winning_trades": 0,
@@ -126,8 +125,8 @@ async def get_performance_metrics(
                     "win_rate_pct": 0,
                     "avg_pnl": 0,
                     "best_trade": 0,
-                    "worst_trade": 0,
-                },
+                    "worst_trade": 0
+                }
             }
 
         return metrics
@@ -136,7 +135,7 @@ async def get_performance_metrics(
         logger.error(f"Performance analytics error for user {user_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to calculate performance metrics: {str(e)}",
+            detail=f"Failed to calculate performance metrics: {str(e)}"
         ) from e
 
 
@@ -174,7 +173,7 @@ async def get_pnl_breakdown(
     if group_by not in ["symbol", "day", "month"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid group_by '{group_by}'. Must be: symbol, day, or month",
+            detail=f"Invalid group_by '{group_by}'. Must be: symbol, day, or month"
         )
 
     try:
@@ -186,14 +185,13 @@ async def get_pnl_breakdown(
         logger.error(f"P&L breakdown error for user {user_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate P&L breakdown: {str(e)}",
+            detail=f"Failed to generate P&L breakdown: {str(e)}"
         ) from e
 
 
 # ============================================================================
 # RISK METRICS
 # ============================================================================
-
 
 @router.get("/risk-metrics")
 async def get_risk_metrics(
@@ -227,30 +225,34 @@ async def get_risk_metrics(
                 "max_position_pct": 0,
                 "top_5_concentration": 0,
                 "num_positions": 0,
-                "positions": [],
+                "positions": []
             }
 
         # Calculate position sizes
         position_values = []
         for pos in positions:
             # Ensure values are floats
-            quantity = float(pos["quantity"])
-            price = float(pos["current_price"])
+            quantity = float(pos['quantity'])
+            price = float(pos['current_price'])
             value = abs(quantity * price)
 
             pct = (value / portfolio_value * 100) if portfolio_value > 0 else 0
-            position_values.append({"symbol": pos["symbol"], "value": value, "pct": pct})
+            position_values.append({
+                "symbol": pos['symbol'],
+                "value": value,
+                "pct": pct
+            })
 
         # Sort by value
-        position_values.sort(key=lambda x: x["value"], reverse=True)
+        position_values.sort(key=lambda x: x['value'], reverse=True)
 
         # Calculate metrics
-        max_position_pct = position_values[0]["pct"] if position_values else 0
-        top_5_value = sum(p["value"] for p in position_values[:5])
+        max_position_pct = position_values[0]['pct'] if position_values else 0
+        top_5_value = sum(p['value'] for p in position_values[:5])
         top_5_concentration = (top_5_value / portfolio_value * 100) if portfolio_value > 0 else 0
 
         # Calculate leverage
-        total_exposure = sum(p["value"] for p in position_values)
+        total_exposure = sum(p['value'] for p in position_values)
         leverage = total_exposure / portfolio_value if portfolio_value > 0 else 0
 
         return {
@@ -259,21 +261,20 @@ async def get_risk_metrics(
             "max_position_pct": round(max_position_pct, 2),
             "top_5_concentration": round(top_5_concentration, 2),
             "num_positions": len(positions),
-            "positions": position_values[:10],  # Top 10 positions
+            "positions": position_values[:10]  # Top 10 positions
         }
 
     except Exception as e:
         logger.error(f"Risk metrics error for user {user_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to calculate risk metrics: {str(e)}",
+            detail=f"Failed to calculate risk metrics: {str(e)}"
         ) from e
 
 
 # ============================================================================
 # TRADE HISTORY
 # ============================================================================
-
 
 @router.get("/trade-history")
 async def get_trade_history(
@@ -354,21 +355,20 @@ async def get_trade_history(
         return {
             "trades": trades,
             "count": len(trades),
-            "total_pnl": sum(t.get("realized_pnl", 0) or 0 for t in trades),
+            "total_pnl": sum(t.get('realized_pnl', 0) or 0 for t in trades)
         }
 
     except Exception as e:
         logger.error(f"Trade history error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch trade history",
+            detail="Failed to fetch trade history"
         ) from e
 
 
 # ============================================================================
 # TODAY'S TRADING STATS
 # ============================================================================
-
 
 @router.get("/today-stats")
 async def get_today_stats(
@@ -413,8 +413,7 @@ async def get_today_stats(
               AND o.filled_quantity > 0
               AND o.filled_at >= $2
             """,
-            user_id,
-            today_start,
+            user_id, today_start
         )
 
         trades_count = len(rows)
@@ -432,16 +431,17 @@ async def get_today_stats(
 
         # Calculate stats
         total_volume = sum(
-            float(row["filled_quantity"] or 0) * float(row["avg_fill_price"] or 0) for row in rows
+            float(row['filled_quantity'] or 0) * float(row['avg_fill_price'] or 0)
+            for row in rows
         )
 
         # Only count sell orders for win/loss (they have realized P&L)
-        sell_trades = [row for row in rows if row["side"] == "sell"]
+        sell_trades = [row for row in rows if row['side'] == 'sell']
 
         if sell_trades:
-            wins = sum(1 for row in sell_trades if float(row["realized_pnl"] or 0) > 0)
-            losses = sum(1 for row in sell_trades if float(row["realized_pnl"] or 0) < 0)
-            total_pnl = sum(float(row["realized_pnl"] or 0) for row in sell_trades)
+            wins = sum(1 for row in sell_trades if float(row['realized_pnl'] or 0) > 0)
+            losses = sum(1 for row in sell_trades if float(row['realized_pnl'] or 0) < 0)
+            total_pnl = sum(float(row['realized_pnl'] or 0) for row in sell_trades)
             win_rate = (wins / len(sell_trades) * 100) if sell_trades else None
             avg_pnl = total_pnl / len(sell_trades) if sell_trades else None
         else:

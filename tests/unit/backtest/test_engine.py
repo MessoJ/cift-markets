@@ -8,9 +8,7 @@ def test_backtest_positions_shifts_positions_by_default():
     returns = np.array([0.01, 0.0, 0.0])
     signal = np.array([1.0, 1.0, 1.0])
 
-    res = backtest_positions(
-        returns, signal, commission_bps=0.0, slippage_bps=0.0, shift_positions=True
-    )
+    res = backtest_positions(returns, signal, commission_bps=0.0, slippage_bps=0.0, shift_positions=True)
     # First period position must be 0 to avoid look-ahead.
     assert res.positions[0] == 0.0
     assert res.strategy_returns[0] == 0.0

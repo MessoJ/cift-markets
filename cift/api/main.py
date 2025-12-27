@@ -20,7 +20,10 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from cift.core.config import settings
-from cift.core.database import check_all_connections, initialize_all_connections
+from cift.core.database import (
+    check_all_connections,
+    initialize_all_connections,
+)
 from cift.core.limiter import limiter
 from cift.core.logging import logger
 
@@ -32,6 +35,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting CIFT Markets API...")
     logger.info(f"Environment: {settings.app_env}")
     logger.info(f"Debug mode: {settings.app_debug}")
+    logger.info(f"Frontend URL: {settings.frontend_url}")
+    logger.info(f"API Base URL: {settings.api_base_url}")
 
     # Initialize all database connections (with timeout protection)
     try:
@@ -48,7 +53,6 @@ async def lifespan(app: FastAPI):
     # Initialize execution engine (skip if databases failed)
     try:
         from cift.core.execution_engine import execution_engine
-
         await asyncio.wait_for(execution_engine.start(), timeout=3.0)
         logger.info("✅ Execution engine started")
     except Exception as e:
@@ -61,6 +65,48 @@ async def lifespan(app: FastAPI):
     try:
         from cift.api.routes.market_data import publish_price_update
 
+        # --- FINNHUB WEBSOCKET (Real-time Streaming) ---
+        if settings.finnhub_api_key:
+            try:
+                from cift.services.finnhub_realtime_service import FinnhubRealtimeService
+                finnhub_service = FinnhubRealtimeService()
+                
+                async def handle_finnhub_update(symbol, price, volume, timestamp):
+                    """Handle real-time update from Finnhub."""
+                    # Broadcast to WebSocket clients
+                    await publish_price_update(
+                        symbol=symbol,
+                        price=price,
+                        bid=price * 0.9999, # Simulated bid/ask
+                        ask=price * 1.0001
+                    )
+                    
+                    # Update Database Cache (Price/Volume only)
+                    # We don't update OHLC here as Finnhub trade updates don't have it
+                    try:
+                        from cift.core.database import get_postgres_pool
+                        pool = await get_postgres_pool()
+                        if pool:
+                            async with pool.acquire() as conn:
+                                await conn.execute("""
+                                    INSERT INTO market_data_cache (symbol, price, volume, updated_at)
+                                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                                    ON CONFLICT (symbol) DO UPDATE SET
+                                        price = EXCLUDED.price,
+                                        volume = EXCLUDED.volume,
+                                        updated_at = CURRENT_TIMESTAMP
+                                """, symbol, float(price), int(volume) if volume else 0)
+                    except Exception as e:
+                        # Don't log every DB error to avoid spam, but maybe log occasionally
+                        pass
+
+                finnhub_service.add_callback(handle_finnhub_update)
+                # Start streaming with default symbols
+                await finnhub_service.start_streaming()
+                logger.info("✅ Finnhub WebSocket started (Real-time streaming)")
+            except Exception as e:
+                logger.error(f"Failed to start Finnhub WebSocket: {e}")
+
         if use_real_data:
             # USE REAL POLYGON DATA
             from cift.services.polygon_realtime_service import PolygonRealtimeService
@@ -70,10 +116,21 @@ async def lifespan(app: FastAPI):
 
             async def fetch_and_broadcast_real_data():
                 """Fetch real market data from Polygon and broadcast."""
-                symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "AMD"]
+                # Use all default symbols
+                symbols = polygon_service.DEFAULT_SYMBOLS
+                logger.info(f"Starting real-time data fetch for {len(symbols)} symbols")
+                
                 while True:
                     try:
-                        quotes = await polygon_service.get_quotes_batch(symbols[:3])  # Rate limited
+                        # Fetch quotes for all symbols
+                        # The service handles rate limiting internally
+                        quotes = await polygon_service.get_quotes_batch(symbols)
+                        
+                        if not quotes:
+                            logger.warning("No quotes fetched from Polygon")
+                            await asyncio.sleep(60)
+                            continue
+
                         for symbol, quote in quotes.items():
                             await publish_price_update(
                                 symbol=symbol,
@@ -83,11 +140,9 @@ async def lifespan(app: FastAPI):
                             )
                             # Also update the database cache
                             from cift.core.database import get_postgres_pool
-
                             pool = await get_postgres_pool()
                             async with pool.acquire() as conn:
-                                await conn.execute(
-                                    """
+                                await conn.execute("""
                                     INSERT INTO market_data_cache (symbol, price, bid, ask, volume, change, change_pct, high, low, open)
                                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                                     ON CONFLICT (symbol) DO UPDATE SET
@@ -99,19 +154,14 @@ async def lifespan(app: FastAPI):
                                         low = EXCLUDED.low,
                                         open = EXCLUDED.open,
                                         updated_at = CURRENT_TIMESTAMP
-                                """,
-                                    symbol,
-                                    quote["price"],
-                                    quote["price"] * 0.9999,
-                                    quote["price"] * 1.0001,
-                                    quote.get("volume", 0),
-                                    quote.get("change", 0),
-                                    quote.get("change_percent", 0),
-                                    quote.get("high", quote["price"]),
-                                    quote.get("low", quote["price"]),
-                                    quote.get("open", quote["price"]),
-                                )
-                        await asyncio.sleep(60)  # Update every minute (rate limit friendly)
+                                """, symbol, quote["price"], quote["price"]*0.9999, quote["price"]*1.0001,
+                                    quote.get("volume", 0), quote.get("change", 0), quote.get("change_percent", 0),
+                                    quote.get("high", quote["price"]), quote.get("low", quote["price"]), quote.get("open", quote["price"]))
+                        
+                        # Wait before next batch
+                        # If we are on free tier, the _request method already slept a lot
+                        # If we are on paid tier, we can update more frequently
+                        await asyncio.sleep(15) 
                     except asyncio.CancelledError:
                         break
                     except Exception as e:
@@ -141,7 +191,6 @@ async def lifespan(app: FastAPI):
     # Start background tasks (KYC processing, portfolio snapshots, etc.)
     try:
         from cift.core.scheduler import setup_background_tasks
-
         await setup_background_tasks()
     except Exception as e:
         logger.warning(f"⚠️ Background tasks setup failed: {e}")
@@ -163,7 +212,6 @@ async def lifespan(app: FastAPI):
                 pass
             if not use_real_data:
                 from cift.core.market_simulator import simulator
-
                 simulator.stop()
             logger.info("Market data source stopped")
         except Exception as e:
@@ -172,12 +220,9 @@ async def lifespan(app: FastAPI):
     # Shutdown background tasks
     try:
         from cift.core.scheduler import stop_scheduler
-
         stop_scheduler()
     except Exception as e:
         logger.warning(f"⚠️ Failed to stop background tasks: {e}")
-
-
 app = FastAPI(
     title="CIFT Markets API",
     description="Computational Intelligence for Financial Trading - Production API",
@@ -200,10 +245,14 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
+        "http://localhost:3000", 
+        "http://localhost:3001", 
         "http://localhost:3002",
-    ],  # Frontend URLs
+        settings.frontend_url,  # Add configured frontend URL
+        "http://20.250.40.67:3000", # Explicitly add remote IP just in case
+        "http://20.250.40.67",      # Add remote IP without port
+        "https://20.250.40.67",     # Add https just in case
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -232,7 +281,6 @@ if settings.app_env == "production":
 # ============================================================================
 # ROUTES
 # ============================================================================
-
 
 @app.get("/")
 async def root():
@@ -264,14 +312,17 @@ async def readiness_check():
 
     # Determine if system is ready (all critical services must be healthy)
     critical_services = ["postgres", "questdb", "redis"]
-    is_ready = all(connection_status.get(service) == "healthy" for service in critical_services)
+    is_ready = all(
+        connection_status.get(service) == "healthy"
+        for service in critical_services
+    )
 
     # TODO: Add Kafka health check when implemented
     # TODO: Add ML model status check when implemented
 
     return {
         "ready": is_ready,
-        "timestamp": logger._core.clock.now().isoformat() if hasattr(logger, "_core") else None,
+        "timestamp": logger._core.clock.now().isoformat() if hasattr(logger, '_core') else None,
         "checks": {
             "postgres": connection_status.get("postgres", "unknown"),
             "questdb": connection_status.get("questdb", "unknown"),
@@ -328,7 +379,6 @@ from cift.api.routes import (  # noqa: E402
 
 try:
     from cift.api.routes import settings as settings_routes
-
     SETTINGS_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Settings routes not available: {e}")
@@ -353,7 +403,6 @@ app.include_router(price_alerts.router, prefix="/api/v1")
 # Company data routes (fundamentals, earnings, patterns)
 try:
     from cift.api.routes import company_data
-
     app.include_router(company_data.router, prefix="/api/v1")
     logger.info("Company data routes loaded")
 except ImportError as e:
@@ -390,7 +439,6 @@ except Exception as e:
 # Real-time streaming routes (SSE)
 try:
     from cift.api.routes import stream
-
     app.include_router(stream.router, prefix="/api/v1")
     logger.info("Real-time streaming routes loaded")
 except ImportError as e:
@@ -402,7 +450,6 @@ if SETTINGS_AVAILABLE:
 # ML Inference routes (Phase 8 - ML Implementation)
 try:
     from cift.api.routes import inference
-
     app.include_router(inference.router)  # Already has /api/v1 prefix
     logger.info("ML Inference routes loaded")
 except ImportError as e:

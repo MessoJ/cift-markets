@@ -21,10 +21,8 @@ router = APIRouter(prefix="/chart-templates", tags=["Chart Templates"])
 # MODELS
 # ============================================================================
 
-
 class ChartTemplateConfig(BaseModel):
     """Chart configuration structure"""
-
     symbol: str
     timeframe: str
     chartType: str = "candlestick"
@@ -37,7 +35,6 @@ class ChartTemplateConfig(BaseModel):
 
 class ChartTemplateCreate(BaseModel):
     """Request model for creating chart template"""
-
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
     config: ChartTemplateConfig
@@ -46,7 +43,6 @@ class ChartTemplateCreate(BaseModel):
 
 class ChartTemplateUpdate(BaseModel):
     """Request model for updating chart template"""
-
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = None
     config: ChartTemplateConfig | None = None
@@ -55,7 +51,6 @@ class ChartTemplateUpdate(BaseModel):
 
 class ChartTemplateResponse(BaseModel):
     """Response model for chart template"""
-
     id: str
     user_id: str
     name: str
@@ -70,9 +65,10 @@ class ChartTemplateResponse(BaseModel):
 # ROUTES
 # ============================================================================
 
-
 @router.get("", response_model=list[ChartTemplateResponse])
-async def get_templates(user_id: UUID = Depends(get_current_user_id)):
+async def get_templates(
+    user_id: UUID = Depends(get_current_user_id)
+):
     """
     Get all chart templates for the authenticated user.
     """
@@ -90,21 +86,24 @@ async def get_templates(user_id: UUID = Depends(get_current_user_id)):
 
         return [
             ChartTemplateResponse(
-                id=str(row["id"]),
-                user_id=str(row["user_id"]),
-                name=row["name"],
-                description=row["description"],
-                config=row["config"],
-                is_default=row["is_default"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
+                id=str(row['id']),
+                user_id=str(row['user_id']),
+                name=row['name'],
+                description=row['description'],
+                config=row['config'],
+                is_default=row['is_default'],
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
             )
             for row in rows
         ]
 
 
 @router.get("/{template_id}", response_model=ChartTemplateResponse)
-async def get_template(template_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+async def get_template(
+    template_id: UUID,
+    user_id: UUID = Depends(get_current_user_id)
+):
     """
     Get a specific chart template by ID.
     """
@@ -123,20 +122,21 @@ async def get_template(template_id: UUID, user_id: UUID = Depends(get_current_us
             raise HTTPException(status_code=404, detail="Template not found")
 
         return ChartTemplateResponse(
-            id=str(row["id"]),
-            user_id=str(row["user_id"]),
-            name=row["name"],
-            description=row["description"],
-            config=row["config"],
-            is_default=row["is_default"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
+            id=str(row['id']),
+            user_id=str(row['user_id']),
+            name=row['name'],
+            description=row['description'],
+            config=row['config'],
+            is_default=row['is_default'],
+            created_at=row['created_at'],
+            updated_at=row['updated_at']
         )
 
 
 @router.post("", response_model=ChartTemplateResponse, status_code=201)
 async def create_template(
-    template: ChartTemplateCreate, user_id: UUID = Depends(get_current_user_id)
+    template: ChartTemplateCreate,
+    user_id: UUID = Depends(get_current_user_id)
 ):
     """
     Create a new chart template.
@@ -147,7 +147,8 @@ async def create_template(
     async with pool.acquire() as conn:
         if template.is_default:
             await conn.execute(
-                "UPDATE chart_templates SET is_default = false WHERE user_id = $1", user_id
+                "UPDATE chart_templates SET is_default = false WHERE user_id = $1",
+                user_id
             )
 
         query = """
@@ -163,34 +164,32 @@ async def create_template(
                 template.name,
                 template.description,
                 template.config.dict(),
-                template.is_default,
+                template.is_default
             )
 
             logger.info(f"Created chart template: {template.name} for user {user_id}")
 
             return ChartTemplateResponse(
-                id=str(row["id"]),
-                user_id=str(row["user_id"]),
-                name=row["name"],
-                description=row["description"],
-                config=row["config"],
-                is_default=row["is_default"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
+                id=str(row['id']),
+                user_id=str(row['user_id']),
+                name=row['name'],
+                description=row['description'],
+                config=row['config'],
+                is_default=row['is_default'],
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
             )
         except Exception as e:
             if "unique_user_template_name" in str(e):
                 raise HTTPException(status_code=400, detail="Template name already exists") from e
-            raise HTTPException(
-                status_code=500, detail=f"Failed to create template: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Failed to create template: {str(e)}") from e
 
 
 @router.patch("/{template_id}", response_model=ChartTemplateResponse)
 async def update_template(
     template_id: UUID,
     template_update: ChartTemplateUpdate,
-    user_id: UUID = Depends(get_current_user_id),
+    user_id: UUID = Depends(get_current_user_id)
 ):
     """
     Update an existing chart template.
@@ -200,7 +199,8 @@ async def update_template(
     async with pool.acquire() as conn:
         # Check if template exists and belongs to user
         existing = await conn.fetchrow(
-            "SELECT id FROM chart_templates WHERE id = $1 AND user_id = $2", template_id, user_id
+            "SELECT id FROM chart_templates WHERE id = $1 AND user_id = $2",
+            template_id, user_id
         )
 
         if not existing:
@@ -210,8 +210,7 @@ async def update_template(
         if template_update.is_default:
             await conn.execute(
                 "UPDATE chart_templates SET is_default = false WHERE user_id = $1 AND id != $2",
-                user_id,
-                template_id,
+                user_id, template_id
             )
 
         # Build dynamic update query
@@ -255,25 +254,26 @@ async def update_template(
             logger.info(f"Updated chart template: {template_id} for user {user_id}")
 
             return ChartTemplateResponse(
-                id=str(row["id"]),
-                user_id=str(row["user_id"]),
-                name=row["name"],
-                description=row["description"],
-                config=row["config"],
-                is_default=row["is_default"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
+                id=str(row['id']),
+                user_id=str(row['user_id']),
+                name=row['name'],
+                description=row['description'],
+                config=row['config'],
+                is_default=row['is_default'],
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
             )
         except Exception as e:
             if "unique_user_template_name" in str(e):
                 raise HTTPException(status_code=400, detail="Template name already exists") from e
-            raise HTTPException(
-                status_code=500, detail=f"Failed to update template: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Failed to update template: {str(e)}") from e
 
 
 @router.delete("/{template_id}")
-async def delete_template(template_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+async def delete_template(
+    template_id: UUID,
+    user_id: UUID = Depends(get_current_user_id)
+):
     """
     Delete a chart template.
     """
@@ -281,7 +281,8 @@ async def delete_template(template_id: UUID, user_id: UUID = Depends(get_current
 
     async with pool.acquire() as conn:
         result = await conn.execute(
-            "DELETE FROM chart_templates WHERE id = $1 AND user_id = $2", template_id, user_id
+            "DELETE FROM chart_templates WHERE id = $1 AND user_id = $2",
+            template_id, user_id
         )
 
         if result == "DELETE 0":
@@ -293,7 +294,9 @@ async def delete_template(template_id: UUID, user_id: UUID = Depends(get_current
 
 
 @router.get("/default/get", response_model=ChartTemplateResponse | None)
-async def get_default_template(user_id: UUID = Depends(get_current_user_id)):
+async def get_default_template(
+    user_id: UUID = Depends(get_current_user_id)
+):
     """
     Get the user's default chart template.
     """
@@ -313,12 +316,12 @@ async def get_default_template(user_id: UUID = Depends(get_current_user_id)):
             return None
 
         return ChartTemplateResponse(
-            id=str(row["id"]),
-            user_id=str(row["user_id"]),
-            name=row["name"],
-            description=row["description"],
-            config=row["config"],
-            is_default=row["is_default"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
+            id=str(row['id']),
+            user_id=str(row['user_id']),
+            name=row['name'],
+            description=row['description'],
+            config=row['config'],
+            is_default=row['is_default'],
+            created_at=row['created_at'],
+            updated_at=row['updated_at']
         )

@@ -10,7 +10,11 @@ import polars as pl
 from cift.backtest.engine import backtest_positions
 from cift.metrics.performance import deflated_sharpe_ratio, prob_sharpe_ratio
 from cift.ml.evaluation.splits import PurgedKFold, build_forward_return_events
-from cift.ml.features import frac_diff_ffd, get_microstructure_features, get_technical_features
+from cift.ml.features import (
+    frac_diff_ffd,
+    get_microstructure_features,
+    get_technical_features,
+)
 from cift.ml.labeling import (
     apply_meta_model_sizing,
     compute_sample_weights,
@@ -46,7 +50,7 @@ def _sample_skew(values: np.ndarray) -> float:
     m3 = float(np.mean((x - mu) ** 3))
     if not np.isfinite(m3):
         return 0.0
-    return float(m3 / (m2**1.5))
+    return float(m3 / (m2 ** 1.5))
 
 
 def _sample_kurtosis_pearson(values: np.ndarray) -> float:
@@ -106,20 +110,16 @@ def _build_features(
     # Optional: Volatility features (rolling std of returns)
     if use_vol_features:
         vol_col_name = f"vol_{vol_window}"
-        df = df.with_columns(
-            [pl.col("returns").rolling_std(window_size=vol_window).shift(1).alias(vol_col_name)]
-        )
+        df = df.with_columns([
+            pl.col("returns").rolling_std(window_size=vol_window).shift(1).alias(vol_col_name)
+        ])
         feature_cols.append(vol_col_name)
 
         # Volatility momentum (change in volatility)
         vol_mom_name = f"vol_mom_{vol_window}"
-        df = df.with_columns(
-            [
-                (pl.col(vol_col_name) / pl.col(vol_col_name).shift(vol_window) - 1.0).alias(
-                    vol_mom_name
-                )
-            ]
-        )
+        df = df.with_columns([
+            (pl.col(vol_col_name) / pl.col(vol_col_name).shift(vol_window) - 1.0).alias(vol_mom_name)
+        ])
         feature_cols.append(vol_mom_name)
 
     # Optional: Technical Analysis features (RSI, MACD, BB, ATR, MFI)
@@ -129,16 +129,7 @@ def _build_features(
         if all(c in df.columns for c in req_cols):
             df = get_technical_features(df)
             # Add the new columns to feature_cols
-            ta_cols = [
-                "rsi_14",
-                "macd_line",
-                "macd_signal",
-                "macd_hist",
-                "bb_width",
-                "bb_pct",
-                "atr_14",
-                "mfi_14",
-            ]
+            ta_cols = ["rsi_14", "macd_line", "macd_signal", "macd_hist", "bb_width", "bb_pct", "atr_14", "mfi_14"]
             feature_cols.extend(ta_cols)
 
             # Shift TA features by 1 to avoid lookahead bias (calculated on close)
@@ -223,7 +214,7 @@ def _fit_predict_xgboost(
     if tune:
         # Simple 80/20 split for validation
         split_idx = int(len(X_train) * 0.8)
-        if split_idx > 10:  # Only tune if enough data
+        if split_idx > 10: # Only tune if enough data
             X_tr, X_val = X_train[:split_idx], X_train[split_idx:]
             y_tr, y_val = y_train[:split_idx], y_train[split_idx:]
             w_tr = sample_weight[:split_idx] if sample_weight is not None else None
@@ -258,14 +249,17 @@ def _fit_predict_xgboost(
                     eval_metric="logloss",
                     verbosity=0,
                     random_state=42,
-                    n_jobs=1,  # Avoid thread contention in parallel folds
+                    n_jobs=1, # Avoid thread contention in parallel folds
                     early_stopping_rounds=10,
                     **params,
                 )
 
                 try:
                     clf.fit(
-                        X_tr, y_tr, sample_weight=w_tr, eval_set=[(X_val, y_val)], verbose=False
+                        X_tr, y_tr,
+                        sample_weight=w_tr,
+                        eval_set=[(X_val, y_val)],
+                        verbose=False
                     )
 
                     val_proba = clf.predict_proba(X_val)[:, 1]
@@ -275,7 +269,7 @@ def _fit_predict_xgboost(
                         best_score = score
                         best_params = params
                         if hasattr(clf, "best_iteration"):
-                            best_params["n_estimators"] = clf.best_iteration + 10
+                             best_params["n_estimators"] = clf.best_iteration + 10
                 except Exception:
                     continue
 
@@ -283,13 +277,7 @@ def _fit_predict_xgboost(
             max_depth = best_params["max_depth"]
             n_estimators = best_params["n_estimators"]
             learning_rate = best_params["learning_rate"]
-            kwargs.update(
-                {
-                    k: v
-                    for k, v in best_params.items()
-                    if k not in ["max_depth", "n_estimators", "learning_rate"]
-                }
-            )
+            kwargs.update({k: v for k, v in best_params.items() if k not in ["max_depth", "n_estimators", "learning_rate"]})
 
             # If tuning happened, we should probably use early stopping for the final fit too
             if early_stopping_rounds is None:
@@ -316,9 +304,14 @@ def _fit_predict_xgboost(
             verbosity=0,
             random_state=42,
             early_stopping_rounds=early_stopping_rounds,
-            **kwargs,
+            **kwargs
         )
-        clf.fit(X_tr, y_tr, sample_weight=w_tr, eval_set=eval_set, verbose=False)
+        clf.fit(
+            X_tr, y_tr,
+            sample_weight=w_tr,
+            eval_set=eval_set,
+            verbose=False
+        )
     else:
         clf = xgb.XGBClassifier(
             max_depth=int(max_depth),
@@ -328,7 +321,7 @@ def _fit_predict_xgboost(
             eval_metric="logloss",
             verbosity=0,
             random_state=42,
-            **kwargs,
+            **kwargs
         )
         clf.fit(X_train, y_train, sample_weight=sample_weight)
 
@@ -516,11 +509,9 @@ def run_walkforward(
 
     # Create volatility column for triple barrier (rolling std of returns)
     tb_vol_window = max(20, horizon_bars * 2)
-    df = df.with_columns(
-        [
-            pl.col("returns").rolling_std(window_size=tb_vol_window).alias("volatility"),
-        ]
-    )
+    df = df.with_columns([
+        pl.col("returns").rolling_std(window_size=tb_vol_window).alias("volatility"),
+    ])
     df = df.drop_nulls(["volatility"])
 
     # Labeling: Triple Barrier or Fixed Horizon
@@ -535,20 +526,14 @@ def run_walkforward(
             min_ret=float(tb_min_ret),
         )
         # Use barrier_return as the forward return for label computation
-        df = df.with_columns(
-            [
-                pl.col("barrier_return").alias("fwd_return"),
-            ]
-        )
+        df = df.with_columns([
+            pl.col("barrier_return").alias("fwd_return"),
+        ])
     else:
         # Fixed horizon forward return label (shift -horizon)
-        df = df.with_columns(
-            [
-                (pl.col(close_col).shift(-horizon_bars) / pl.col(close_col) - 1.0).alias(
-                    "fwd_return"
-                ),
-            ]
-        )
+        df = df.with_columns([
+            (pl.col(close_col).shift(-horizon_bars) / pl.col(close_col) - 1.0).alias("fwd_return"),
+        ])
     # Do not drop null fwd_return yet: we need returns/features for holdout backtesting.
 
     model_norm = str(model).strip().lower()
@@ -557,21 +542,17 @@ def run_walkforward(
 
     feature_cols: list[str] = []
     if model_norm == "baseline":
-        df = df.with_columns(
-            [
-                pl.col("returns").rolling_mean(window_size=max(2, horizon_bars)).alias("ret_mean"),
-            ]
-        )
-        df = df.with_columns(
-            [
-                pl.when(pl.col("ret_mean") > threshold)
-                .then(1.0)
-                .when(pl.col("ret_mean") < -threshold)
-                .then(-1.0)
-                .otherwise(0.0)
-                .alias("signal"),
-            ]
-        )
+        df = df.with_columns([
+            pl.col("returns").rolling_mean(window_size=max(2, horizon_bars)).alias("ret_mean"),
+        ])
+        df = df.with_columns([
+            pl.when(pl.col("ret_mean") > threshold)
+            .then(1.0)
+            .when(pl.col("ret_mean") < -threshold)
+            .then(-1.0)
+            .otherwise(0.0)
+            .alias("signal"),
+        ])
     else:
         df, feature_cols = _build_features(
             df,
@@ -631,9 +612,7 @@ def run_walkforward(
     train_universe = np.arange(safe_train_end)
     train_universe = train_universe[label_ok[:safe_train_end]]
 
-    holdout_universe = (
-        np.arange(split_idx, len(df)) if holdout_bars_i > 0 else np.array([], dtype=int)
-    )
+    holdout_universe = np.arange(split_idx, len(df)) if holdout_bars_i > 0 else np.array([], dtype=int)
     # Treat each bar as 1 unit; horizon and embargo expressed in bars.
     bar_index = np.arange(len(df), dtype=np.float64)
     events = build_forward_return_events(bar_index, horizon=float(horizon_bars))
@@ -672,27 +651,18 @@ def run_walkforward(
             for thr in thr_values:
                 fold_sharpes: list[float] = []
                 # Inner CV uses only train_universe.
-                for inner_train_pos, inner_test_pos in inner_splitter.split(
-                    eval_positions, eval_events
-                ):
+                for inner_train_pos, inner_test_pos in inner_splitter.split(eval_positions, eval_events):
                     inner_train_idx = eval_indices[inner_train_pos]
                     inner_test_idx = eval_indices[inner_test_pos]
 
                     X_train = X_all[inner_train_idx]
                     y_train = y_all[inner_train_idx]
                     X_test = X_all[inner_test_idx]
-                    inner_weights = (
-                        sample_weights_all[inner_train_idx]
-                        if sample_weights_all is not None
-                        else None
-                    )
+                    inner_weights = sample_weights_all[inner_train_idx] if sample_weights_all is not None else None
 
                     proba = _fit_predict_logreg(
-                        X_train=X_train,
-                        y_train=y_train,
-                        X_test=X_test,
-                        C=float(C),
-                        sample_weight=inner_weights,
+                        X_train=X_train, y_train=y_train, X_test=X_test, C=float(C),
+                        sample_weight=inner_weights
                     )
                     pos = _signal_from_proba(proba, threshold=float(thr))
                     rets = returns_all[inner_test_idx]
@@ -721,9 +691,7 @@ def run_walkforward(
     all_cv_returns: list[float] = []
     all_cv_positions: list[float] = []
 
-    for fold, (train_pos, test_pos) in enumerate(
-        splitter.split(eval_positions, eval_events), start=1
-    ):
+    for fold, (train_pos, test_pos) in enumerate(splitter.split(eval_positions, eval_events), start=1):
         train_idx = eval_indices[train_pos]
         test_idx = eval_indices[test_pos]
 
@@ -756,9 +724,7 @@ def run_walkforward(
                     C=float(selected_C),
                     sample_weight=train_weights,
                 )
-                train_primary_side = _signal_from_proba(
-                    train_proba, threshold=float(selected_threshold)
-                )
+                train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_idx]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
 
@@ -809,9 +775,7 @@ def run_walkforward(
                     sample_weight=train_weights,
                     tune=tune_model,
                 )
-                train_primary_side = _signal_from_proba(
-                    train_proba, threshold=float(selected_threshold)
-                )
+                train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_idx]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
 
@@ -908,9 +872,7 @@ def run_walkforward(
                 raise ValueError("Not enough training data before holdout")
 
             # Get sample weights for train universe
-            holdout_train_weights = (
-                sample_weights_all[train_universe] if sample_weights_all is not None else None
-            )
+            holdout_train_weights = sample_weights_all[train_universe] if sample_weights_all is not None else None
 
             proba = _fit_predict_logreg(
                 X_train=X_all[train_universe],
@@ -919,9 +881,7 @@ def run_walkforward(
                 C=float(selected_C),
                 sample_weight=holdout_train_weights,
             )
-            primary_holdout_positions = _signal_from_proba(
-                proba, threshold=float(selected_threshold)
-            )
+            primary_holdout_positions = _signal_from_proba(proba, threshold=float(selected_threshold))
 
             if use_meta_labeling:
                 # Create meta-labels from train data
@@ -932,9 +892,7 @@ def run_walkforward(
                     C=float(selected_C),
                     sample_weight=holdout_train_weights,
                 )
-                train_primary_side = _signal_from_proba(
-                    train_proba, threshold=float(selected_threshold)
-                )
+                train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_universe]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
 
@@ -962,9 +920,7 @@ def run_walkforward(
                 raise ValueError("Not enough training data before holdout")
 
             # Sample weights for xgboost holdout
-            holdout_train_weights_xgb = (
-                sample_weights_all[train_universe] if sample_weights_all is not None else None
-            )
+            holdout_train_weights_xgb = sample_weights_all[train_universe] if sample_weights_all is not None else None
 
             proba = _fit_predict_xgboost(
                 X_train=X_all[train_universe],
@@ -973,9 +929,7 @@ def run_walkforward(
                 sample_weight=holdout_train_weights_xgb,
                 tune=tune_model,
             )
-            primary_holdout_positions = _signal_from_proba(
-                proba, threshold=float(selected_threshold)
-            )
+            primary_holdout_positions = _signal_from_proba(proba, threshold=float(selected_threshold))
 
             if use_meta_labeling:
                 train_proba = _fit_predict_xgboost(
@@ -985,9 +939,7 @@ def run_walkforward(
                     sample_weight=holdout_train_weights_xgb,
                     tune=tune_model,
                 )
-                train_primary_side = _signal_from_proba(
-                    train_proba, threshold=float(selected_threshold)
-                )
+                train_primary_side = _signal_from_proba(train_proba, threshold=float(selected_threshold))
                 train_actual_rets = returns_all[train_universe]
                 meta_labels_train = get_meta_labels(train_primary_side, train_actual_rets)
 
