@@ -58,18 +58,12 @@ export default function AnalyticsPage() {
       setAnalytics(analyticsData);
       
       // Transform equity curve data for chart
-      // Simulate a benchmark (SPY) if not provided, just for visualization
-      const startValue = equityCurveData[0]?.value || 100000;
-      const transformedEquity = equityCurveData.map((point: any, i: number) => {
-        // Simple mock benchmark: 8% annual growth with some noise
-        const days = i;
-        const benchmarkReturn = Math.pow(1.08, days / 365) - 1;
-        const noise = Math.sin(days / 20) * 0.02;
-        
+      // Note: Real benchmark data should come from backend API
+      const transformedEquity = equityCurveData.map((point: any) => {
         return {
           timestamp: new Date(point.timestamp).getTime(),
           value: point.value,
-          benchmark: startValue * (1 + benchmarkReturn + noise), 
+          benchmark: point.benchmark || null, // Use real benchmark from API if available
         };
       });
       
@@ -359,7 +353,7 @@ export default function AnalyticsPage() {
               <div class="flex justify-between items-center p-3 bg-terminal-800/50 rounded-lg">
                 <span class="text-xs text-gray-400">Beta (vs SPY)</span>
                 <span class="text-sm font-mono font-bold text-white">
-                  {analytics()?.beta?.toFixed(2) || '0.85'}
+                  {analytics()?.beta?.toFixed(2) || 'N/A'}
                 </span>
               </div>
               <div class="flex justify-between items-center p-3 bg-terminal-800/50 rounded-lg">
