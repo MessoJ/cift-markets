@@ -32,28 +32,36 @@ interface SymbolSearchProps {
   className?: string;
 }
 
-// Mock search results - in production, this would call an API
-const mockSearch = async (query: string): Promise<SearchResult[]> => {
+import { apiClient } from '~/lib/api/client';
+
+// Real search using API
+const searchSymbols = async (query: string): Promise<SearchResult[]> => {
   if (!query || query.length < 1) return [];
   
-  const allSymbols: SearchResult[] = [
-    { symbol: 'AAPL', name: 'Apple Inc.', exchange: 'NASDAQ', type: 'stock', price: 178.50, change: 2.30, changePercent: 1.31 },
-    { symbol: 'MSFT', name: 'Microsoft Corporation', exchange: 'NASDAQ', type: 'stock', price: 378.20, change: -1.50, changePercent: -0.40 },
-    { symbol: 'GOOGL', name: 'Alphabet Inc.', exchange: 'NASDAQ', type: 'stock', price: 141.80, change: 0.90, changePercent: 0.64 },
-    { symbol: 'AMZN', name: 'Amazon.com Inc.', exchange: 'NASDAQ', type: 'stock', price: 178.25, change: 3.20, changePercent: 1.83 },
-    { symbol: 'TSLA', name: 'Tesla Inc.', exchange: 'NASDAQ', type: 'stock', price: 248.50, change: -5.30, changePercent: -2.09 },
-    { symbol: 'META', name: 'Meta Platforms Inc.', exchange: 'NASDAQ', type: 'stock', price: 505.75, change: 8.40, changePercent: 1.69 },
-    { symbol: 'NVDA', name: 'NVIDIA Corporation', exchange: 'NASDAQ', type: 'stock', price: 875.30, change: 15.20, changePercent: 1.77 },
-    { symbol: 'SPY', name: 'SPDR S&P 500 ETF', exchange: 'NYSE', type: 'etf', price: 502.40, change: 1.80, changePercent: 0.36 },
-    { symbol: 'QQQ', name: 'Invesco QQQ Trust', exchange: 'NASDAQ', type: 'etf', price: 432.15, change: 2.50, changePercent: 0.58 },
-    { symbol: 'BTC-USD', name: 'Bitcoin USD', exchange: 'CRYPTO', type: 'crypto', price: 98500, change: 1200, changePercent: 1.23 },
-    { symbol: 'ETH-USD', name: 'Ethereum USD', exchange: 'CRYPTO', type: 'crypto', price: 3450, change: -50, changePercent: -1.43 },
-  ];
-  
-  const q = query.toUpperCase();
-  return allSymbols.filter(s => 
-    s.symbol.includes(q) || s.name.toUpperCase().includes(q)
-  ).slice(0, 8);
+  try {
+    const response = await apiClient.get('/search', { 
+      params: { 
+        q: query, 
+        types: 'symbol',
+        limit: 8 
+      } 
+    });
+    
+    if (!response || !response.results) return [];
+
+    return response.results.map((r: any) => ({
+      symbol: r.id,
+      name: r.metadata?.name || r.subtitle || r.id,
+      exchange: r.metadata?.exchange || 'US',
+      type: r.metadata?.type || 'stock',
+      price: r.metadata?.price || 0,
+      change: r.metadata?.change || 0,
+      changePercent: r.metadata?.change_pct || 0
+    }));
+  } catch (error) {
+    console.error('Symbol search failed:', error);
+    return [];
+  }
 };
 
 export function SymbolSearch(props: SymbolSearchProps) {
@@ -82,7 +90,7 @@ export function SymbolSearch(props: SymbolSearchProps) {
     searchTimeout = setTimeout(async () => {
       setLoading(true);
       try {
-        const searchFn = props.onSearch || mockSearch;
+        const searchFn = props.onSearch || searchSymbols;
         const searchResults = await searchFn(q);
         setResults(searchResults);
         setActiveIndex(-1);

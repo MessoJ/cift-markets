@@ -101,39 +101,50 @@ async def global_search(
             # ================================================================
             if 'symbol' in search_types:
                 try:
+                    # Search in market_data_cache and join with symbols for metadata
                     symbol_rows = await conn.fetch(
                         """
-                        SELECT DISTINCT ON (symbol)
-                            symbol,
-                            price,
-                            change,
-                            change_pct,
-                            volume,
-                            timestamp
-                        FROM market_data
-                        WHERE symbol ILIKE $1
-                        ORDER BY symbol, timestamp DESC
-                        LIMIT $2
+                        SELECT 
+                            m.symbol,
+                            m.price,
+                            m.change,
+                            m.change_pct,
+                            m.volume,
+                            s.name,
+                            s.asset_type,
+                            s.exchange
+                        FROM market_data_cache m
+                        LEFT JOIN symbols s ON m.symbol = s.symbol
+                        WHERE m.symbol ILIKE $1 OR s.name ILIKE $1
+                        ORDER BY 
+                            CASE WHEN m.symbol = $2 THEN 0 ELSE 1 END,
+                            m.volume DESC NULLS LAST
+                        LIMIT $3
                         """,
                         query_pattern,
+                        query_upper,
                         limit
                     )
 
                     for row in symbol_rows:
                         change_indicator = "🟢" if row['change'] and row['change'] > 0 else "🔴" if row['change'] and row['change'] < 0 else "⚪"
+                        name = row['name'] or row['symbol']
                         results.append(SearchResult(
                             id=row['symbol'],
                             type='symbol',
                             title=row['symbol'],
-                            subtitle=f"${row['price']:.2f}" if row['price'] else "N/A",
-                            description=f"{change_indicator} {row['change_pct']:.2f}% • Vol: {row['volume']:,}" if row['change_pct'] and row['volume'] else None,
+                            subtitle=name,
+                            description=f"${row['price']:.2f} • {change_indicator} {row['change_pct']:.2f}%" if row['price'] else "Price N/A",
                             link=f"/trading?symbol={row['symbol']}",
                             icon="📈",
                             metadata={
                                 'price': float(row['price']) if row['price'] else None,
                                 'change': float(row['change']) if row['change'] else None,
                                 'change_pct': float(row['change_pct']) if row['change_pct'] else None,
-                                'volume': row['volume']
+                                'volume': row['volume'],
+                                'name': name,
+                                'type': row['asset_type'] or 'stock',
+                                'exchange': row['exchange']
                             },
                             relevance_score=100.0 if row['symbol'] == query_upper else 80.0
                         ))
