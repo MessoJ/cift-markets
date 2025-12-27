@@ -837,62 +837,64 @@ export default function AnalysisPage() {
               />
               
               {/* Factor Analysis Sections (Expandable) */}
-              <div class="space-y-3">
+              <div class="space-y-4">
                 <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                   <PieChart class="h-4 w-4" />
                   Detailed Analysis
                   <span class="text-xs font-normal text-slate-500">(Click to expand)</span>
                 </h3>
                 
-                <ExpandableAnalysisSection
-                  type="technical"
-                  score={data().technical?.score ?? 50}
-                  signal={data().technical?.signal ?? 'NEUTRAL'}
-                  data={data().technical}
-                  isExpanded={expandedSections().has('technical')}
-                  onToggle={() => toggleSection('technical')}
-                  symbol={data().symbol}
-                />
-                
-                <ExpandableAnalysisSection
-                  type="fundamental"
-                  score={data().fundamental?.score ?? 50}
-                  signal={data().fundamental?.signal ?? 'NEUTRAL'}
-                  data={data().fundamental}
-                  isExpanded={expandedSections().has('fundamental')}
-                  onToggle={() => toggleSection('fundamental')}
-                  symbol={data().symbol}
-                />
-                
-                <ExpandableAnalysisSection
-                  type="sentiment"
-                  score={data().sentiment?.score ?? 50}
-                  signal={data().sentiment?.signal ?? 'NEUTRAL'}
-                  data={data().sentiment}
-                  isExpanded={expandedSections().has('sentiment')}
-                  onToggle={() => toggleSection('sentiment')}
-                  symbol={data().symbol}
-                />
-                
-                <ExpandableAnalysisSection
-                  type="momentum"
-                  score={data().momentum?.score ?? 50}
-                  signal={data().momentum?.signal ?? 'NEUTRAL'}
-                  data={data().momentum}
-                  isExpanded={expandedSections().has('momentum')}
-                  onToggle={() => toggleSection('momentum')}
-                  symbol={data().symbol}
-                />
-                
-                <ExpandableAnalysisSection
-                  type="risk"
-                  score={100 - (data().risk?.score ?? 50)}
-                  signal={data().risk?.risk_level === 'low' ? 'BULLISH' : data().risk?.risk_level === 'high' ? 'BEARISH' : 'NEUTRAL'}
-                  data={data().risk}
-                  isExpanded={expandedSections().has('risk')}
-                  onToggle={() => toggleSection('risk')}
-                  symbol={data().symbol}
-                />
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <ExpandableAnalysisSection
+                    type="technical"
+                    score={data().technical?.score ?? 50}
+                    signal={data().technical?.signal ?? 'NEUTRAL'}
+                    data={data().technical}
+                    isExpanded={expandedSections().has('technical')}
+                    onToggle={() => toggleSection('technical')}
+                    symbol={data().symbol}
+                  />
+                  
+                  <ExpandableAnalysisSection
+                    type="fundamental"
+                    score={data().fundamental?.score ?? 50}
+                    signal={data().fundamental?.signal ?? 'NEUTRAL'}
+                    data={data().fundamental}
+                    isExpanded={expandedSections().has('fundamental')}
+                    onToggle={() => toggleSection('fundamental')}
+                    symbol={data().symbol}
+                  />
+                  
+                  <ExpandableAnalysisSection
+                    type="sentiment"
+                    score={data().sentiment?.score ?? 50}
+                    signal={data().sentiment?.signal ?? 'NEUTRAL'}
+                    data={data().sentiment}
+                    isExpanded={expandedSections().has('sentiment')}
+                    onToggle={() => toggleSection('sentiment')}
+                    symbol={data().symbol}
+                  />
+                  
+                  <ExpandableAnalysisSection
+                    type="momentum"
+                    score={data().momentum?.score ?? 50}
+                    signal={data().momentum?.signal ?? 'NEUTRAL'}
+                    data={data().momentum}
+                    isExpanded={expandedSections().has('momentum')}
+                    onToggle={() => toggleSection('momentum')}
+                    symbol={data().symbol}
+                  />
+                  
+                  <ExpandableAnalysisSection
+                    type="risk"
+                    score={100 - (data().risk?.score ?? 50)}
+                    signal={data().risk?.risk_level === 'low' ? 'BULLISH' : data().risk?.risk_level === 'high' ? 'BEARISH' : 'NEUTRAL'}
+                    data={data().risk}
+                    isExpanded={expandedSections().has('risk')}
+                    onToggle={() => toggleSection('risk')}
+                    symbol={data().symbol}
+                  />
+                </div>
               </div>
               
               {/* Trade Setup (if available) */}

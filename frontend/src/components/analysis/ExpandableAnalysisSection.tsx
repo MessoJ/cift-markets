@@ -154,38 +154,31 @@ export function ExpandableAnalysisSection(props: ExpandableAnalysisSectionProps)
   const Icon = config().icon;
 
   return (
-    <div class={`bg-slate-950 border ${props.isExpanded ? config().border : 'border-slate-800'} rounded-xl overflow-hidden transition-all duration-300`}>
-      {/* Header - Always Visible */}
+    <div class={`bg-slate-950 border ${props.isExpanded ? config().border : 'border-slate-800'} rounded-xl overflow-hidden transition-all duration-300 h-full`}>
+      {/* Header - Vertical Layout for Grid */}
       <button
         onClick={props.onToggle}
-        class={`w-full p-4 flex items-center justify-between hover:bg-slate-900 transition-colors ${props.isExpanded ? `bg-gradient-to-r ${config().gradient}` : ''}`}
+        class={`w-full p-4 flex flex-col items-center justify-center gap-3 hover:bg-slate-900 transition-colors ${props.isExpanded ? `bg-gradient-to-b ${config().gradient}` : ''}`}
       >
-        <div class="flex items-center gap-4">
-          <div class={`p-2.5 rounded-lg ${props.isExpanded ? 'bg-slate-950' : 'bg-slate-900'} ${config().iconColor} border border-slate-800`}>
-            <Icon class="w-5 h-5" />
-          </div>
-          <div class="text-left">
-            <div class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-0.5">{config().title}</div>
-            <div class="flex items-baseline gap-1.5">
-              <span class={`text-xl font-bold ${scoreColor()}`}>{Math.round(props.score)}</span>
-              <span class="text-slate-600 text-[10px] font-medium">/100</span>
-            </div>
-          </div>
+        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider text-center h-8 flex items-center justify-center">{config().title}</div>
+        
+        <div class="flex items-baseline gap-1 my-1">
+          <span class={`text-3xl font-bold ${scoreColor()}`}>{Math.round(props.score)}</span>
+          <span class="text-slate-600 text-[10px] font-medium">/100</span>
         </div>
         
-        <div class="flex items-center gap-3">
-          <div class={`px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase ${signalConfig().bg} ${signalConfig().text} border border-white/5`}>
-            {props.signal?.replace('_', ' ') || 'NEUTRAL'}
-          </div>
-          <div class={`p-1.5 rounded-full ${props.isExpanded ? 'bg-slate-950' : 'bg-slate-900'} transition-colors border border-slate-800`}>
-            {props.isExpanded ? <ChevronUp class="w-3 h-3 text-slate-400" /> : <ChevronDown class="w-3 h-3 text-slate-400" />}
-          </div>
+        <div class={`px-3 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase ${signalConfig().bg} ${signalConfig().text} border border-white/5`}>
+          {props.signal?.replace('_', ' ') || 'NEUTRAL'}
         </div>
+
+        <Show when={props.isExpanded}>
+          <ChevronUp class="w-3 h-3 text-slate-500 mt-1" />
+        </Show>
       </button>
 
       {/* Expanded Content */}
       <Show when={props.isExpanded}>
-        <div class="px-4 pb-4 animate-in slide-in-from-top-2 duration-200">
+        <div class="px-3 pb-3 animate-in slide-in-from-top-2 duration-200 bg-slate-950">
           <div class="h-px bg-gradient-to-r from-transparent via-slate-800 to-transparent mb-4" />
           
           {/* Technical Analysis Details */}
