@@ -43,14 +43,27 @@ export default function WatchlistsPage() {
   const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = createSignal(false);
 
-  // Generate sparkline data for symbols
+  // Generate sparkline data based on available real data
+  // Uses open, high, low, close to create a simple price path representation
   const getSparklineData = (item: any) => {
-    const data = [];
-    const basePrice = item.price || 100;
-    for (let i = 0; i < 24; i++) {
-      data.push(basePrice * (0.97 + Math.random() * 0.06));
-    }
-    data.push(item.price || basePrice);
+    const price = item.price || 0;
+    const open = item.open || price;
+    const high = item.high || price;
+    const low = item.low || price;
+    const change = item.change || 0;
+    
+    // If no real data available, return empty array (sparkline won't render)
+    if (!price || price === 0) return [];
+    
+    // Create a simplified 5-point path: open -> low -> high -> price
+    // This represents the day's price action using real OHLC data
+    const data = [
+      open,
+      change >= 0 ? low : high,  // Dip first if up day, peak first if down day
+      change >= 0 ? high : low,  // Peak then if up day, dip then if down day  
+      price
+    ];
+    
     return data;
   };
 
