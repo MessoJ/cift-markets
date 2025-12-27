@@ -322,6 +322,7 @@ async def get_quotes(
             )
 
             for row in ohlcv_rows:
+                found_symbols.add(row["symbol"])
                 bid = float(row["bid"]) if row["bid"] else None
                 ask = float(row["ask"]) if row["ask"] else None
                 spread_bps = ((ask - bid) / bid * 10000) if (bid and ask and bid > 0) else 0.0
@@ -336,6 +337,38 @@ async def get_quotes(
                         timestamp=row["timestamp"],
                     )
                 )
+
+    # Final fallback: Use market_data_service to fetch real-time data for remaining symbols
+    # This is especially important for INDEX symbols (S&P, DOW, NASDAQ) which use yfinance
+    final_remaining = [s for s in symbols_upper if s not in found_symbols]
+    if final_remaining:
+        try:
+            live_quotes = await market_data_service.get_quotes_batch(final_remaining)
+            for symbol, quote_data in live_quotes.items():
+                if quote_data and quote_data.get("price", 0) > 0:
+                    price = float(quote_data["price"])
+                    bid = float(quote_data.get("bid") or price * 0.9999)
+                    ask = float(quote_data.get("ask") or price * 1.0001)
+                    spread_bps = ((ask - bid) / bid * 10000) if bid > 0 else 0.0
+                    
+                    all_quotes.append(
+                        PriceQuote(
+                            symbol=quote_data.get("original_symbol", symbol),
+                            price=price,
+                            bid=bid,
+                            ask=ask,
+                            spread_bps=round(spread_bps, 2),
+                            change=float(quote_data.get("change") or 0),
+                            change_pct=float(quote_data.get("change_percent") or 0),
+                            high=float(quote_data.get("high") or 0) if quote_data.get("high") else None,
+                            low=float(quote_data.get("low") or 0) if quote_data.get("low") else None,
+                            open=float(quote_data.get("open") or 0) if quote_data.get("open") else None,
+                            volume=int(quote_data.get("volume") or 0) if quote_data.get("volume") else None,
+                            timestamp=datetime.utcnow(),
+                        )
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to fetch live quotes for {final_remaining}: {e}")
 
     return all_quotes
 
