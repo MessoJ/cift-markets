@@ -43,6 +43,10 @@ interface TableProps<T> {
   hoverable?: boolean;
   class?: string;
   rowClass?: (item: T) => string;
+  // Controlled expansion - allows parent to manage expanded state
+  expandedRowId?: string | null;
+  onExpandChange?: (id: string | null) => void;
+  getRowId?: (item: T) => string;
 }
 
 // ============================================================================
@@ -52,6 +56,27 @@ interface TableProps<T> {
 export function Table<T extends Record<string, any>>(props: TableProps<T>) {
   const [sortKey, setSortKey] = createSignal<string | null>(null);
   const [sortDirection, setSortDirection] = createSignal<'asc' | 'desc'>('asc');
+  // Internal expanded state for uncontrolled mode
+  const [internalExpandedId, setInternalExpandedId] = createSignal<string | null>(null);
+  
+  // Use controlled state if provided, otherwise use internal state
+  const isControlled = () => props.expandedRowId !== undefined;
+  const expandedId = () => isControlled() ? props.expandedRowId : internalExpandedId();
+  
+  const getRowId = (item: T, index: number): string => {
+    if (props.getRowId) return props.getRowId(item);
+    // Fallback: use id field or index
+    return item.id?.toString() || item.order_id?.toString() || `row-${index}`;
+  };
+  
+  const toggleExpand = (rowId: string) => {
+    const newId = expandedId() === rowId ? null : rowId;
+    if (isControlled() && props.onExpandChange) {
+      props.onExpandChange(newId);
+    } else {
+      setInternalExpandedId(newId);
+    }
+  };
 
   const handleSort = (column: Column<T>) => {
     if (!column.sortable) return;
@@ -169,7 +194,8 @@ export function Table<T extends Record<string, any>>(props: TableProps<T>) {
           >
             <For each={sortedData()}>
               {(item, index) => {
-                const [expanded, setExpanded] = createSignal(false);
+                const rowId = getRowId(item, index());
+                const isExpanded = () => expandedId() === rowId;
                 return (
                   <>
                     <tr
@@ -179,11 +205,11 @@ export function Table<T extends Record<string, any>>(props: TableProps<T>) {
                         striped() && index() % 2 === 1 && 'bg-terminal-900/30',
                         (props.onRowClick || props.renderExpandedRow) && 'cursor-pointer',
                         props.rowClass?.(item),
-                        expanded() && 'bg-terminal-800/50'
+                        isExpanded() && 'bg-terminal-800/50'
                       )}
                       onClick={() => {
                         if (props.renderExpandedRow) {
-                          setExpanded(!expanded());
+                          toggleExpand(rowId);
                         }
                         props.onRowClick?.(item);
                       }}
@@ -204,7 +230,7 @@ export function Table<T extends Record<string, any>>(props: TableProps<T>) {
                         )}
                       </For>
                     </tr>
-                    <Show when={expanded() && props.renderExpandedRow}>
+                    <Show when={isExpanded() && props.renderExpandedRow}>
                       <tr>
                         <td colspan={props.columns.length} class="p-0 border-b border-terminal-800 bg-terminal-900/30">
                           {props.renderExpandedRow!(item)}

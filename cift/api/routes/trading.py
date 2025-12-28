@@ -455,6 +455,8 @@ async def get_order_by_id(
     Returns:
         Order details including fills if available.
     """
+    from cift.core.database import db_manager
+    
     async with db_manager.pool.acquire() as conn:
         order_row = await conn.fetchrow(
             "SELECT * FROM orders WHERE id = $1 AND user_id = $2",
@@ -470,20 +472,25 @@ async def get_order_by_id(
             order_id
         )
         
-        # Get execution quality metrics if available
-        exec_quality = await conn.fetchrow(
-            """
-            SELECT 
-                avg_fill_price,
-                slippage_bps,
-                total_commission,
-                fill_rate,
-                time_to_first_fill_ms
-            FROM execution_quality_metrics 
-            WHERE order_id = $1
-            """,
-            order_id
-        )
+        # Get execution quality metrics if available (table may not exist)
+        exec_quality = None
+        try:
+            exec_quality = await conn.fetchrow(
+                """
+                SELECT 
+                    avg_fill_price,
+                    slippage_bps,
+                    total_commission,
+                    fill_rate,
+                    time_to_first_fill_ms
+                FROM execution_quality_metrics 
+                WHERE order_id = $1
+                """,
+                order_id
+            )
+        except Exception:
+            # Table doesn't exist yet - this is okay
+            pass
         
         return {
             "order": dict(order_row),

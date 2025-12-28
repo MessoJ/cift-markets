@@ -9,12 +9,12 @@
  * ALL DATA FROM BACKEND - NO MOCK DATA
  */
 
-import { createSignal, createEffect, Show, onCleanup, onMount, For } from 'solid-js';
+import { createSignal, createEffect, Show, onCleanup, onMount, For, createMemo } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { Table, Column } from '~/components/ui/Table';
 import { apiClient } from '~/lib/api/client';
 import { formatCurrency, formatPercent } from '~/lib/utils/format';
-import { X, RefreshCw, Trash2, Filter, Calendar } from 'lucide-solid';
+import { X, RefreshCw, Trash2, Filter, Calendar, TrendingUp, Clock, CheckCircle, XCircle } from 'lucide-solid';
 import { DateRangePicker, DateRange, defaultPresets } from '~/components/ui/DateRangePicker';
 
 type OrderStatus = 'all' | 'open' | 'filled' | 'cancelled';
@@ -23,13 +23,16 @@ type OrderStatus = 'all' | 'open' | 'filled' | 'cancelled';
 const ExpandedOrderRow = (props: { order: any }) => {
   const [details, setDetails] = createSignal<any>(null);
   const [loading, setLoading] = createSignal(true);
+  const [error, setError] = createSignal<string | null>(null);
 
   onMount(async () => {
     try {
       const data = await apiClient.getOrder(props.order.id);
-      setDetails(data);
-    } catch (err) {
+      // Handle both direct response and nested order response
+      setDetails(data.order || data);
+    } catch (err: any) {
       console.error('Failed to load order details:', err);
+      setError(err.message || 'Failed to load details');
     } finally {
       setLoading(false);
     }
@@ -38,18 +41,21 @@ const ExpandedOrderRow = (props: { order: any }) => {
   return (
     <div class="p-4 text-sm bg-terminal-900/50">
       <Show when={!loading()} fallback={<div class="text-gray-500 flex items-center gap-2"><RefreshCw class="w-3 h-3 animate-spin"/> Loading details...</div>}>
-        <Show when={details()}>
+        <Show when={error()}>
+          <div class="text-danger-400 text-xs">{error()}</div>
+        </Show>
+        <Show when={details() && !error()}>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <h4 class="text-[10px] font-bold text-accent-500 uppercase mb-3 tracking-wider">Execution Analysis</h4>
               <div class="space-y-2 font-mono text-xs">
                 <div class="flex justify-between border-b border-terminal-800 pb-1">
                   <span class="text-gray-500">Order ID</span>
-                  <span class="text-gray-400 select-all">{details().order.id}</span>
+                  <span class="text-gray-400 select-all">{details().id || props.order.id}</span>
                 </div>
                 <div class="flex justify-between border-b border-terminal-800 pb-1">
                   <span class="text-gray-500">Strategy</span>
-                  <span class="text-white">{details().order.strategy_id || 'Manual Trade'}</span>
+                  <span class="text-white">{details().strategy_id || 'Manual Trade'}</span>
                 </div>
                 <div class="flex justify-between border-b border-terminal-800 pb-1">
                   <span class="text-gray-500">Avg Fill Price</span>
@@ -111,6 +117,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = createSignal(true);
   const [activeTab, setActiveTab] = createSignal<OrderStatus>('all');
   const [symbolFilter, setSymbolFilter] = createSignal('');
+  const [expandedOrderId, setExpandedOrderId] = createSignal<string | null>(null);
   const [dateRange, setDateRange] = createSignal<DateRange>({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
     end: new Date(),
@@ -135,19 +142,30 @@ export default function OrdersPage() {
     }
   };
 
-  // Initial fetch and auto-refresh
+  // Track if this is the first mount
+  let isFirstMount = true;
+  
+  // Single effect for fetching - tracks activeTab changes
   createEffect(() => {
-    // Initial fetch with sync to ensure we have latest broker data
-    fetchOrders(true);
-    const interval = setInterval(() => fetchOrders(false), 30000); // Poll every 30s to avoid 429s
-    onCleanup(() => clearInterval(interval));
+    const tab = activeTab(); // Track dependency
+    
+    // Only show loading spinner if we don't have data or it's a tab change
+    if (orders().length === 0 || !isFirstMount) {
+      setLoading(true);
+    }
+    
+    // Force sync on first mount, regular fetch on tab changes
+    fetchOrders(isFirstMount);
+    isFirstMount = false;
   });
 
-  // Re-fetch when tab changes
-  createEffect(() => {
-    activeTab(); // Dependency
-    setLoading(true);
-    fetchOrders();
+  // Separate auto-refresh interval - doesn't depend on activeTab
+  onMount(() => {
+    const interval = setInterval(() => {
+      // Background refresh - don't show loading
+      fetchOrders(false);
+    }, 30000);
+    onCleanup(() => clearInterval(interval));
   });
 
   const filteredOrders = () => {
@@ -171,6 +189,34 @@ export default function OrdersPage() {
     return filtered;
   };
 
+  // Compute order statistics
+  const orderStats = createMemo(() => {
+    const all = filteredOrders();
+    const open = all.filter(o => o.status === 'open');
+    const filled = all.filter(o => o.status === 'filled');
+    const cancelled = all.filter(o => o.status === 'cancelled');
+    
+    const filledValue = filled.reduce((sum, o) => 
+      sum + (o.filled_quantity || 0) * (o.avg_fill_price || o.limit_price || 0), 0);
+    
+    const pendingValue = open.reduce((sum, o) => 
+      sum + (o.quantity - (o.filled_quantity || 0)) * (o.limit_price || 0), 0);
+    
+    const fillRate = all.length > 0 
+      ? (filled.length / (filled.length + cancelled.length)) * 100 
+      : 0;
+    
+    return {
+      total: all.length,
+      open: open.length,
+      filled: filled.length,
+      cancelled: cancelled.length,
+      filledValue,
+      pendingValue,
+      fillRate: isNaN(fillRate) ? 0 : fillRate,
+    };
+  });
+
   const cancelOrder = async (orderId: string) => {
     if (!confirm('Cancel this order?')) return;
     try {
@@ -188,14 +234,21 @@ export default function OrdersPage() {
     if (!confirm(`Are you sure you want to CANCEL ALL ${openCount} open orders?`)) return;
     
     try {
-      // Assuming API has a bulk cancel or we loop
-      // Ideally: await apiClient.cancelAllOrders();
-      // Fallback: Loop
-      const openOrders = orders().filter(o => o.status === 'open');
-      await Promise.all(openOrders.map(o => apiClient.cancelOrder(o.id)));
-      await fetchOrders();
+      // Use bulk cancel API endpoint
+      await apiClient.cancelAllOrders();
+      await fetchOrders(true);
     } catch (err: any) {
-      alert(`Failed to cancel all orders: ${err.message}`);
+      console.error('Bulk cancel failed, trying individual cancellations:', err);
+      // Fallback to individual cancellations if bulk fails
+      try {
+        const openOrders = orders().filter(o => o.status === 'open');
+        for (const order of openOrders) {
+          await apiClient.cancelOrder(order.id);
+        }
+        await fetchOrders(true);
+      } catch (fallbackErr: any) {
+        alert(`Failed to cancel orders: ${fallbackErr.message}`);
+      }
     }
   };
 
@@ -398,6 +451,56 @@ export default function OrdersPage() {
         </div>
       </div>
 
+      {/* Summary Stats Cards */}
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-terminal-900 border border-terminal-800 rounded-lg p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <Clock class="w-4 h-4 text-accent-400" />
+            <span class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Open Orders</span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-2xl font-bold text-white font-mono">{orderStats().open}</span>
+            <Show when={orderStats().pendingValue > 0}>
+              <span class="text-xs text-gray-500">{formatCurrency(orderStats().pendingValue)}</span>
+            </Show>
+          </div>
+        </div>
+        
+        <div class="bg-terminal-900 border border-terminal-800 rounded-lg p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <CheckCircle class="w-4 h-4 text-success-400" />
+            <span class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Filled</span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-2xl font-bold text-success-400 font-mono">{orderStats().filled}</span>
+            <Show when={orderStats().filledValue > 0}>
+              <span class="text-xs text-gray-500">{formatCurrency(orderStats().filledValue)}</span>
+            </Show>
+          </div>
+        </div>
+        
+        <div class="bg-terminal-900 border border-terminal-800 rounded-lg p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <XCircle class="w-4 h-4 text-gray-500" />
+            <span class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Cancelled</span>
+          </div>
+          <div class="text-2xl font-bold text-gray-500 font-mono">{orderStats().cancelled}</div>
+        </div>
+        
+        <div class="bg-terminal-900 border border-terminal-800 rounded-lg p-3">
+          <div class="flex items-center gap-2 mb-1">
+            <TrendingUp class="w-4 h-4 text-primary-400" />
+            <span class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Fill Rate</span>
+          </div>
+          <div class="flex items-baseline gap-1">
+            <span class={`text-2xl font-bold font-mono ${orderStats().fillRate >= 80 ? 'text-success-400' : orderStats().fillRate >= 50 ? 'text-accent-400' : 'text-gray-400'}`}>
+              {orderStats().fillRate.toFixed(0)}
+            </span>
+            <span class="text-sm text-gray-500">%</span>
+          </div>
+        </div>
+      </div>
+
       {/* Controls Bar */}
       <div class="bg-terminal-900 border border-terminal-800 rounded-lg p-1 flex flex-col sm:flex-row gap-2 justify-between items-center">
         {/* Tabs */}
@@ -464,7 +567,9 @@ export default function OrdersPage() {
               </button>
             </div>
           }
-          onRowClick={(order) => { /* Expand handled by Table */ }}
+          expandedRowId={expandedOrderId()}
+          onExpandChange={setExpandedOrderId}
+          getRowId={(order) => order.id || order.order_id}
           renderExpandedRow={(order) => <ExpandedOrderRow order={order} />}
           compact
           hoverable

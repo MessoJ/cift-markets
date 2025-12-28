@@ -290,10 +290,16 @@ export default function CandlestickChart(props: CandlestickChartProps) {
     try {
       console.info(`📊 Fetching ${props.candleLimit || 500} bars for ${props.symbol} (${props.timeframe})`);
       
+      // Check if patterns or advanced indicators need indicators from backend
+      const needsIndicators = activeIndicators().some(
+        i => i.enabled && ['patterns', 'volume_profile', 'ichimoku', 'pivot_points', 'stoch', 'obv', 'atr_14'].includes(i.id)
+      );
+      
       const data = await apiClient.getBars(
         props.symbol,
         props.timeframe,
-        props.candleLimit || 500
+        props.candleLimit || 500,
+        needsIndicators
       );
 
       if (!data || data.length === 0) {
@@ -888,8 +894,8 @@ export default function CandlestickChart(props: CandlestickChartProps) {
     
     console.log('📍 Chart click:', { tool: props.activeTool, point });
     
-    // Handle two-point drawings (trendline, fibonacci, rectangle, arrow)
-    if (['trendline', 'fibonacci', 'rectangle', 'arrow'].includes(props.activeTool)) {
+    // Handle two-point drawings (trendline, fibonacci, rectangle, arrow, ruler)
+    if (['trendline', 'fibonacci', 'rectangle', 'arrow', 'ruler'].includes(props.activeTool)) {
       const points = drawingPoints();
       
       if (points.length === 0) {
@@ -1347,6 +1353,17 @@ export default function CandlestickChart(props: CandlestickChartProps) {
     })
   );
 
+  // Refetch data when indicators requiring backend calculation are toggled
+  createEffect(
+    on(() => activeIndicators().filter(i => i.enabled && ['patterns', 'volume_profile', 'ichimoku', 'pivot_points', 'stoch', 'obv', 'atr_14'].includes(i.id)).length, 
+    () => {
+      // Refetch when patterns/advanced indicators count changes
+      if (bars().length > 0) {
+        fetchChartData();
+      }
+    })
+  );
+
   // Update chart when bars change
   createEffect(
     on(bars, () => {
@@ -1442,10 +1459,11 @@ export default function CandlestickChart(props: CandlestickChartProps) {
 
       {/* Screenshot Button */}
       <button
-        class="absolute top-4 right-28 bg-terminal-900/80 hover:bg-terminal-800 border border-terminal-750 rounded-lg px-3 py-1.5 text-xs font-medium text-white z-40 flex items-center gap-2 shadow-lg backdrop-blur-sm transition-colors"
+        class="absolute top-4 right-28 bg-terminal-900/80 hover:bg-accent-500/20 border border-accent-500/50 rounded-lg px-3 py-1.5 text-xs font-medium text-white z-40 flex items-center gap-2 shadow-lg backdrop-blur-sm transition-colors group"
         onClick={() => {
-          if (!chartInstance) return;
-          const url = chartInstance.getDataURL({
+          const instance = chart.getInstance();
+          if (!instance) return;
+          const url = instance.getDataURL({
             type: 'png',
             pixelRatio: 2,
             backgroundColor: DARK_THEME.background
@@ -1459,7 +1477,7 @@ export default function CandlestickChart(props: CandlestickChartProps) {
         }}
         title="Take Screenshot"
       >
-        <span class="text-gray-400">📷</span>
+        <span class="text-accent-500 group-hover:text-accent-400">📷</span>
       </button>
 
       {/* Replay Toggle Button (when not in replay mode) */}

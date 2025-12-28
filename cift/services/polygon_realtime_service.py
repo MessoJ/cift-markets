@@ -87,32 +87,25 @@ class PolygonRealtimeService:
     # API endpoints
     BASE_URL = "https://api.polygon.io"
 
-    # Popular symbols to track
+    # Popular symbols to track (fallback if DB unavailable)
     DEFAULT_SYMBOLS = [
-        "AAPL",
-        "MSFT",
-        "GOOGL",
-        "AMZN",
-        "NVDA",
-        "TSLA",
-        "META",
-        "BRK.B",
-        "JPM",
-        "V",
-        "JNJ",
-        "WMT",
-        "PG",
-        "XOM",
-        "UNH",
-        "HD",
-        "MA",
-        "COST",
-        "SPY",
-        "QQQ",
-        "DIA",
-        "IWM",
-        "VTI",
-        "VOO",
+        # Tech
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "AVGO", "ORCL", "CRM",
+        "ADBE", "AMD", "INTC", "IBM", "CSCO", "QCOM", "TXN", "MU", "NOW", "INTU",
+        # Financial
+        "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "BLK", "SCHW", "AXP",
+        # Healthcare
+        "UNH", "LLY", "JNJ", "NVO", "ABBV", "MRK", "PFE", "TMO", "ABT", "DHR",
+        # Consumer
+        "WMT", "PG", "COST", "HD", "NKE", "MCD", "SBUX", "TGT", "LOW", "TJX",
+        # Industrial
+        "CAT", "DE", "UPS", "HON", "RTX", "BA", "LMT", "GE", "MMM", "FDX",
+        # Energy
+        "XOM", "CVX", "COP", "SLB", "EOG",
+        # Communication
+        "NFLX", "DIS", "CMCSA", "T", "VZ", "TMUS",
+        # ETFs
+        "SPY", "QQQ", "DIA", "IWM", "VTI", "VOO", "XLF", "XLK", "XLE", "XLV",
     ]
 
     # Index symbols
@@ -158,6 +151,19 @@ class PolygonRealtimeService:
 
         self._initialized = True
         logger.info("Polygon HTTP session initialized")
+
+    async def get_all_symbols_from_db(self) -> list[str]:
+        """Get all tradable symbols from the database."""
+        try:
+            pool = await get_postgres_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT symbol FROM symbols WHERE is_tradable = true AND is_active = true ORDER BY market_cap DESC NULLS LAST"
+                )
+                return [row['symbol'] for row in rows]
+        except Exception as e:
+            logger.warning(f"Could not fetch symbols from DB, using defaults: {e}")
+            return self.DEFAULT_SYMBOLS
 
     async def close(self):
         """Close HTTP session."""
@@ -659,8 +665,9 @@ class PolygonRealtimeService:
             Number of symbols updated
         """
         if symbols is None:
-            # Include indices and crypto in default update
-            symbols = self.DEFAULT_SYMBOLS + list(self.INDEX_SYMBOLS.keys()) + ["BTC-USD", "ETH-USD", "GC=F", "CL=F"]
+            # Get all symbols from database + indices and crypto
+            db_symbols = await self.get_all_symbols_from_db()
+            symbols = db_symbols + list(self.INDEX_SYMBOLS.keys()) + ["BTC-USD", "ETH-USD", "GC=F", "CL=F"]
 
         logger.info(f"Updating market cache for {len(symbols)} symbols...")
 
@@ -834,7 +841,9 @@ class PolygonRealtimeService:
             Number of symbols updated
         """
         if symbols is None:
-            symbols = self.DEFAULT_SYMBOLS
+            # Dynamically fetch all symbols from database
+            db_symbols = await self.get_all_symbols_from_db()
+            symbols = db_symbols if db_symbols else self.DEFAULT_SYMBOLS
 
         logger.info(f"Updating 52-week high/low for {len(symbols)} symbols...")
 

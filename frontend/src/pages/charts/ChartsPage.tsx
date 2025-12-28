@@ -236,6 +236,15 @@ export default function ChartsPage() {
           { id: 'bb_bands', name: 'Bollinger Bands', category: 'volatility', color: '#ec4899' },
           { id: 'macd', name: 'MACD', category: 'momentum', color: '#f97316' },
           { id: 'rsi_14', name: 'RSI (14)', category: 'momentum', color: '#a855f7' },
+          // New indicators
+          { id: 'stoch', name: 'Stochastic', category: 'momentum', color: '#22d3ee' },
+          { id: 'atr_14', name: 'ATR (14)', category: 'volatility', color: '#f43f5e' },
+          { id: 'obv', name: 'On-Balance Volume', category: 'volume', color: '#8b5cf6' },
+          { id: 'volume_profile', name: 'Volume Profile', category: 'volume', color: '#60a5fa' },
+          { id: 'ichimoku', name: 'Ichimoku Cloud', category: 'trend', color: '#10b981' },
+          { id: 'pivot_points', name: 'Pivot Points', category: 'trend', color: '#fbbf24' },
+          { id: 'patterns', name: 'Candlestick Patterns', category: 'trend', color: '#ffffff' },
+          { id: 'volume_sma_20', name: 'Volume SMA', category: 'volume', color: '#64748b' },
         ];
         
         const config = defaultIndicators.find((ind) => ind.id === indicatorId);

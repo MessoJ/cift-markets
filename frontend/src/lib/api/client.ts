@@ -1039,10 +1039,11 @@ export class CIFTApiClient {
   async getBars(
     symbol: string,
     timeframe: string = '1m',
-    limit: number = 100
+    limit: number = 100,
+    withIndicators: boolean = false
   ): Promise<any[]> {
     const { data } = await this.axiosInstance.get(`/market-data/bars/${symbol}`, {
-      params: { timeframe, limit },
+      params: { timeframe, limit, with_indicators: withIndicators },
     });
     return data;
   }

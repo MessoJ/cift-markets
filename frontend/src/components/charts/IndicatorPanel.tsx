@@ -96,13 +96,6 @@ const AVAILABLE_INDICATORS: Omit<IndicatorConfig, 'enabled'>[] = [
   
   // Volatility indicators
   {
-    id: 'bb_bands',
-    name: 'Bollinger Bands',
-    category: 'volatility',
-    color: '#ec4899',
-    params: { period: 20, stdDev: 2 },
-  },
-  {
     id: 'atr_14',
     name: 'ATR (14)',
     category: 'volatility',
@@ -210,21 +203,21 @@ export default function IndicatorPanel(props: IndicatorPanelProps) {
       <Show when={expanded()}>
         <div class="border-t border-terminal-750 p-3">
           {/* Category Tabs */}
-          <div class="flex items-center gap-1 mb-3">
+          <div class="flex flex-wrap items-center gap-1 mb-3">
             <For each={categories}>
               {(cat) => {
                 const Icon = cat.icon;
                 return (
                   <button
                     onClick={() => setSelectedCategory(cat.id)}
-                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors"
+                    class="flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors"
                     classList={{
                       'bg-accent-600 text-white': selectedCategory() === cat.id,
                       'bg-terminal-850 text-gray-400 hover:bg-terminal-800 hover:text-white':
                         selectedCategory() !== cat.id,
                     }}
                   >
-                    <Icon size={14} />
+                    <Icon size={12} />
                     <span>{cat.name}</span>
                   </button>
                 );

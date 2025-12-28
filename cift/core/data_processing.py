@@ -199,6 +199,14 @@ def calculate_technical_indicators(df: pl.DataFrame) -> pl.DataFrame:
 
     Performance: 12x faster than Pandas rolling operations
     """
+    # Cast decimal columns to float64 for compatibility with rolling operations
+    numeric_cols = ["open", "high", "low", "close"]
+    for col in numeric_cols:
+        if col in df.columns:
+            df = df.with_columns(pl.col(col).cast(pl.Float64))
+    if "volume" in df.columns:
+        df = df.with_columns(pl.col("volume").cast(pl.Int64))
+    
     # First pass: Calculate returns and base indicators
     df = df.with_columns(
         [

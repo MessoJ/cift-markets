@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from cift.core.auth import User, get_current_active_user
 from cift.core.data_processing import calculate_technical_indicators, load_ohlcv_data, calculate_volume_profile
-from cift.core.database import db_manager
+from cift.core.database import db_manager, questdb_manager
 from cift.core.trading_queries import get_ohlcv_last_n_bars
 from cift.services.market_data_service import market_data_service
 
@@ -539,43 +539,52 @@ async def get_time_and_sales(
         logger.debug(f"QuestDB query failed for {symbol}: {e}")
     
     # Source 3: In-memory cache from Finnhub service
-    in_memory_trades = finnhub.get_recent_trades(symbol, limit)
-    if in_memory_trades:
-        return {
-            "symbol": symbol,
-            "trades": in_memory_trades,
-            "count": len(in_memory_trades),
-            "last_price": in_memory_trades[0]["price"] if in_memory_trades else None,
-            "_source": "memory_cache",
-            "_simulated": False,
-        }
+    try:
+        in_memory_trades = finnhub.get_recent_trades(symbol, limit)
+        if in_memory_trades:
+            return {
+                "symbol": symbol,
+                "trades": in_memory_trades,
+                "count": len(in_memory_trades),
+                "last_price": in_memory_trades[0]["price"] if in_memory_trades else None,
+                "_source": "memory_cache",
+                "_simulated": False,
+            }
+    except AttributeError:
+        # Method doesn't exist in older version of service
+        logger.debug(f"Finnhub service doesn't have get_recent_trades method")
     
     # Source 4: Fallback to simulated data (when no real data available)
     # This happens when symbol isn't subscribed or market is closed
     logger.info(f"No real trades for {symbol}, generating simulated data")
     
-    # Get recent bars to simulate trades
-    async with db_manager.pool.acquire() as conn:
-        bars = await conn.fetch(
-            """
-            SELECT timestamp, open, high, low, close, volume
-            FROM ohlcv_bars
-            WHERE symbol = $1
-            ORDER BY timestamp DESC
-            LIMIT 10
-            """,
-            symbol,
-        )
+    # Get recent bars to simulate trades - use db_manager which is already imported
+    bars = None
+    quote = None
+    try:
+        async with db_manager.pool.acquire() as conn:
+            bars = await conn.fetch(
+                """
+                SELECT timestamp, open, high, low, close, volume
+                FROM ohlcv_bars
+                WHERE symbol = $1
+                ORDER BY timestamp DESC
+                LIMIT 10
+                """,
+                symbol,
+            )
 
-        # Get current quote
-        quote = await conn.fetchrow(
-            """
-            SELECT price, bid, ask
-            FROM market_data_cache
-            WHERE symbol = $1
-            """,
-            symbol,
-        )
+            # Get current quote
+            quote = await conn.fetchrow(
+                """
+                SELECT price, bid, ask
+                FROM market_data_cache
+                WHERE symbol = $1
+                """,
+                symbol,
+            )
+    except Exception as e:
+        logger.debug(f"Error fetching bars/quote for simulated data: {e}")
 
     if not bars and not quote:
         raise HTTPException(status_code=404, detail=f"No data for {symbol}")
@@ -624,19 +633,22 @@ async def get_time_and_sales(
     }
 
 
-@router.get("/bars/{symbol}", response_model=list[OHLCVBar])
+@router.get("/bars/{symbol}")
 async def get_bars(
     symbol: str,
     timeframe: str = Query("1m", description="Bar timeframe (1m, 5m, 15m, 1h, 1d)"),
     limit: int = Query(100, ge=1, le=1000, description="Number of bars"),
+    with_indicators: bool = Query(False, description="Include technical indicators and patterns"),
     start_date: datetime | None = None,
     end_date: datetime | None = None,
-):
+) -> list:
     """
     Get OHLCV bars for a symbol.
 
     Performance: ~3-5ms for 100 bars (uses QuestDB SAMPLE BY optimization)
     """
+    import polars as pl
+    
     # Use optimized QuestDB query
     bars = await get_ohlcv_last_n_bars(symbol, timeframe, limit)
 
@@ -669,6 +681,21 @@ async def get_bars(
     if not bars:
         raise HTTPException(status_code=404, detail=f"No bar data found for {symbol}")
 
+    # If indicators requested, process through Polars
+    if with_indicators:
+        logger.info(f"Processing indicators for {symbol}, bars count: {len(bars)}")
+        try:
+            df = pl.DataFrame(bars)
+            logger.info(f"DataFrame created, columns: {df.columns}")
+            df = calculate_technical_indicators(df)
+            logger.info(f"Indicators calculated, columns: {df.columns}")
+            # Convert back to list of dicts with all columns
+            return df.to_dicts()
+        except Exception as e:
+            logger.warning(f"Failed to calculate indicators: {e}, returning raw bars")
+            import traceback
+            logger.error(traceback.format_exc())
+    
     return [
         OHLCVBar(
             timestamp=bar["timestamp"],
