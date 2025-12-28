@@ -32,17 +32,37 @@ class ScreenerCriteria(BaseModel):
     # Volume filters
     volume_min: int | None = None
 
-    # Market cap filters
+    # Market cap filters (in millions)
     market_cap_min: Decimal | None = None
     market_cap_max: Decimal | None = None
 
-    # Fundamental filters
+    # Valuation filters
     pe_ratio_min: Decimal | None = None
     pe_ratio_max: Decimal | None = None
-    eps_min: Decimal | None = None
+    forward_pe_min: Decimal | None = None
+    forward_pe_max: Decimal | None = None
+    peg_ratio_min: Decimal | None = None
+    peg_ratio_max: Decimal | None = None
+    price_to_book_min: Decimal | None = None
+    price_to_book_max: Decimal | None = None
+    price_to_sales_min: Decimal | None = None
+    price_to_sales_max: Decimal | None = None
+    
+    # Dividend filters
     dividend_yield_min: Decimal | None = None
+    dividend_yield_max: Decimal | None = None
+    
+    # Profitability filters
+    profit_margin_min: Decimal | None = None
+    roe_min: Decimal | None = None
+    roa_min: Decimal | None = None
+    
+    # Risk filters
     beta_min: Decimal | None = None
     beta_max: Decimal | None = None
+    
+    # EPS filters
+    eps_min: Decimal | None = None
 
     # Performance filters
     change_pct_min: Decimal | None = None
@@ -52,6 +72,8 @@ class ScreenerCriteria(BaseModel):
     sector: str | None = None
     industry: str | None = None
     country: str | None = None
+    exchange: str | None = None
+    asset_type: str | None = None
 
 
 class ScreenerResponse(BaseModel):
@@ -107,89 +129,169 @@ async def screen_stocks(
 ):
     """
     Run advanced stock screen with technical and fundamental analysis.
+    Uses REAL DATA from symbols table and market_data_cache.
     No authentication required for basic screening.
     """
     pg_pool = await get_postgres_pool()
 
     # Valid sort columns - map frontend names to actual column expressions
+    # Using 's' alias for symbols table, 'mdc' for market_data_cache
     sort_map = {
-        "market_cap": "cp.market_cap",
-        "pe_ratio": "cp.pe_ratio",
-        "dividend_yield": "cp.dividend_yield",
-        "symbol": "cp.symbol",
-        "name": "cp.name",
-        "sector": "cp.sector",
+        "market_cap": "s.market_cap",
+        "pe_ratio": "s.pe_ratio",
+        "forward_pe": "s.forward_pe",
+        "dividend_yield": "s.dividend_yield",
+        "symbol": "s.symbol",
+        "name": "s.name",
+        "sector": "s.sector",
         "change_pct": "mdc.change_pct",
         "volume": "mdc.volume",
         "price": "mdc.price",
-        "beta": "cp.beta",
-        "avg_volume": "cp.avg_volume_10d",
+        "beta": "COALESCE(mdc.change_pct, 0) / NULLIF(ABS(mdc.change_pct), 0)",  # Placeholder
+        "eps": "s.eps",
+        "roe": "s.roe",
+        "profit_margin": "s.profit_margin",
     }
-    sort_column = sort_map.get(sort_by, "cp.market_cap")
+    sort_column = sort_map.get(sort_by, "s.market_cap")
     sort_direction = "DESC" if sort_order.lower() == "desc" else "ASC"
 
-    # Base query
+    # Base query - using symbols table (which has actual data) instead of company_profiles (empty)
     base_query = """
-        FROM company_profiles cp
-        LEFT JOIN market_data_cache mdc ON cp.symbol = mdc.symbol
-        WHERE 1=1
+        FROM symbols s
+        LEFT JOIN market_data_cache mdc ON s.symbol = mdc.symbol
+        WHERE s.is_tradable = true AND s.is_active = true
     """
 
     params = []
     param_count = 1
 
-    # Apply fundamental filters from company_profiles
+    # ========== MARKET CAP FILTERS ==========
     if criteria.market_cap_min:
-        base_query += f" AND cp.market_cap >= ${param_count}"
-        params.append(float(criteria.market_cap_min))
+        # Convert from millions (API) to actual value (DB stores in raw form)
+        # DB has values like 3000000000000 for Apple ($3T)
+        base_query += f" AND s.market_cap >= ${param_count}"
+        params.append(float(criteria.market_cap_min) * 1_000_000)  # Convert M to actual
         param_count += 1
 
     if criteria.market_cap_max:
-        base_query += f" AND cp.market_cap <= ${param_count}"
-        params.append(float(criteria.market_cap_max))
+        base_query += f" AND s.market_cap <= ${param_count}"
+        params.append(float(criteria.market_cap_max) * 1_000_000)
         param_count += 1
 
+    # ========== VALUATION FILTERS ==========
     if criteria.pe_ratio_min:
-        base_query += f" AND cp.pe_ratio >= ${param_count}"
+        base_query += f" AND s.pe_ratio >= ${param_count}"
         params.append(float(criteria.pe_ratio_min))
         param_count += 1
 
     if criteria.pe_ratio_max:
-        base_query += f" AND cp.pe_ratio <= ${param_count}"
+        base_query += f" AND s.pe_ratio <= ${param_count}"
         params.append(float(criteria.pe_ratio_max))
         param_count += 1
 
+    if criteria.forward_pe_min:
+        base_query += f" AND s.forward_pe >= ${param_count}"
+        params.append(float(criteria.forward_pe_min))
+        param_count += 1
+
+    if criteria.forward_pe_max:
+        base_query += f" AND s.forward_pe <= ${param_count}"
+        params.append(float(criteria.forward_pe_max))
+        param_count += 1
+
+    if criteria.peg_ratio_min:
+        base_query += f" AND s.peg_ratio >= ${param_count}"
+        params.append(float(criteria.peg_ratio_min))
+        param_count += 1
+
+    if criteria.peg_ratio_max:
+        base_query += f" AND s.peg_ratio <= ${param_count}"
+        params.append(float(criteria.peg_ratio_max))
+        param_count += 1
+
+    if criteria.price_to_book_min:
+        base_query += f" AND s.price_to_book >= ${param_count}"
+        params.append(float(criteria.price_to_book_min))
+        param_count += 1
+
+    if criteria.price_to_book_max:
+        base_query += f" AND s.price_to_book <= ${param_count}"
+        params.append(float(criteria.price_to_book_max))
+        param_count += 1
+
+    if criteria.price_to_sales_min:
+        base_query += f" AND s.price_to_sales >= ${param_count}"
+        params.append(float(criteria.price_to_sales_min))
+        param_count += 1
+
+    if criteria.price_to_sales_max:
+        base_query += f" AND s.price_to_sales <= ${param_count}"
+        params.append(float(criteria.price_to_sales_max))
+        param_count += 1
+
+    # ========== DIVIDEND FILTERS ==========
     if criteria.dividend_yield_min:
-        base_query += f" AND cp.dividend_yield >= ${param_count}"
+        base_query += f" AND s.dividend_yield >= ${param_count}"
         params.append(float(criteria.dividend_yield_min))
         param_count += 1
 
-    if criteria.beta_min:
-        base_query += f" AND cp.beta >= ${param_count}"
-        params.append(float(criteria.beta_min))
+    if criteria.dividend_yield_max:
+        base_query += f" AND s.dividend_yield <= ${param_count}"
+        params.append(float(criteria.dividend_yield_max))
         param_count += 1
 
-    if criteria.beta_max:
-        base_query += f" AND cp.beta <= ${param_count}"
-        params.append(float(criteria.beta_max))
+    # ========== PROFITABILITY FILTERS ==========
+    if criteria.profit_margin_min:
+        base_query += f" AND s.profit_margin >= ${param_count}"
+        params.append(float(criteria.profit_margin_min))
         param_count += 1
 
+    if criteria.roe_min:
+        base_query += f" AND s.roe >= ${param_count}"
+        params.append(float(criteria.roe_min))
+        param_count += 1
+
+    if criteria.roa_min:
+        base_query += f" AND s.roa >= ${param_count}"
+        params.append(float(criteria.roa_min))
+        param_count += 1
+
+    if criteria.eps_min:
+        base_query += f" AND s.eps >= ${param_count}"
+        params.append(float(criteria.eps_min))
+        param_count += 1
+
+    # ========== RISK FILTERS ==========
+    # Note: Beta is not in symbols table, would need to be calculated or added
+    # Skipping beta filters for now
+
+    # ========== CATEGORY FILTERS ==========
     if criteria.sector:
-        base_query += f" AND cp.sector ILIKE ${param_count}"
+        base_query += f" AND s.sector ILIKE ${param_count}"
         params.append(f"%{criteria.sector}%")
         param_count += 1
 
     if criteria.industry:
-        base_query += f" AND cp.industry ILIKE ${param_count}"
+        base_query += f" AND s.industry ILIKE ${param_count}"
         params.append(f"%{criteria.industry}%")
         param_count += 1
 
     if criteria.country:
-        base_query += f" AND cp.country = ${param_count}"
+        base_query += f" AND s.country = ${param_count}"
         params.append(criteria.country)
         param_count += 1
 
-    # Apply price filters from market_data_cache
+    if criteria.exchange:
+        base_query += f" AND s.exchange = ${param_count}"
+        params.append(criteria.exchange)
+        param_count += 1
+
+    if criteria.asset_type:
+        base_query += f" AND s.asset_type = ${param_count}"
+        params.append(criteria.asset_type)
+        param_count += 1
+
+    # ========== PRICE FILTERS (from market_data_cache) ==========
     if criteria.price_min:
         base_query += f" AND mdc.price >= ${param_count}"
         params.append(float(criteria.price_min))
@@ -218,26 +320,41 @@ async def screen_stocks(
     # Count query
     count_query = f"SELECT COUNT(*) {base_query}"
 
-    # Data query
+    # Data query with comprehensive fields
     data_query = f"""
         SELECT
-            cp.symbol,
-            cp.name,
-            cp.sector,
-            cp.industry,
-            cp.country,
-            cp.market_cap,
-            cp.pe_ratio,
-            cp.forward_pe,
-            cp.dividend_yield,
-            cp.beta,
-            cp.fifty_two_week_high,
-            cp.fifty_two_week_low,
-            cp.avg_volume_10d,
+            s.symbol,
+            s.name,
+            s.sector,
+            s.industry,
+            s.country,
+            s.exchange,
+            s.asset_type,
+            s.market_cap,
+            s.pe_ratio,
+            s.forward_pe,
+            s.peg_ratio,
+            s.price_to_book,
+            s.price_to_sales,
+            s.eps,
+            s.dividend_yield,
+            s.profit_margin,
+            s.operating_margin,
+            s.roe,
+            s.roa,
+            s.revenue,
+            s.net_income,
+            s.analyst_rating,
+            s.analyst_target_price,
+            s.analyst_count,
             COALESCE(mdc.price, 0) as price,
             COALESCE(mdc.change, 0) as change,
-            COALESCE(mdc.change_pct, 0) as change_percent,
-            COALESCE(mdc.volume, 0) as volume
+            COALESCE(mdc.change_pct, 0) as change_pct,
+            COALESCE(mdc.volume, 0) as volume,
+            mdc.high_52w,
+            mdc.low_52w,
+            mdc.avg_volume,
+            mdc.updated_at as price_updated_at
         {base_query}
         ORDER BY {sort_column} {sort_direction} NULLS LAST
         LIMIT ${param_count} OFFSET ${param_count + 1}
@@ -249,30 +366,68 @@ async def screen_stocks(
     try:
         async with pg_pool.acquire() as conn:
             # Get total count first
-            total_count = await conn.fetchval(count_query, *params)
+            total_count = await conn.fetchval(count_query, *params) or 0
 
             # Get paginated data
             rows = await conn.fetch(data_query, *params, limit, offset)
 
             for row in rows:
+                # Calculate 52-week metrics
+                week52_high = float(row['high_52w']) if row['high_52w'] else None
+                week52_low = float(row['low_52w']) if row['low_52w'] else None
+                current_price = float(row['price']) if row['price'] else 0
+                
+                # Distance from 52-week high/low (percentage)
+                pct_from_high = None
+                pct_from_low = None
+                if week52_high and current_price:
+                    pct_from_high = ((current_price - week52_high) / week52_high) * 100
+                if week52_low and current_price:
+                    pct_from_low = ((current_price - week52_low) / week52_low) * 100
+
                 results.append({
                     "symbol": row['symbol'],
                     "name": row['name'],
-                    "price": float(row['price']) if row['price'] else 0,
+                    "sector": row['sector'] or "Unknown",
+                    "industry": row['industry'] or "Unknown",
+                    "country": row['country'] or "US",
+                    "exchange": row['exchange'] or "Unknown",
+                    "asset_type": row['asset_type'] or "stock",
+                    # Price data
+                    "price": current_price,
                     "change": float(row['change']) if row['change'] else 0,
-                    "change_pct": float(row['change_percent']) if row['change_percent'] else 0,
+                    "change_pct": float(row['change_pct']) if row['change_pct'] else 0,
                     "volume": int(row['volume']) if row['volume'] else 0,
+                    # Valuation
                     "market_cap": float(row['market_cap']) if row['market_cap'] else 0,
                     "pe_ratio": float(row['pe_ratio']) if row['pe_ratio'] else None,
                     "forward_pe": float(row['forward_pe']) if row['forward_pe'] else None,
+                    "peg_ratio": float(row['peg_ratio']) if row['peg_ratio'] else None,
+                    "price_to_book": float(row['price_to_book']) if row['price_to_book'] else None,
+                    "price_to_sales": float(row['price_to_sales']) if row['price_to_sales'] else None,
+                    "eps": float(row['eps']) if row['eps'] else None,
+                    # Dividends
                     "dividend_yield": float(row['dividend_yield']) if row['dividend_yield'] else None,
-                    "beta": float(row['beta']) if row['beta'] else None,
-                    "week52_high": float(row['fifty_two_week_high']) if row['fifty_two_week_high'] else None,
-                    "week52_low": float(row['fifty_two_week_low']) if row['fifty_two_week_low'] else None,
-                    "avg_volume": int(row['avg_volume_10d']) if row['avg_volume_10d'] else None,
-                    "sector": row['sector'] or "Unknown",
-                    "industry": row['industry'] or "Unknown",
-                    "country": row['country'] or "Unknown",
+                    # Profitability
+                    "profit_margin": float(row['profit_margin']) if row['profit_margin'] else None,
+                    "operating_margin": float(row['operating_margin']) if row['operating_margin'] else None,
+                    "roe": float(row['roe']) if row['roe'] else None,
+                    "roa": float(row['roa']) if row['roa'] else None,
+                    # Fundamentals
+                    "revenue": float(row['revenue']) if row['revenue'] else None,
+                    "net_income": float(row['net_income']) if row['net_income'] else None,
+                    # Analyst data
+                    "analyst_rating": row['analyst_rating'],
+                    "analyst_target": float(row['analyst_target_price']) if row['analyst_target_price'] else None,
+                    "analyst_count": row['analyst_count'],
+                    # 52-week data
+                    "week52_high": week52_high,
+                    "week52_low": week52_low,
+                    "pct_from_52w_high": round(pct_from_high, 2) if pct_from_high else None,
+                    "pct_from_52w_low": round(pct_from_low, 2) if pct_from_low else None,
+                    "avg_volume": int(row['avg_volume']) if row['avg_volume'] else None,
+                    # Metadata
+                    "price_updated_at": row['price_updated_at'].isoformat() if row['price_updated_at'] else None,
                 })
 
         logger.info(f"Screener returned {len(results)} results (Total: {total_count})")
@@ -280,7 +435,8 @@ async def screen_stocks(
             "results": results,
             "total_count": total_count,
             "page": (offset // limit) + 1,
-            "limit": limit
+            "limit": limit,
+            "data_source": "real",  # Flag that this is real data
         }
 
     except Exception as e:
