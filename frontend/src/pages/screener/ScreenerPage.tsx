@@ -32,16 +32,39 @@ interface ScreenerResult {
   change_pct: number;
   volume: number;
   market_cap: number;
+  // Valuation metrics
   pe_ratio: number | null;
   forward_pe: number | null;
+  peg_ratio: number | null;
+  price_to_book: number | null;
+  price_to_sales: number | null;
+  eps: number | null;
+  // Dividend
   dividend_yield: number | null;
-  beta: number | null;
+  // Profitability
+  profit_margin: number | null;
+  operating_margin: number | null;
+  roe: number | null;
+  roa: number | null;
+  revenue: number | null;
+  net_income: number | null;
+  // Analyst data
+  analyst_rating: string | null;
+  analyst_target: number | null;
+  analyst_count: number | null;
+  // 52-week data
   week52_high: number | null;
   week52_low: number | null;
+  pct_from_52w_high: number | null;
+  pct_from_52w_low: number | null;
   avg_volume: number | null;
+  // Other
+  beta: number | null;
   sector: string;
   industry: string;
   country: string;
+  exchange: string;
+  asset_type: string;
 }
 
 interface PresetScreen {
@@ -81,21 +104,84 @@ export default function ScreenerPage() {
   const [sortColumn, setSortColumn] = createSignal<string>('market_cap');
   const [sortDirection, setSortDirection] = createSignal<'asc' | 'desc'>('desc');
 
-  // Filter states
+  // Filter states - Basic
   const [priceMin, setPriceMin] = createSignal<number | undefined>();
   const [priceMax, setPriceMax] = createSignal<number | undefined>();
   const [volumeMin, setVolumeMin] = createSignal<number | undefined>();
   const [marketCapMin, setMarketCapMin] = createSignal<number | undefined>();
   const [marketCapMax, setMarketCapMax] = createSignal<number | undefined>();
-  const [peRatioMin, setPeRatioMin] = createSignal<number | undefined>();
-  const [peRatioMax, setPeRatioMax] = createSignal<number | undefined>();
   const [changePctMin, setChangePctMin] = createSignal<number | undefined>();
   const [changePctMax, setChangePctMax] = createSignal<number | undefined>();
-  const [dividendMin, setDividendMin] = createSignal<number | undefined>();
-  const [betaMin, setBetaMin] = createSignal<number | undefined>();
-  const [betaMax, setBetaMax] = createSignal<number | undefined>();
   const [selectedSector, setSelectedSector] = createSignal<string>('');
   const [selectedCountry, setSelectedCountry] = createSignal<string>('');
+  
+  // Filter states - Valuation
+  const [peRatioMin, setPeRatioMin] = createSignal<number | undefined>();
+  const [peRatioMax, setPeRatioMax] = createSignal<number | undefined>();
+  const [forwardPeMin, setForwardPeMin] = createSignal<number | undefined>();
+  const [forwardPeMax, setForwardPeMax] = createSignal<number | undefined>();
+  const [pegRatioMin, setPegRatioMin] = createSignal<number | undefined>();
+  const [pegRatioMax, setPegRatioMax] = createSignal<number | undefined>();
+  const [priceToBkMin, setPriceToBkMin] = createSignal<number | undefined>();
+  const [priceToBkMax, setPriceToBkMax] = createSignal<number | undefined>();
+  const [priceToSalesMin, setPriceToSalesMin] = createSignal<number | undefined>();
+  const [priceToSalesMax, setPriceToSalesMax] = createSignal<number | undefined>();
+  
+  // Filter states - Dividends & Income
+  const [dividendMin, setDividendMin] = createSignal<number | undefined>();
+  const [epsMin, setEpsMin] = createSignal<number | undefined>();
+  
+  // Filter states - Profitability
+  const [profitMarginMin, setProfitMarginMin] = createSignal<number | undefined>();
+  const [roeMin, setRoeMin] = createSignal<number | undefined>();
+  const [roaMin, setRoaMin] = createSignal<number | undefined>();
+  
+  // Filter states - Risk (Beta not in DB yet)
+  const [betaMin, setBetaMin] = createSignal<number | undefined>();
+  const [betaMax, setBetaMax] = createSignal<number | undefined>();
+  
+  // Active Filters Tracking
+  const getActiveFilters = () => {
+    const filters: { key: string; label: string; value: string; clear: () => void }[] = [];
+    
+    if (priceMin() !== undefined || priceMax() !== undefined) {
+      const label = priceMin() && priceMax() ? `$${priceMin()}-$${priceMax()}` :
+                    priceMin() ? `>$${priceMin()}` : `<$${priceMax()}`;
+      filters.push({ key: 'price', label: `Price: ${label}`, value: label, clear: () => { setPriceMin(undefined); setPriceMax(undefined); } });
+    }
+    if (marketCapMin() !== undefined || marketCapMax() !== undefined) {
+      const label = marketCapMin() && marketCapMax() ? `${marketCapMin()}B-${marketCapMax()}B` :
+                    marketCapMin() ? `>${marketCapMin()}B` : `<${marketCapMax()}B`;
+      filters.push({ key: 'mcap', label: `Market Cap: ${label}`, value: label, clear: () => { setMarketCapMin(undefined); setMarketCapMax(undefined); } });
+    }
+    if (peRatioMin() !== undefined || peRatioMax() !== undefined) {
+      const label = peRatioMin() && peRatioMax() ? `${peRatioMin()}-${peRatioMax()}` :
+                    peRatioMin() ? `>${peRatioMin()}` : `<${peRatioMax()}`;
+      filters.push({ key: 'pe', label: `P/E: ${label}`, value: label, clear: () => { setPeRatioMin(undefined); setPeRatioMax(undefined); } });
+    }
+    if (dividendMin() !== undefined) {
+      filters.push({ key: 'div', label: `Dividend: >${dividendMin()}%`, value: `${dividendMin()}`, clear: () => setDividendMin(undefined) });
+    }
+    if (selectedSector()) {
+      filters.push({ key: 'sector', label: `Sector: ${selectedSector()}`, value: selectedSector(), clear: () => setSelectedSector('') });
+    }
+    if (changePctMin() !== undefined || changePctMax() !== undefined) {
+      const label = changePctMin() && changePctMax() ? `${changePctMin()}%-${changePctMax()}%` :
+                    changePctMin() ? `>${changePctMin()}%` : `<${changePctMax()}%`;
+      filters.push({ key: 'chg', label: `Change: ${label}`, value: label, clear: () => { setChangePctMin(undefined); setChangePctMax(undefined); } });
+    }
+    if (profitMarginMin() !== undefined) {
+      filters.push({ key: 'pm', label: `Margin: >${profitMarginMin()}%`, value: `${profitMarginMin()}`, clear: () => setProfitMarginMin(undefined) });
+    }
+    if (roeMin() !== undefined) {
+      filters.push({ key: 'roe', label: `ROE: >${roeMin()}%`, value: `${roeMin()}`, clear: () => setRoeMin(undefined) });
+    }
+    if (epsMin() !== undefined) {
+      filters.push({ key: 'eps', label: `EPS: >$${epsMin()}`, value: `${epsMin()}`, clear: () => setEpsMin(undefined) });
+    }
+    
+    return filters;
+  };
 
   // Preset icons mapping
   const presetIcons: Record<string, any> = {
@@ -159,21 +245,42 @@ export default function ScreenerPage() {
   };
 
   const getCriteria = () => ({
+    // Basic filters
     price_min: priceMin(),
     price_max: priceMax(),
     volume_min: volumeMin(),
     // Convert Billions (UI) to Millions (DB)
     market_cap_min: marketCapMin() ? marketCapMin()! * 1000 : undefined,
     market_cap_max: marketCapMax() ? marketCapMax()! * 1000 : undefined,
-    pe_ratio_min: peRatioMin(),
-    pe_ratio_max: peRatioMax(),
     change_pct_min: changePctMin(),
     change_pct_max: changePctMax(),
-    dividend_yield_min: dividendMin(),
-    beta_min: betaMin(),
-    beta_max: betaMax(),
     sector: selectedSector() || undefined,
     country: selectedCountry() || undefined,
+    
+    // Valuation filters
+    pe_ratio_min: peRatioMin(),
+    pe_ratio_max: peRatioMax(),
+    forward_pe_min: forwardPeMin(),
+    forward_pe_max: forwardPeMax(),
+    peg_ratio_min: pegRatioMin(),
+    peg_ratio_max: pegRatioMax(),
+    price_to_book_min: priceToBkMin(),
+    price_to_book_max: priceToBkMax(),
+    price_to_sales_min: priceToSalesMin(),
+    price_to_sales_max: priceToSalesMax(),
+    
+    // Income filters
+    dividend_yield_min: dividendMin() ? dividendMin()! / 100 : undefined, // Convert % to decimal
+    eps_min: epsMin(),
+    
+    // Profitability filters
+    profit_margin_min: profitMarginMin() ? profitMarginMin()! / 100 : undefined,
+    roe_min: roeMin() ? roeMin()! / 100 : undefined,
+    roa_min: roaMin() ? roaMin()! / 100 : undefined,
+    
+    // Risk filters (beta not yet in DB)
+    beta_min: betaMin(),
+    beta_max: betaMax(),
   });
 
   const handleScan = async (overrideCriteria?: any, newPage = 1) => {
@@ -279,6 +386,20 @@ export default function ScreenerPage() {
     setBetaMax(undefined);
     setSelectedSector('');
     setSelectedCountry('');
+    // New filters
+    setForwardPeMin(undefined);
+    setForwardPeMax(undefined);
+    setPegRatioMin(undefined);
+    setPegRatioMax(undefined);
+    setPriceToBkMin(undefined);
+    setPriceToBkMax(undefined);
+    setPriceToSalesMin(undefined);
+    setPriceToSalesMax(undefined);
+    setEpsMin(undefined);
+    setProfitMarginMin(undefined);
+    setRoeMin(undefined);
+    setRoaMin(undefined);
+    
     setActivePreset(null);
     setPage(1);
     if (runScan) {
@@ -459,6 +580,32 @@ export default function ScreenerPage() {
         </div>
       </div>
 
+      {/* Active Filters Badges */}
+      <Show when={getActiveFilters().length > 0}>
+        <div class="flex-shrink-0 bg-terminal-900/30 border-b border-terminal-750 px-4 py-2 overflow-x-auto">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs text-gray-500 font-medium">Active Filters:</span>
+            <For each={getActiveFilters()}>
+              {(filter) => (
+                <button
+                  onClick={() => { filter.clear(); handleScan(undefined, 1); }}
+                  class="flex-shrink-0 px-2 py-1 flex items-center gap-1.5 text-xs font-medium rounded-full bg-accent-500/20 text-accent-400 border border-accent-500/30 hover:bg-accent-500/30 transition-all group"
+                >
+                  <span>{filter.label}</span>
+                  <X size={10} class="opacity-50 group-hover:opacity-100" />
+                </button>
+              )}
+            </For>
+            <button
+              onClick={() => resetFilters()}
+              class="text-xs text-gray-500 hover:text-white transition-colors underline"
+            >
+              Clear All
+            </button>
+          </div>
+        </div>
+      </Show>
+
       <div class="flex-1 flex overflow-hidden relative">
         {/* Filter Panel (Collapsible) */}
         <Show when={showFilters()}>
@@ -470,6 +617,40 @@ export default function ScreenerPage() {
                   <X size={20} />
                 </button>
               </div>
+              
+              {/* Quick Filter Presets */}
+              <div class="pb-3 border-b border-terminal-750">
+                <label class="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2 block">
+                  Quick Filters
+                </label>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => { setPeRatioMax(15); setDividendMin(2); handleScan(undefined, 1); }}
+                    class="px-2 py-1.5 text-[10px] font-medium bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 text-gray-400 hover:text-white rounded transition-all"
+                  >
+                    💎 Value
+                  </button>
+                  <button
+                    onClick={() => { setPeRatioMin(25); setMarketCapMin(100); handleScan(undefined, 1); }}
+                    class="px-2 py-1.5 text-[10px] font-medium bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 text-gray-400 hover:text-white rounded transition-all"
+                  >
+                    🚀 Growth
+                  </button>
+                  <button
+                    onClick={() => { setDividendMin(3); handleScan(undefined, 1); }}
+                    class="px-2 py-1.5 text-[10px] font-medium bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 text-gray-400 hover:text-white rounded transition-all"
+                  >
+                    💰 Dividend
+                  </button>
+                  <button
+                    onClick={() => { setMarketCapMin(500); handleScan(undefined, 1); }}
+                    class="px-2 py-1.5 text-[10px] font-medium bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 text-gray-400 hover:text-white rounded transition-all"
+                  >
+                    🏢 Mega Cap
+                  </button>
+                </div>
+              </div>
+
               {/* Price */}
               <div>
                 <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 block">
@@ -571,6 +752,98 @@ export default function ScreenerPage() {
                     value={peRatioMax() ?? ''}
                     onInput={(e) => setPeRatioMax(e.target.value ? parseFloat(e.target.value) : undefined)}
                     placeholder="Max"
+                    class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                  />
+                </div>
+              </div>
+
+              {/* Advanced Valuation Section */}
+              <div class="pt-2 border-t border-terminal-750">
+                <label class="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-3 block">
+                  Advanced Valuation
+                </label>
+                
+                {/* Price-to-Book */}
+                <div class="mb-3">
+                  <label class="text-xs text-gray-500 mb-1 block">Price/Book</label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={priceToBkMin() ?? ''}
+                      onInput={(e) => setPriceToBkMin(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      placeholder="Min"
+                      class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                    />
+                    <input
+                      type="number"
+                      value={priceToBkMax() ?? ''}
+                      onInput={(e) => setPriceToBkMax(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      placeholder="Max"
+                      class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                    />
+                  </div>
+                </div>
+                
+                {/* Price-to-Sales */}
+                <div class="mb-3">
+                  <label class="text-xs text-gray-500 mb-1 block">Price/Sales</label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={priceToSalesMin() ?? ''}
+                      onInput={(e) => setPriceToSalesMin(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      placeholder="Min"
+                      class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                    />
+                    <input
+                      type="number"
+                      value={priceToSalesMax() ?? ''}
+                      onInput={(e) => setPriceToSalesMax(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      placeholder="Max"
+                      class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Profitability Section */}
+              <div class="pt-2 border-t border-terminal-750">
+                <label class="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-3 block">
+                  Profitability
+                </label>
+                
+                {/* Min EPS */}
+                <div class="mb-3">
+                  <label class="text-xs text-gray-500 mb-1 block">Min EPS ($)</label>
+                  <input
+                    type="number"
+                    value={epsMin() ?? ''}
+                    onInput={(e) => setEpsMin(e.target.value ? parseFloat(e.target.value) : undefined)}
+                    placeholder="e.g. 2.00"
+                    class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                  />
+                </div>
+                
+                {/* Profit Margin */}
+                <div class="mb-3">
+                  <label class="text-xs text-gray-500 mb-1 block">Min Profit Margin (%)</label>
+                  <input
+                    type="number"
+                    value={profitMarginMin() ?? ''}
+                    onInput={(e) => setProfitMarginMin(e.target.value ? parseFloat(e.target.value) : undefined)}
+                    placeholder="e.g. 10"
+                    class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
+                  />
+                </div>
+                
+                {/* ROE */}
+                <div class="mb-3">
+                  <label class="text-xs text-gray-500 mb-1 block">Min ROE (%)</label>
+                  <input
+                    type="number"
+                    value={roeMin() ?? ''}
+                    onInput={(e) => setRoeMin(e.target.value ? parseFloat(e.target.value) : undefined)}
+                    placeholder="e.g. 15"
                     class="w-full bg-terminal-850 border border-terminal-750 text-white text-xs px-3 py-2 rounded focus:outline-none focus:border-accent-500"
                   />
                 </div>
@@ -783,17 +1056,22 @@ export default function ScreenerPage() {
                         <Show when={activeTab() === 'valuation'}>
                           <SortHeader column="market_cap" label="Market Cap" align="right" />
                           <SortHeader column="pe_ratio" label="P/E" align="right" />
-                          <SortHeader column="forward_pe" label="Fwd P/E" align="right" />
-                          <SortHeader column="dividend_yield" label="Div Yield" align="right" />
-                          <SortHeader column="price" label="Price" align="right" />
+                          <SortHeader column="price_to_book" label="P/B" align="right" />
+                          <SortHeader column="price_to_sales" label="P/S" align="right" />
+                          <SortHeader column="eps" label="EPS" align="right" />
+                          <SortHeader column="dividend_yield" label="Div %" align="right" />
                         </Show>
 
                         <Show when={activeTab() === 'performance'}>
                           <SortHeader column="change_pct" label="Change %" align="right" />
-                          <SortHeader column="beta" label="Beta" align="right" />
-                          <SortHeader column="week52_high" label="52W High" align="right" />
-                          <SortHeader column="week52_low" label="52W Low" align="right" />
-                          <SortHeader column="avg_volume" label="Avg Vol" align="right" />
+                          <SortHeader column="price" label="Price" align="right" />
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-right sticky top-0 bg-terminal-850 z-10">
+                            52W Range
+                          </th>
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-right sticky top-0 bg-terminal-850 z-10">
+                            From High
+                          </th>
+                          <SortHeader column="volume" label="Volume" align="right" />
                         </Show>
                       </tr>
                     </thead>
@@ -840,7 +1118,7 @@ export default function ScreenerPage() {
                               </td>
                               <td class="px-3 py-3 text-right">
                                 <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {formatMarketCap(result.market_cap * 1000000)}
+                                  {formatMarketCap(result.market_cap)}
                                 </span>
                               </td>
                               <td class="px-3 py-3 text-right">
@@ -858,27 +1136,44 @@ export default function ScreenerPage() {
                             <Show when={activeTab() === 'valuation'}>
                               <td class="px-3 py-3 text-right">
                                 <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {formatMarketCap(result.market_cap * 1000000)}
+                                  {formatMarketCap(result.market_cap)}
                                 </span>
                               </td>
                               <td class="px-3 py-3 text-right">
-                                <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {result.pe_ratio?.toFixed(2) || '-'}
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.pe_ratio && result.pe_ratio < 15 ? 'text-success-400' :
+                                  result.pe_ratio && result.pe_ratio > 30 ? 'text-warning-400' : 'text-gray-400'
+                                }`}>
+                                  {result.pe_ratio?.toFixed(1) || '-'}
                                 </span>
                               </td>
                               <td class="px-3 py-3 text-right">
-                                <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {result.forward_pe?.toFixed(2) || '-'}
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.price_to_book && result.price_to_book < 2 ? 'text-success-400' : 'text-gray-400'
+                                }`}>
+                                  {result.price_to_book?.toFixed(2) || '-'}
                                 </span>
                               </td>
                               <td class="px-3 py-3 text-right">
-                                <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {result.dividend_yield ? `${result.dividend_yield.toFixed(2)}%` : '-'}
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.price_to_sales && result.price_to_sales < 3 ? 'text-success-400' : 'text-gray-400'
+                                }`}>
+                                  {result.price_to_sales?.toFixed(2) || '-'}
                                 </span>
                               </td>
                               <td class="px-3 py-3 text-right">
-                                <span class="text-sm text-white font-mono tabular-nums">
-                                  ${result.price?.toFixed(2) || '0.00'}
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.eps && result.eps > 0 ? 'text-success-400' : 
+                                  result.eps && result.eps < 0 ? 'text-danger-400' : 'text-gray-400'
+                                }`}>
+                                  {result.eps ? `$${result.eps.toFixed(2)}` : '-'}
+                                </span>
+                              </td>
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.dividend_yield && result.dividend_yield > 0.02 ? 'text-success-400' : 'text-gray-400'
+                                }`}>
+                                  {result.dividend_yield ? `${(result.dividend_yield * 100).toFixed(2)}%` : '-'}
                                 </span>
                               </td>
                             </Show>
@@ -891,24 +1186,57 @@ export default function ScreenerPage() {
                                   {result.change_pct >= 0 ? '+' : ''}{result.change_pct?.toFixed(2) || '0.00'}%
                                 </span>
                               </td>
+                              {/* Price */}
                               <td class="px-3 py-3 text-right">
-                                <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {result.beta?.toFixed(2) || '-'}
+                                <span class="text-sm text-white font-mono tabular-nums">
+                                  ${result.price?.toFixed(2) || '0.00'}
                                 </span>
                               </td>
+                              {/* 52-Week Range Visual Bar */}
+                              <td class="px-3 py-3">
+                                <Show when={result.week52_low && result.week52_high} fallback={
+                                  <span class="text-xs text-gray-600">-</span>
+                                }>
+                                  <div class="flex items-center gap-2 min-w-[120px]">
+                                    <span class="text-[10px] text-gray-500 font-mono w-12 text-right">
+                                      ${result.week52_low?.toFixed(0)}
+                                    </span>
+                                    <div class="flex-1 h-1.5 bg-terminal-800 rounded-full relative">
+                                      {(() => {
+                                        const low = result.week52_low || 0;
+                                        const high = result.week52_high || 1;
+                                        const range = high - low;
+                                        const position = range > 0 ? ((result.price - low) / range) * 100 : 50;
+                                        return (
+                                          <div 
+                                            class="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-accent-500 rounded-full shadow-lg"
+                                            style={{ left: `${Math.min(100, Math.max(0, position))}%`, transform: 'translate(-50%, -50%)' }}
+                                          />
+                                        );
+                                      })()}
+                                    </div>
+                                    <span class="text-[10px] text-gray-500 font-mono w-12">
+                                      ${result.week52_high?.toFixed(0)}
+                                    </span>
+                                  </div>
+                                </Show>
+                              </td>
+                              {/* % From 52W High */}
                               <td class="px-3 py-3 text-right">
-                                <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {result.week52_high ? `$${result.week52_high.toFixed(2)}` : '-'}
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.pct_from_52w_high !== null && result.pct_from_52w_high > -10 
+                                    ? 'text-success-400' 
+                                    : result.pct_from_52w_high !== null && result.pct_from_52w_high < -30 
+                                    ? 'text-danger-400' 
+                                    : 'text-gray-400'
+                                }`}>
+                                  {result.pct_from_52w_high !== null ? `${result.pct_from_52w_high.toFixed(1)}%` : '-'}
                                 </span>
                               </td>
+                              {/* Volume */}
                               <td class="px-3 py-3 text-right">
                                 <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {result.week52_low ? `$${result.week52_low.toFixed(2)}` : '-'}
-                                </span>
-                              </td>
-                              <td class="px-3 py-3 text-right">
-                                <span class="text-xs text-gray-400 font-mono tabular-nums">
-                                  {formatVol(result.avg_volume || 0)}
+                                  {formatVol(result.volume || 0)}
                                 </span>
                               </td>
                             </Show>
