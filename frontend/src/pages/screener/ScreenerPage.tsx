@@ -77,6 +77,14 @@ interface PresetScreen {
   icon?: any;
 }
 
+interface SavedScreen {
+  id: string;
+  name: string;
+  criteria: any;
+  created_at: string;
+  last_run: string | null;
+}
+
 interface SectorInfo {
   name: string;
   count: number;
@@ -103,6 +111,11 @@ export default function ScreenerPage() {
   const [totalCount, setTotalCount] = createSignal(0);
   const [sortColumn, setSortColumn] = createSignal<string>('market_cap');
   const [sortDirection, setSortDirection] = createSignal<'asc' | 'desc'>('desc');
+  
+  // Saved Screens
+  const [savedScreens, setSavedScreens] = createSignal<SavedScreen[]>([]);
+  const [showSaveModal, setShowSaveModal] = createSignal(false);
+  const [saveScreenName, setSaveScreenName] = createSignal('');
 
   // Filter states - Basic
   const [priceMin, setPriceMin] = createSignal<number | undefined>();
@@ -215,7 +228,7 @@ export default function ScreenerPage() {
 
   // Load presets and sectors on mount
   onMount(async () => {
-    await Promise.all([loadPresets(), loadSectors()]);
+    await Promise.all([loadPresets(), loadSectors(), loadSavedScreens()]);
     // Auto-run default screen
     await handleScan();
   });
@@ -242,6 +255,106 @@ export default function ScreenerPage() {
     } catch (err) {
       console.error('Failed to load sectors:', err);
     }
+  };
+
+  const loadSavedScreens = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      
+      const response = await fetch('/api/v1/screener/saved', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSavedScreens(data.screens || []);
+      }
+    } catch (err) {
+      console.error('Failed to load saved screens:', err);
+    }
+  };
+
+  const saveCurrentScreen = async () => {
+    const name = saveScreenName().trim();
+    if (!name) return;
+    
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      alert('Please log in to save screens');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/v1/screener/saved', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name,
+          criteria: getCriteria()
+        }),
+      });
+      
+      if (response.ok) {
+        await loadSavedScreens();
+        setShowSaveModal(false);
+        setSaveScreenName('');
+      } else {
+        const data = await response.json();
+        alert(data.detail || 'Failed to save screen');
+      }
+    } catch (err) {
+      console.error('Failed to save screen:', err);
+      alert('Failed to save screen');
+    }
+  };
+
+  const deleteSavedScreen = async (screenId: string) => {
+    if (!confirm('Delete this saved screen?')) return;
+    
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    
+    try {
+      const response = await fetch(`/api/v1/screener/saved/${screenId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        await loadSavedScreens();
+      }
+    } catch (err) {
+      console.error('Failed to delete screen:', err);
+    }
+  };
+
+  const applySavedScreen = async (screen: SavedScreen) => {
+    resetFilters(false);
+    const c = screen.criteria;
+    
+    // Apply all filters from saved criteria
+    if (c.price_min) setPriceMin(c.price_min);
+    if (c.price_max) setPriceMax(c.price_max);
+    if (c.volume_min) setVolumeMin(c.volume_min);
+    if (c.market_cap_min) setMarketCapMin(c.market_cap_min / 1000); // Convert M to B
+    if (c.market_cap_max) setMarketCapMax(c.market_cap_max / 1000);
+    if (c.pe_ratio_min) setPeRatioMin(c.pe_ratio_min);
+    if (c.pe_ratio_max) setPeRatioMax(c.pe_ratio_max);
+    if (c.forward_pe_min) setForwardPeMin(c.forward_pe_min);
+    if (c.forward_pe_max) setForwardPeMax(c.forward_pe_max);
+    if (c.dividend_yield_min) setDividendMin(c.dividend_yield_min);
+    if (c.change_pct_min) setChangePctMin(c.change_pct_min);
+    if (c.change_pct_max) setChangePctMax(c.change_pct_max);
+    if (c.sector) setSelectedSector(c.sector);
+    if (c.country) setSelectedCountry(c.country);
+    if (c.eps_min) setEpsMin(c.eps_min);
+    if (c.profit_margin_min) setProfitMarginMin(c.profit_margin_min);
+    if (c.roe_min) setRoeMin(c.roe_min);
+    
+    await handleScan(c, 1);
   };
 
   const getCriteria = () => ({
@@ -936,12 +1049,52 @@ export default function ScreenerPage() {
                 </button>
 
                 <button
+                  onClick={() => setShowSaveModal(true)}
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-primary-500/50 text-primary-400 hover:text-primary-300 text-sm rounded transition-colors"
+                >
+                  <Save size={14} />
+                  <span>Save Screen</span>
+                </button>
+
+                <button
                   onClick={() => resetFilters()}
                   class="w-full px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 text-gray-400 hover:text-white text-sm rounded transition-colors"
                 >
                   Reset All Filters
                 </button>
               </div>
+
+              {/* Saved Screens Section */}
+              <Show when={savedScreens().length > 0}>
+                <div class="pt-4 border-t border-terminal-750 mt-4">
+                  <label class="text-xs font-semibold text-primary-400 uppercase tracking-wide mb-2 block">
+                    Your Saved Screens
+                  </label>
+                  <div class="space-y-1.5">
+                    <For each={savedScreens()}>
+                      {(screen) => (
+                        <div class="flex items-center gap-1 group">
+                          <button
+                            onClick={() => applySavedScreen(screen)}
+                            class="flex-1 px-2 py-1.5 text-left text-xs bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 hover:border-primary-500/50 text-gray-300 hover:text-white rounded transition-all truncate"
+                            title={`Created: ${new Date(screen.created_at).toLocaleDateString()}`}
+                          >
+                            <Star size={10} class="inline mr-1.5 text-yellow-500" />
+                            {screen.name}
+                          </button>
+                          <button
+                            onClick={() => deleteSavedScreen(screen.id)}
+                            class="p-1.5 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
             </div>
           </div>
         </Show>
@@ -1327,6 +1480,45 @@ export default function ScreenerPage() {
           </Show>
         </div>
       </div>
+
+      {/* Save Screen Modal */}
+      <Show when={showSaveModal()}>
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowSaveModal(false)}>
+          <div class="bg-terminal-900 border border-terminal-750 rounded-lg p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Save size={20} class="text-primary-400" />
+              Save Screen
+            </h3>
+            <p class="text-sm text-gray-400 mb-4">
+              Save your current filter settings for quick access later.
+            </p>
+            <input
+              type="text"
+              value={saveScreenName()}
+              onInput={(e) => setSaveScreenName(e.target.value)}
+              placeholder="Enter screen name..."
+              class="w-full bg-terminal-850 border border-terminal-750 text-white px-4 py-3 rounded-lg focus:outline-none focus:border-primary-500 mb-4"
+              onKeyPress={(e) => e.key === 'Enter' && saveCurrentScreen()}
+              autofocus
+            />
+            <div class="flex gap-3">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                class="flex-1 px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-terminal-750 text-gray-400 hover:text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveCurrentScreen}
+                disabled={!saveScreenName().trim()}
+                class="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+              >
+                Save Screen
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }
