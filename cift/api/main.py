@@ -170,6 +170,19 @@ async def lifespan(app: FastAPI):
 
             market_data_task = asyncio.create_task(fetch_and_broadcast_real_data())
             logger.info("✅ REAL Polygon market data started (live prices from polygon.io)")
+            
+            # Update 52-week high/low data on startup (runs in background)
+            async def update_52week_on_startup():
+                """Update 52-week data shortly after startup."""
+                await asyncio.sleep(30)  # Wait 30s before starting
+                logger.info("📊 Starting 52-week high/low data update...")
+                try:
+                    updated = await polygon_service.update_52week_highs_lows()
+                    logger.success(f"✅ Updated 52-week data for {updated} symbols")
+                except Exception as e:
+                    logger.error(f"Failed to update 52-week data: {e}")
+            
+            asyncio.create_task(update_52week_on_startup())
         else:
             # FALLBACK TO SIMULATOR
             from cift.core.market_simulator import simulator

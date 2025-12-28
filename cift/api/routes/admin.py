@@ -28,6 +28,7 @@ class DataUpdateRequest(BaseModel):
     update_quotes: bool = True
     update_news: bool = True
     update_bars: bool = False
+    update_52week: bool = False
     days: int = 5
 
 
@@ -37,6 +38,7 @@ class DataUpdateResponse(BaseModel):
     quotes_updated: int = 0
     news_stored: int = 0
     bars_stored: int = 0
+    week52_updated: int = 0
     message: str
 
 
@@ -84,7 +86,8 @@ async def update_market_data(
         results = {
             "quotes_updated": 0,
             "news_stored": 0,
-            "bars_stored": 0
+            "bars_stored": 0,
+            "week52_updated": 0
         }
 
         try:
@@ -98,6 +101,22 @@ async def update_market_data(
                     symbols=request.symbols,
                     limit=50
                 )
+            
+            if request.update_52week:
+                # Run in background for large operations
+                async def fetch_52week():
+                    try:
+                        svc = PolygonRealtimeService()
+                        await svc.initialize()
+                        await svc.update_52week_highs_lows(
+                            symbols=request.symbols
+                        )
+                        await svc.close()
+                    except Exception as e:
+                        logger.error(f"Background 52-week fetch failed: {e}")
+
+                background_tasks.add_task(fetch_52week)
+                results["week52_updated"] = -1  # Indicates running in background
 
             if request.update_bars:
                 # Run in background for large operations
@@ -124,7 +143,8 @@ async def update_market_data(
             quotes_updated=results["quotes_updated"],
             news_stored=results["news_stored"],
             bars_stored=results["bars_stored"],
-            message=f"Market data updated. Bars: {'running in background' if results['bars_stored'] == -1 else results['bars_stored']}"
+            week52_updated=results["week52_updated"],
+            message=f"Market data updated. Bars: {'running in background' if results['bars_stored'] == -1 else results['bars_stored']}. 52W: {'running in background' if results['week52_updated'] == -1 else results['week52_updated']}"
         )
 
     except Exception as e:

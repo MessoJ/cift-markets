@@ -825,6 +825,73 @@ class PolygonRealtimeService:
         logger.success(f"Total bars stored: {total_bars}")
         return total_bars
 
+    async def update_52week_highs_lows(self, symbols: list[str] | None = None) -> int:
+        """
+        Fetch 1 year of daily data and calculate 52-week high/low for each symbol.
+        Updates the market_data_cache table with high_52w and low_52w values.
+
+        Returns:
+            Number of symbols updated
+        """
+        if symbols is None:
+            symbols = self.DEFAULT_SYMBOLS
+
+        logger.info(f"Updating 52-week high/low for {len(symbols)} symbols...")
+
+        pool = await get_postgres_pool()
+        updated = 0
+
+        to_date = datetime.utcnow()
+        from_date = to_date - timedelta(days=365)  # 1 year of data
+
+        for symbol in symbols:
+            try:
+                # Fetch 1 year of daily bars
+                bars = await self.get_aggregates(
+                    symbol=symbol,
+                    multiplier=1,
+                    timespan="day",
+                    from_date=from_date,
+                    to_date=to_date,
+                    limit=400,  # ~260 trading days in a year
+                )
+
+                if not bars or len(bars) < 10:
+                    logger.warning(f"Insufficient daily bars for {symbol}: {len(bars) if bars else 0}")
+                    continue
+
+                # Calculate 52-week high and low
+                high_52w = max(float(bar["h"]) for bar in bars)
+                low_52w = min(float(bar["l"]) for bar in bars)
+
+                logger.info(f"{symbol}: 52W High={high_52w:.2f}, 52W Low={low_52w:.2f} (from {len(bars)} bars)")
+
+                # Update market_data_cache
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        UPDATE market_data_cache
+                        SET high_52w = $2, low_52w = $3
+                        WHERE symbol = $1
+                        """,
+                        symbol,
+                        high_52w,
+                        low_52w,
+                    )
+                    updated += 1
+
+                # Rate limiting
+                if not self.api_key:
+                    await asyncio.sleep(12)  # Free tier limit
+                else:
+                    await asyncio.sleep(0.2)
+
+            except Exception as e:
+                logger.error(f"Error updating 52-week data for {symbol}: {e}")
+
+        logger.success(f"Updated 52-week high/low for {updated} symbols")
+        return updated
+
     # ========================================================================
     # MARKET STATUS
     # ========================================================================
@@ -892,6 +959,7 @@ class PolygonBackgroundWorker:
     async def _update_loop(self):
         """Main update loop."""
         news_counter = 0
+        week52_counter = 0  # Update 52-week data less frequently (once per hour)
 
         while self._running:
             try:
@@ -905,6 +973,12 @@ class PolygonBackgroundWorker:
                         symbols=["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"], limit=20
                     )
                     news_counter = 0
+
+                # Update 52-week high/low less frequently (every 60 intervals = ~1 hour)
+                week52_counter += 1
+                if week52_counter >= 60:
+                    await self.service.update_52week_highs_lows()
+                    week52_counter = 0
 
                 await asyncio.sleep(self.update_interval)
 
