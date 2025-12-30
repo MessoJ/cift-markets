@@ -5,7 +5,7 @@ Centralized configuration using Pydantic Settings for type safety and validation
 """
 
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
         default=6379,
         validation_alias=AliasChoices("dragonfly_port", "redis_port", "REDIS_PORT"),
     )
-    dragonfly_password: Optional[str] = Field(
+    dragonfly_password: str | None = Field(
         default=None,
         validation_alias=AliasChoices(
             "dragonfly_password",
