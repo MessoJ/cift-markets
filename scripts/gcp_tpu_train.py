@@ -33,6 +33,7 @@ def get_dataset():
     import pandas as pd
     import numpy as np
     from torch.utils.data import Dataset
+    from pathlib import Path
     
     class ParquetDataset(Dataset):
         def __init__(self, file_paths):
@@ -49,7 +50,7 @@ def get_dataset():
             
             if self.data:
                 self.data = np.concatenate(self.data)
-                print(f"Loaded {len(self.data)} samples from {len(file_paths)} files")
+                print(f"Loaded {len(self.data):,} samples from {len(file_paths)} files")
             else:
                 print("WARNING: No parquet files found, using dummy data")
                 self.data = np.random.randn(10000, 2).astype(np.float32)
@@ -62,11 +63,13 @@ def get_dataset():
             y = self.data[idx + SEQ_LEN, 0]
             return torch.tensor(x), torch.tensor(y)
     
+    # Recursively find all parquet files
+    files = []
     if os.path.exists(DATA_DIR):
-        files = [os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR) if f.endswith('.parquet')]
-    else:
-        files = []
+        for f in Path(DATA_DIR).rglob('*.parquet'):
+            files.append(str(f))
     
+    print(f"Found {len(files)} parquet files")
     return ParquetDataset(files)
 
 def create_model():
