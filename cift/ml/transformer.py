@@ -1122,3 +1122,10 @@ __all__ = [
     "MultiHeadAttention",
     "CrossTimeframeAttention",
 ]
+
+# Backwards compatibility: some scripts import `TransformerModel`
+# so provide an alias to the primary `OrderFlowTransformer` class.
+TransformerModel = OrderFlowTransformer
+
+# Export the alias as well
+__all__.append("TransformerModel")
