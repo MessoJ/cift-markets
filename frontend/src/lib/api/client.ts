@@ -34,7 +34,7 @@ declare global {
 // Use relative paths to leverage Vite proxy (configured in vite.config.ts)
 // This avoids CORS issues and allows proper cookie handling
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/v1';
+const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://20.250.40.67:8000/api/v1';
 
 // ============================================================================
 // TYPE DEFINITIONS

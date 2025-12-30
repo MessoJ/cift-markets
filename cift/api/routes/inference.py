@@ -185,7 +185,7 @@ def get_api_state() -> InferenceAPIState:
 # API ROUTER
 # ============================================================================
 
-router = APIRouter(prefix="/api/v1", tags=["inference"])
+router = APIRouter(prefix="/api/v1/inference", tags=["inference"])
 
 
 @router.post("/predict", response_model=PredictionResponse)
@@ -318,7 +318,7 @@ async def predict_stream(
         state.ws_connections.discard(websocket)
 
 
-@router.get("/models/status", response_model=SystemStatus)
+@router.get("/status", response_model=SystemStatus)
 async def get_model_status(
     state: InferenceAPIState = Depends(get_api_state),
 ):
@@ -381,16 +381,20 @@ async def reload_models(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+class PipelineStartRequest(BaseModel):
+    """Request to start the pipeline."""
+    symbols: list[str] = Field(default=["SPY"], description="Symbols to trade")
+
+
 @router.post("/pipeline/start")
 async def start_pipeline(
-    symbols: list[str] = None,
+    request: PipelineStartRequest = None,
     state: InferenceAPIState = Depends(get_api_state),
 ):
     """Start the inference pipeline."""
     from cift.core.config import settings
 
-    if symbols is None:
-        symbols = ["SPY"]
+    symbols = request.symbols if request else ["SPY"]
     try:
         config = PipelineConfig(
             polygon_api_key=settings.polygon_api_key,

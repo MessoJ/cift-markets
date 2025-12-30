@@ -20,6 +20,7 @@ Real-time trade data is:
 1. Stored in QuestDB for Time & Sales persistence
 2. Cached in Dragonfly for fast retrieval (last 200 trades per symbol)
 3. Broadcast to WebSocket clients for live updates
+4. Aggregated into 1-minute bars for real-time chart updates
 """
 
 import asyncio
@@ -34,6 +35,67 @@ from loguru import logger
 
 from cift.core.config import settings
 from cift.core.database import get_postgres_pool, questdb_manager, redis_manager
+
+
+# Bar aggregation state for 1-minute bars
+_bar_aggregators: dict[str, dict] = {}  # {symbol: {open, high, low, close, volume, start_time}}
+_bar_lock = asyncio.Lock()
+
+
+async def _aggregate_trade_to_bar(symbol: str, price: float, volume: int, timestamp_ms: int):
+    """
+    Aggregate a trade into 1-minute bars and broadcast updates.
+    
+    Called for each incoming trade from Finnhub WebSocket.
+    Broadcasts bar updates to /ws/bars subscribers.
+    """
+    global _bar_aggregators
+    
+    from cift.api.routes.market_data import publish_bar_update
+    
+    async with _bar_lock:
+        now = datetime.utcnow()
+        # Round down to current minute
+        current_minute = now.replace(second=0, microsecond=0)
+        
+        if symbol not in _bar_aggregators:
+            # Start new bar
+            _bar_aggregators[symbol] = {
+                "o": price,
+                "h": price,
+                "l": price,
+                "c": price,
+                "v": volume,
+                "t": current_minute.isoformat(),
+                "start_time": current_minute
+            }
+        else:
+            bar = _bar_aggregators[symbol]
+            bar_start = bar.get("start_time")
+            
+            if bar_start < current_minute:
+                # New minute - publish completed bar and start new one
+                try:
+                    await publish_bar_update(symbol, "1m", bar)
+                except Exception as e:
+                    logger.debug(f"Bar publish error: {e}")
+                
+                # Start new bar
+                _bar_aggregators[symbol] = {
+                    "o": price,
+                    "h": price,
+                    "l": price,
+                    "c": price,
+                    "v": volume,
+                    "t": current_minute.isoformat(),
+                    "start_time": current_minute
+                }
+            else:
+                # Update current bar
+                bar["h"] = max(bar["h"], price)
+                bar["l"] = min(bar["l"], price)
+                bar["c"] = price
+                bar["v"] += volume
 
 
 class FinnhubRealtimeService:
@@ -465,6 +527,11 @@ class FinnhubRealtimeService:
                         
                         # 6. Cache in Redis/Dragonfly for fast Time & Sales retrieval
                         await self._cache_trade_to_redis(symbol, trade_record)
+                        
+                        # 7. Aggregate into 1-minute bars for WebSocket chart streaming
+                        asyncio.create_task(_aggregate_trade_to_bar(
+                            symbol, price, int(volume) if volume else 1, timestamp
+                        ))
 
             elif msg_type == "ping":
                 # Respond to ping

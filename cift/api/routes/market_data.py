@@ -633,6 +633,43 @@ async def get_time_and_sales(
     }
 
 
+# ============================================================================
+# BARS CACHE (Dragonfly/Redis - sub-millisecond response)
+# ============================================================================
+
+BARS_CACHE_TTL = 30  # Cache bars for 30 seconds (balance freshness vs performance)
+POPULAR_SYMBOLS = ["AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META", "SPY", "QQQ", "JPM"]
+
+
+async def get_cached_bars(symbol: str, timeframe: str, limit: int) -> list | None:
+    """Get bars from Dragonfly cache (sub-millisecond)."""
+    import json
+    from cift.core.database import redis_manager
+    
+    try:
+        await redis_manager.initialize()
+        cache_key = f"bars:{symbol}:{timeframe}:{limit}"
+        cached = await redis_manager.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.debug(f"Cache miss for {symbol} bars: {e}")
+    return None
+
+
+async def set_cached_bars(symbol: str, timeframe: str, limit: int, bars: list) -> None:
+    """Store bars in Dragonfly cache."""
+    import json
+    from cift.core.database import redis_manager
+    
+    try:
+        await redis_manager.initialize()
+        cache_key = f"bars:{symbol}:{timeframe}:{limit}"
+        await redis_manager.set(cache_key, json.dumps(bars, default=str), expire=BARS_CACHE_TTL)
+    except Exception as e:
+        logger.debug(f"Failed to cache {symbol} bars: {e}")
+
+
 @router.get("/bars/{symbol}")
 async def get_bars(
     symbol: str,
@@ -645,11 +682,23 @@ async def get_bars(
     """
     Get OHLCV bars for a symbol.
 
-    Performance: ~3-5ms for 100 bars (uses QuestDB SAMPLE BY optimization)
+    Performance (with caching):
+    - Cache hit: <1ms (Dragonfly)
+    - Cache miss: ~3-5ms (PostgreSQL/QuestDB)
+    - Cold start: 500-2000ms (Finnhub fetch + store)
     """
     import polars as pl
     
-    # Use optimized QuestDB query
+    symbol = symbol.upper()
+    
+    # 1. Check Dragonfly cache first (sub-millisecond)
+    if not with_indicators:  # Don't cache indicator-enriched data (too variable)
+        cached_bars = await get_cached_bars(symbol, timeframe, limit)
+        if cached_bars:
+            logger.debug(f"⚡ Cache hit for {symbol} bars ({len(cached_bars)} bars)")
+            return cached_bars
+    
+    # 2. Use optimized database query
     bars = await get_ohlcv_last_n_bars(symbol, timeframe, limit)
 
     if not bars:
@@ -696,7 +745,8 @@ async def get_bars(
             import traceback
             logger.error(traceback.format_exc())
     
-    return [
+    # Build response
+    result = [
         OHLCVBar(
             timestamp=bar["timestamp"],
             symbol=bar["symbol"],
@@ -708,6 +758,12 @@ async def get_bars(
         )
         for bar in bars
     ]
+    
+    # 3. Cache the result for next request (non-blocking)
+    import asyncio
+    asyncio.create_task(set_cached_bars(symbol, timeframe, limit, [r.model_dump() for r in result]))
+    
+    return result
 
 
 @router.get("/history/{symbol}")
@@ -1224,6 +1280,124 @@ async def websocket_market_data(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
+@router.websocket("/ws/bars")
+async def websocket_bar_stream(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time bar (OHLCV) streaming with initial backfill.
+    
+    Protocol:
+    - Client → Server: {"action": "subscribe", "symbol": "AAPL", "timeframe": "1m", "limit": 500}
+    - Client → Server: {"action": "unsubscribe", "symbol": "AAPL"}
+    - Server → Client: {"type": "bars_init", "symbol": "AAPL", "timeframe": "1m", "bars": [...], "count": 500}
+    - Server → Client: {"type": "bar_update", "symbol": "AAPL", "timeframe": "1m", "bar": {...}}
+    
+    Features:
+    - Instant initial data from Redis cache (<1ms) or DB (3-5ms)
+    - Real-time bar updates pushed as they form
+    - Single connection supports multiple symbol/timeframe pairs
+    
+    Performance:
+    - Sub-millisecond message delivery
+    - Cache-first data retrieval
+    """
+    await manager.connect(websocket)
+    subscriptions = {}  # Track {symbol: timeframe} for this connection
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action")
+            
+            if action == "subscribe":
+                symbol = data.get("symbol", "").upper()
+                timeframe = data.get("timeframe", "1d")
+                limit = min(data.get("limit", 500), 2000)  # Cap at 2000 bars
+                
+                if not symbol:
+                    await websocket.send_json({"type": "error", "message": "Symbol required"})
+                    continue
+                
+                # Subscribe to updates
+                manager.subscribe(websocket, symbol)
+                subscriptions[symbol] = timeframe
+                
+                # Fetch initial data (cache-first)
+                cached_bars = await get_cached_bars(symbol, timeframe, limit)
+                if cached_bars:
+                    bars = cached_bars
+                    source = "cache"
+                else:
+                    # Fetch from DB via existing endpoint logic
+                    from cift.core.database import get_db
+                    async for session in get_db():
+                        bars_result = await session.execute(
+                            text("""
+                                SELECT timestamp, open, high, low, close, volume
+                                FROM ohlcv_bars
+                                WHERE symbol = :symbol AND timeframe = :timeframe
+                                ORDER BY timestamp DESC
+                                LIMIT :limit
+                            """),
+                            {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                        )
+                        rows = bars_result.fetchall()
+                        bars = [
+                            {
+                                "t": row[0].isoformat() if row[0] else None,
+                                "o": float(row[1]) if row[1] else 0,
+                                "h": float(row[2]) if row[2] else 0,
+                                "l": float(row[3]) if row[3] else 0,
+                                "c": float(row[4]) if row[4] else 0,
+                                "v": int(row[5]) if row[5] else 0
+                            }
+                            for row in reversed(rows)  # Oldest first for charts
+                        ]
+                        break
+                    source = "db"
+                    
+                    # Cache the result for future subscribers
+                    if bars:
+                        asyncio.create_task(set_cached_bars(symbol, timeframe, limit, bars))
+                
+                # Send initial bars
+                await websocket.send_json({
+                    "type": "bars_init",
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "bars": bars,
+                    "count": len(bars),
+                    "source": source,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                
+                logger.info(f"WS bars subscribe: {symbol} {timeframe} - sent {len(bars)} bars from {source}")
+            
+            elif action == "unsubscribe":
+                symbol = data.get("symbol", "").upper()
+                if symbol:
+                    manager.unsubscribe(websocket, symbol)
+                    subscriptions.pop(symbol, None)
+                    await websocket.send_json({
+                        "type": "unsubscribed",
+                        "symbol": symbol,
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+            
+            elif action == "ping":
+                await websocket.send_json({
+                    "type": "pong",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+    
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        logger.info(f"WS bars client disconnected. Subscriptions: {list(subscriptions.keys())}")
+    
+    except Exception as e:
+        logger.error(f"WS bars error: {e}", exc_info=True)
+        manager.disconnect(websocket)
+
+
 # ============================================================================
 # HELPER FUNCTIONS FOR PUBLISHING DATA
 # ============================================================================
@@ -1277,5 +1451,48 @@ async def publish_tick_data(tick_data: dict):
     await manager.broadcast_to_symbol(symbol, message)
 
 
+async def publish_bar_update(symbol: str, timeframe: str, bar: dict):
+    """
+    Publish new bar data to all subscribed WebSocket clients.
+    
+    Call this when a new bar is formed or an existing bar is updated.
+    
+    Args:
+        symbol: Symbol that was updated
+        timeframe: Timeframe of the bar (1m, 5m, 1h, 1d, etc.)
+        bar: Bar data with o, h, l, c, v, t fields
+    """
+    message = {
+        "type": "bar",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "bar": bar,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    
+    await manager.broadcast_to_symbol(symbol, message)
+
+
+async def publish_bars_batch(symbol: str, timeframe: str, bars: list[dict]):
+    """
+    Publish batch of bars to subscribers (for initial load or backfill).
+    
+    Args:
+        symbol: Symbol
+        timeframe: Timeframe
+        bars: List of bar data
+    """
+    message = {
+        "type": "bars_batch",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "bars": bars,
+        "count": len(bars),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    
+    await manager.broadcast_to_symbol(symbol, message)
+
+
 # Export connection manager for use in other modules
-__all__ = ["router", "manager", "publish_price_update", "publish_tick_data"]
+__all__ = ["router", "manager", "publish_price_update", "publish_tick_data", "publish_bar_update", "publish_bars_batch"]

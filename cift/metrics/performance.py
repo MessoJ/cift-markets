@@ -186,3 +186,35 @@ def turnover(
     if pos.size < 2:
         return 0.0
     return float(np.sum(np.abs(np.diff(pos))))
+
+
+def calmar_ratio(
+    returns: Iterable[float] | np.ndarray,
+    equity_curve: Iterable[float] | np.ndarray,
+    *,
+    periods_per_year: int = 252,
+) -> float:
+    """Compute Calmar ratio (CAGR / Max Drawdown).
+
+    Parameters
+    ----------
+    returns:
+        Per-period arithmetic returns.
+    equity_curve:
+        Equity curve (cumulative value).
+    periods_per_year:
+        Sampling frequency.
+
+    Returns
+    -------
+    float:
+        Calmar ratio. Higher is better. Returns 0 if no drawdown.
+    """
+    ann_return = cagr(returns, periods_per_year=periods_per_year)
+    mdd = max_drawdown(equity_curve)
+
+    if mdd >= 0 or abs(mdd) < 1e-10:
+        return 0.0
+
+    # mdd is negative, so -mdd is positive
+    return ann_return / (-mdd)

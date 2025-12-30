@@ -51,7 +51,21 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "sqlalchemy[asyncio]>=2.0.23" \
         "greenlet>=3.0.0" \
         "httpx>=0.25.0" \
-        "slowapi>=0.1.9"
+        "slowapi>=0.1.9" \
+        "fastapi>=0.109.0" \
+        "uvicorn[standard]>=0.27.0" \
+        "python-multipart>=0.0.9" \
+        "pydantic>=2.0.0" \
+        "pydantic-settings>=2.0.0" \
+        "prometheus-client>=0.17.0" \
+        "itsdangerous>=2.0.0" \
+        "loguru>=0.7.0" \
+        "bcrypt>=4.0.0" \
+        "pyjwt>=2.8.0" \
+        "email-validator>=2.0.0" \
+        "reportlab>=4.0.0" \
+        "qrcode>=7.0" \
+        "pillow>=10.0.0"
 
 # Copy Rust source for PyO3 binding
 COPY rust_core/ /build/rust_core/

@@ -431,6 +431,13 @@ export default function ChartsPage() {
   // KEYBOARD SHORTCUTS (Industry Standard)
   // =========================================================================
   onMount(() => {
+    // Read symbol from URL query params (e.g., /charts?symbol=NVDA)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlSymbol = urlParams.get('symbol');
+    if (urlSymbol && urlSymbol.trim()) {
+      setSymbol(urlSymbol.toUpperCase());
+    }
+    
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;

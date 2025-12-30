@@ -14,12 +14,12 @@ export default defineConfig({
     strictPort: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://20.250.40.67:8000',
         changeOrigin: true,
         secure: false,
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://20.250.40.67:8000',
         ws: true,
       },
     },

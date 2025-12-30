@@ -183,6 +183,47 @@ async def lifespan(app: FastAPI):
                     logger.error(f"Failed to update 52-week data: {e}")
             
             asyncio.create_task(update_52week_on_startup())
+            
+            # Pre-fetch popular symbol bars on startup (warm the cache)
+            async def prefetch_popular_bars():
+                """Pre-fetch bars for popular symbols to warm the cache."""
+                await asyncio.sleep(10)  # Wait 10s for other services to init
+                logger.info("🔥 Pre-fetching bars for popular symbols to warm cache...")
+                
+                popular = ["AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META", "SPY", "QQQ", "JPM"]
+                timeframes = ["1d", "1h"]  # Pre-cache daily and hourly
+                
+                from cift.core.trading_queries import get_ohlcv_last_n_bars
+                from cift.api.routes.market_data import set_cached_bars
+                
+                for symbol in popular:
+                    for tf in timeframes:
+                        try:
+                            bars = await get_ohlcv_last_n_bars(symbol, tf, 500)
+                            if bars:
+                                # Convert to cacheable format
+                                bar_dicts = [
+                                    {
+                                        "timestamp": str(b["timestamp"]),
+                                        "symbol": b["symbol"],
+                                        "open": float(b["open"]),
+                                        "high": float(b["high"]),
+                                        "low": float(b["low"]),
+                                        "close": float(b["close"]),
+                                        "volume": int(b["volume"]),
+                                    }
+                                    for b in bars
+                                ]
+                                await set_cached_bars(symbol, tf, 500, bar_dicts)
+                                logger.debug(f"✅ Pre-cached {len(bars)} {tf} bars for {symbol}")
+                        except Exception as e:
+                            logger.debug(f"Failed to pre-cache {symbol} {tf}: {e}")
+                        
+                        await asyncio.sleep(0.1)  # Rate limit
+                
+                logger.success(f"✅ Pre-fetched bars for {len(popular)} popular symbols")
+            
+            asyncio.create_task(prefetch_popular_bars())
         else:
             # FALLBACK TO SIMULATOR
             from cift.core.market_simulator import simulator

@@ -11,7 +11,7 @@
 import { createSignal } from 'solid-js';
 import { AssetMarkerData, NewsEvent, MarketMovingEvent, calculateEventStatus } from '../config/assetColors';
 
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/api/v1';
+const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://20.250.40.67:8000/api/v1';
 
 export type AssetUpdateCallback = (asset: AssetMarkerData) => void;
 export type NewsUpdateCallback = (news: NewsEvent) => void;

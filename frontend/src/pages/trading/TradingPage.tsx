@@ -35,6 +35,7 @@ import { registerShortcut, ShortcutHint } from '~/components/ui/KeyboardShortcut
 import CandlestickChart from '~/components/charts/CandlestickChart';
 import CompanyProfileWidget from '~/components/trading/CompanyProfileWidget';
 import { InlineAnalyzer } from '~/components/analysis/InlineAnalyzer';
+import HFTControlPanel from '~/components/trading/HFTControlPanel';
 
 // --- Types ---
 type Tab = 'positions' | 'open_orders' | 'order_history' | 'trade_history';
@@ -252,6 +253,7 @@ export default function TradingPage() {
   const [showConfirmation, setShowConfirmation] = createSignal(false);
   const [pendingOrder, setPendingOrder] = createSignal<any>(null);
   const [requireConfirmation, setRequireConfirmation] = createSignal(true);
+  const [showSettings, setShowSettings] = createSignal(false);
   
   // Data State
   const [orderBook, setOrderBook] = createSignal<OrderBookData | null>(null);
@@ -923,6 +925,11 @@ export default function TradingPage() {
         {/* RIGHT PANEL: Order Entry & Watchlist (20%) */}
         <div class={`w-full lg:w-80 flex-col border-l-0 lg:border-l border-t lg:border-t-0 border-terminal-800 bg-terminal-900 shrink-0 overflow-hidden h-[600px] lg:h-auto ${mobileTab() === 'trade' ? 'flex' : 'hidden lg:flex'}`}>
           
+          {/* HFT Control Panel (Collapsible or always visible) */}
+          <div class="p-4 border-b border-terminal-800">
+            <HFTControlPanel />
+          </div>
+
           {/* Order Entry Form - Scrollable */}
           <div class="flex-1 overflow-auto p-4">
             <div class="flex items-center justify-between mb-4">
@@ -937,7 +944,43 @@ export default function TradingPage() {
                 >
                   {requireConfirmation() ? <Shield class="w-3.5 h-3.5" /> : <Zap class="w-3.5 h-3.5" />}
                 </button>
-                <button class="p-1.5 hover:bg-terminal-800 rounded text-gray-500"><Settings class="w-3.5 h-3.5" /></button>
+                <div class="relative">
+                  <button 
+                    onClick={() => setShowSettings(!showSettings())}
+                    class={`p-1.5 hover:bg-terminal-800 rounded transition-colors ${showSettings() ? 'text-accent-400 bg-terminal-800' : 'text-gray-500'}`}
+                  >
+                    <Settings class="w-3.5 h-3.5" />
+                  </button>
+                  
+                  <Show when={showSettings()}>
+                    <div class="absolute right-0 top-full mt-2 w-48 bg-terminal-900 border border-terminal-700 rounded-lg shadow-xl z-50 p-3 space-y-3">
+                      <h4 class="text-[10px] font-bold text-gray-500 uppercase">Order Settings</h4>
+                      
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-300">Confirmations</span>
+                        <button 
+                          onClick={() => setRequireConfirmation(!requireConfirmation())}
+                          class={`w-8 h-4 rounded-full transition-colors relative ${requireConfirmation() ? 'bg-accent-500' : 'bg-terminal-700'}`}
+                        >
+                          <div class={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${requireConfirmation() ? 'left-4.5' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                      
+                      <div class="space-y-1">
+                        <label class="text-[10px] text-gray-500">Default Quantity</label>
+                        <input type="number" value="100" class="w-full bg-terminal-950 border border-terminal-700 rounded px-2 py-1 text-xs text-white" />
+                      </div>
+                      
+                      <div class="space-y-1">
+                        <label class="text-[10px] text-gray-500">Slippage (bps)</label>
+                        <input type="number" value="10" class="w-full bg-terminal-950 border border-terminal-700 rounded px-2 py-1 text-xs text-white" />
+                      </div>
+                    </div>
+                    
+                    {/* Backdrop to close */}
+                    <div class="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />
+                  </Show>
+                </div>
               </div>
             </div>
 

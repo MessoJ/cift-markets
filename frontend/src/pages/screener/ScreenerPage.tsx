@@ -90,7 +90,58 @@ interface SectorInfo {
   count: number;
 }
 
-type ViewTab = 'overview' | 'valuation' | 'performance';
+// Extended types for new features
+interface TechnicalIndicators {
+  symbol: string;
+  rsi_14: number | null;
+  sma_20: number | null;
+  sma_50: number | null;
+  sma_200: number | null;
+  ema_20: number | null;
+  current_price: number | null;
+  macd?: { macd_line: number | null } | null;
+  bollinger_bands?: { upper: number; middle: number; lower: number } | null;
+}
+
+interface PerformanceData {
+  symbol: string;
+  return_1w: number | null;
+  return_1m: number | null;
+  return_3m: number | null;
+  return_6m: number | null;
+  return_ytd: number | null;
+  return_1y: number | null;
+  volatility_30d: number | null;
+}
+
+interface ScatterDataPoint {
+  symbol: string;
+  name: string;
+  sector: string;
+  x: number | null;
+  y: number | null;
+  size: number;
+}
+
+interface BacktestItem {
+  id: string;
+  name: string;
+  status: string;
+  total_return: number | null;
+  max_drawdown: number | null;
+  created_at: string;
+}
+
+interface AlertItem {
+  id: string;
+  name: string;
+  criteria: any;
+  is_active: boolean;
+  matched_symbols: string[];
+  created_at: string;
+}
+
+type ViewTab = 'overview' | 'valuation' | 'performance' | 'profitability' | 'technical';
 
 export default function ScreenerPage() {
   const navigate = useNavigate();
@@ -116,8 +167,34 @@ export default function ScreenerPage() {
   const [savedScreens, setSavedScreens] = createSignal<SavedScreen[]>([]);
   const [showSaveModal, setShowSaveModal] = createSignal(false);
   const [saveScreenName, setSaveScreenName] = createSignal('');
-
-  // Filter states - Basic
+  
+  // NEW: Technical Indicators & Performance Data
+  const [technicalData, setTechnicalData] = createSignal<Record<string, TechnicalIndicators>>({});
+  const [performanceData, setPerformanceData] = createSignal<Record<string, PerformanceData>>({});
+  const [loadingTechnical, setLoadingTechnical] = createSignal(false);
+  const [loadingPerformance, setLoadingPerformance] = createSignal(false);
+  
+  // NEW: Scatter Plot
+  const [showScatterPlot, setShowScatterPlot] = createSignal(false);
+  const [scatterData, setScatterData] = createSignal<ScatterDataPoint[]>([]);
+  const [scatterXAxis, setScatterXAxis] = createSignal('pe_ratio');
+  const [scatterYAxis, setScatterYAxis] = createSignal('roe');
+  const [loadingScatter, setLoadingScatter] = createSignal(false);
+  
+  // NEW: Alerts & Backtests
+  const [showAlertsPanel, setShowAlertsPanel] = createSignal(false);
+  const [alerts, setAlerts] = createSignal<AlertItem[]>([]);
+  const [showBacktestPanel, setShowBacktestPanel] = createSignal(false);
+  const [backtests, setBacktests] = createSignal<BacktestItem[]>([]);
+  const [newAlertName, setNewAlertName] = createSignal('');
+  const [newBacktestName, setNewBacktestName] = createSignal('');
+  const [backtestStartDate, setBacktestStartDate] = createSignal('');
+  const [backtestEndDate, setBacktestEndDate] = createSignal('');
+  
+  // Preview count (debounced filter preview)
+  const [previewCount, setPreviewCount] = createSignal<number | null>(null);
+  const [previewLoading, setPreviewLoading] = createSignal(false);
+  let previewTimeout: ReturnType<typeof setTimeout> | null = null;
   const [priceMin, setPriceMin] = createSignal<number | undefined>();
   const [priceMax, setPriceMax] = createSignal<number | undefined>();
   const [volumeMin, setVolumeMin] = createSignal<number | undefined>();
@@ -274,6 +351,226 @@ export default function ScreenerPage() {
     }
   };
 
+  // NEW: Load technical indicators for current results
+  const loadTechnicalData = async () => {
+    const symbols = results().map(r => r.symbol).slice(0, 20); // Limit to 20
+    if (symbols.length === 0) return;
+    
+    setLoadingTechnical(true);
+    try {
+      const response = await fetch(`/api/v1/screener/technical/bulk?symbols=${symbols.join(',')}&timeframe=1d`);
+      if (response.ok) {
+        const data = await response.json();
+        setTechnicalData(data.data || {});
+      }
+    } catch (err) {
+      console.error('Failed to load technical data:', err);
+    } finally {
+      setLoadingTechnical(false);
+    }
+  };
+
+  // NEW: Load performance metrics for current results
+  const loadPerformanceData = async () => {
+    const symbols = results().map(r => r.symbol).slice(0, 20);
+    if (symbols.length === 0) return;
+    
+    setLoadingPerformance(true);
+    try {
+      const response = await fetch(`/api/v1/screener/performance/bulk?symbols=${symbols.join(',')}`);
+      if (response.ok) {
+        const data = await response.json();
+        setPerformanceData(data.data || {});
+      }
+    } catch (err) {
+      console.error('Failed to load performance data:', err);
+    } finally {
+      setLoadingPerformance(false);
+    }
+  };
+
+  // NEW: Load scatter plot data
+  const loadScatterData = async () => {
+    setLoadingScatter(true);
+    try {
+      const params = new URLSearchParams({
+        x_axis: scatterXAxis(),
+        y_axis: scatterYAxis(),
+      });
+      if (selectedSector()) {
+        params.append('sector', selectedSector());
+      }
+      const response = await fetch(`/api/v1/screener/scatter-data?${params}`);
+      if (response.ok) {
+        const data = await response.json();
+        setScatterData(data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to load scatter data:', err);
+    } finally {
+      setLoadingScatter(false);
+    }
+  };
+
+  // NEW: Load alerts
+  const loadAlerts = async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    
+    try {
+      const response = await fetch('/api/v1/screener/alerts', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAlerts(data.alerts || []);
+      }
+    } catch (err) {
+      console.error('Failed to load alerts:', err);
+    }
+  };
+
+  // NEW: Create alert from current filters
+  const createAlert = async () => {
+    const name = newAlertName().trim();
+    if (!name) {
+      alert('Please enter an alert name');
+      return;
+    }
+    
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      alert('Please log in to create alerts');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/v1/screener/alerts', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name,
+          criteria: getCriteria(),
+          notify_email: true,
+        }),
+      });
+      
+      if (response.ok) {
+        await loadAlerts();
+        setNewAlertName('');
+        alert('Alert created! You\'ll be notified when stocks match your criteria.');
+      } else {
+        const data = await response.json();
+        alert(data.detail || 'Failed to create alert');
+      }
+    } catch (err) {
+      console.error('Failed to create alert:', err);
+    }
+  };
+
+  // NEW: Delete alert
+  const deleteAlert = async (alertId: string) => {
+    if (!confirm('Delete this alert?')) return;
+    
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    
+    try {
+      const response = await fetch(`/api/v1/screener/alerts/${alertId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        await loadAlerts();
+      }
+    } catch (err) {
+      console.error('Failed to delete alert:', err);
+    }
+  };
+
+  // NEW: Load backtests
+  const loadBacktests = async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    
+    try {
+      const response = await fetch('/api/v1/screener/backtests', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setBacktests(data.backtests || []);
+      }
+    } catch (err) {
+      console.error('Failed to load backtests:', err);
+    }
+  };
+
+  // NEW: Create backtest
+  const createBacktest = async () => {
+    const name = newBacktestName().trim();
+    if (!name || !backtestStartDate() || !backtestEndDate()) {
+      alert('Please enter backtest name and date range');
+      return;
+    }
+    
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      alert('Please log in to create backtests');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/v1/screener/backtests', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name,
+          criteria: getCriteria(),
+          start_date: backtestStartDate(),
+          end_date: backtestEndDate(),
+          initial_capital: 100000,
+          rebalance_frequency: 'monthly',
+          position_sizing: 'equal_weight',
+          max_positions: 20,
+        }),
+      });
+      
+      if (response.ok) {
+        await loadBacktests();
+        setNewBacktestName('');
+        setBacktestStartDate('');
+        setBacktestEndDate('');
+        alert('Backtest started! Results will be available shortly.');
+      } else {
+        const data = await response.json();
+        alert(data.detail || 'Failed to create backtest');
+      }
+    } catch (err) {
+      console.error('Failed to create backtest:', err);
+    }
+  };
+
+  // NEW: Load technical data when switching to technical tab
+  createEffect(() => {
+    if (activeTab() === 'technical' && results().length > 0 && Object.keys(technicalData()).length === 0) {
+      loadTechnicalData();
+    }
+  });
+
+  // NEW: Load scatter data when opening scatter plot
+  createEffect(() => {
+    if (showScatterPlot()) {
+      loadScatterData();
+    }
+  });
+
   const saveCurrentScreen = async () => {
     const name = saveScreenName().trim();
     if (!name) return;
@@ -383,17 +680,56 @@ export default function ScreenerPage() {
     price_to_sales_max: priceToSalesMax(),
     
     // Income filters
-    dividend_yield_min: dividendMin() ? dividendMin()! / 100 : undefined, // Convert % to decimal
+    dividend_yield_min: dividendMin() ? dividendMin()! / 100 : undefined, // Convert % to decimal (DB stores as decimal 0.0247)
     eps_min: epsMin(),
     
-    // Profitability filters
-    profit_margin_min: profitMarginMin() ? profitMarginMin()! / 100 : undefined,
-    roe_min: roeMin() ? roeMin()! / 100 : undefined,
-    roa_min: roaMin() ? roaMin()! / 100 : undefined,
+    // Profitability filters (DB stores as percentage like 26.92, not 0.2692)
+    profit_margin_min: profitMarginMin(),
+    roe_min: roeMin(),
+    roa_min: roaMin(),
     
     // Risk filters (beta not yet in DB)
     beta_min: betaMin(),
     beta_max: betaMax(),
+  });
+
+  // Debounced preview count - updates as user changes filters
+  const updatePreviewCount = async () => {
+    setPreviewLoading(true);
+    try {
+      const criteria = getCriteria();
+      const response = await fetch(`/api/v1/screener/scan?limit=0&offset=0`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(criteria),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setPreviewCount(data.total_count || 0);
+      }
+    } catch (err) {
+      console.error('Preview count error:', err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Trigger preview count on filter changes (debounced)
+  createEffect(() => {
+    // Track all filter values
+    const _ = [
+      priceMin(), priceMax(), volumeMin(), marketCapMin(), marketCapMax(),
+      changePctMin(), changePctMax(), selectedSector(), selectedCountry(),
+      peRatioMin(), peRatioMax(), forwardPeMin(), forwardPeMax(),
+      pegRatioMin(), pegRatioMax(), priceToBkMin(), priceToBkMax(),
+      priceToSalesMin(), priceToSalesMax(), dividendMin(), epsMin(),
+      profitMarginMin(), roeMin(), roaMin(), betaMin(), betaMax()
+    ];
+    
+    // Debounce the preview
+    if (previewTimeout) clearTimeout(previewTimeout);
+    previewTimeout = setTimeout(updatePreviewCount, 500);
   });
 
   const handleScan = async (overrideCriteria?: any, newPage = 1) => {
@@ -1039,6 +1375,22 @@ export default function ScreenerPage() {
 
               {/* Action Buttons */}
               <div class="pt-4 space-y-2">
+                {/* Preview Count */}
+                <Show when={previewCount() !== null}>
+                  <div class="text-center py-2 px-3 bg-terminal-850 border border-terminal-700 rounded">
+                    <span class="text-xs text-gray-400">
+                      {previewLoading() ? (
+                        <span class="animate-pulse">Counting...</span>
+                      ) : (
+                        <>
+                          <span class="text-lg font-bold text-white">{previewCount()}</span>
+                          <span class="ml-1">stocks match</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </Show>
+                
                 <button
                   onClick={() => handleScan(undefined, 1)}
                   disabled={loading()}
@@ -1054,6 +1406,33 @@ export default function ScreenerPage() {
                 >
                   <Save size={14} />
                   <span>Save Screen</span>
+                </button>
+
+                {/* NEW: Scatter Plot Button */}
+                <button
+                  onClick={() => { setShowScatterPlot(!showScatterPlot()); if (!showScatterPlot()) loadScatterData(); }}
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-warning-500/50 text-warning-400 hover:text-warning-300 text-sm rounded transition-colors"
+                >
+                  <PieChart size={14} />
+                  <span>Scatter Plot</span>
+                </button>
+
+                {/* NEW: Alert Button */}
+                <button
+                  onClick={() => { setShowAlertsPanel(!showAlertsPanel()); if (!showAlertsPanel()) loadAlerts(); }}
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-danger-500/50 text-danger-400 hover:text-danger-300 text-sm rounded transition-colors"
+                >
+                  <Zap size={14} />
+                  <span>Create Alert</span>
+                </button>
+
+                {/* NEW: Backtest Button */}
+                <button
+                  onClick={() => { setShowBacktestPanel(!showBacktestPanel()); if (!showBacktestPanel()) loadBacktests(); }}
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-terminal-850 hover:bg-terminal-800 border border-success-500/50 text-success-400 hover:text-success-300 text-sm rounded transition-colors"
+                >
+                  <BarChart3 size={14} />
+                  <span>Backtest</span>
                 </button>
 
                 <button
@@ -1134,6 +1513,26 @@ export default function ScreenerPage() {
                   }`}
                 >
                   Performance
+                </button>
+                <button
+                  onClick={() => setActiveTab('profitability')}
+                  class={`py-3 text-xs font-medium border-b-2 transition-colors ${
+                    activeTab() === 'profitability'
+                      ? 'border-accent-500 text-white'
+                      : 'border-transparent text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Profitability
+                </button>
+                <button
+                  onClick={() => { setActiveTab('technical'); loadTechnicalData(); }}
+                  class={`py-3 text-xs font-medium border-b-2 transition-colors ${
+                    activeTab() === 'technical'
+                      ? 'border-accent-500 text-white'
+                      : 'border-transparent text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Technical
                 </button>
               </div>
             </div>
@@ -1225,6 +1624,34 @@ export default function ScreenerPage() {
                             From High
                           </th>
                           <SortHeader column="volume" label="Volume" align="right" />
+                        </Show>
+
+                        <Show when={activeTab() === 'profitability'}>
+                          <SortHeader column="price" label="Price" align="right" />
+                          <SortHeader column="roe" label="ROE %" align="right" />
+                          <SortHeader column="roa" label="ROA %" align="right" />
+                          <SortHeader column="profit_margin" label="Profit Margin" align="right" />
+                          <SortHeader column="operating_margin" label="Op Margin" align="right" />
+                          <SortHeader column="eps" label="EPS" align="right" />
+                        </Show>
+
+                        <Show when={activeTab() === 'technical'}>
+                          <SortHeader column="price" label="Price" align="right" />
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-right sticky top-0 bg-terminal-850 z-10">
+                            RSI (14)
+                          </th>
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-right sticky top-0 bg-terminal-850 z-10">
+                            SMA 20
+                          </th>
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-right sticky top-0 bg-terminal-850 z-10">
+                            SMA 50
+                          </th>
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-center sticky top-0 bg-terminal-850 z-10">
+                            Above SMA20
+                          </th>
+                          <th class="px-3 py-3 text-xs font-semibold text-gray-400 text-center sticky top-0 bg-terminal-850 z-10">
+                            Above SMA50
+                          </th>
                         </Show>
                       </tr>
                     </thead>
@@ -1393,6 +1820,132 @@ export default function ScreenerPage() {
                                 </span>
                               </td>
                             </Show>
+
+                            <Show when={activeTab() === 'profitability'}>
+                              {/* Price */}
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-sm text-white font-mono tabular-nums">
+                                  ${result.price?.toFixed(2) || '0.00'}
+                                </span>
+                              </td>
+                              {/* ROE */}
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.roe && result.roe > 20 ? 'text-success-400' :
+                                  result.roe && result.roe < 10 ? 'text-warning-400' : 'text-gray-400'
+                                }`}>
+                                  {result.roe ? `${result.roe.toFixed(1)}%` : '-'}
+                                </span>
+                              </td>
+                              {/* ROA */}
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.roa && result.roa > 10 ? 'text-success-400' : 'text-gray-400'
+                                }`}>
+                                  {result.roa ? `${result.roa.toFixed(1)}%` : '-'}
+                                </span>
+                              </td>
+                              {/* Profit Margin */}
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.profit_margin && result.profit_margin > 20 ? 'text-success-400' :
+                                  result.profit_margin && result.profit_margin < 5 ? 'text-danger-400' : 'text-gray-400'
+                                }`}>
+                                  {result.profit_margin ? `${result.profit_margin.toFixed(1)}%` : '-'}
+                                </span>
+                              </td>
+                              {/* Operating Margin */}
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.operating_margin && result.operating_margin > 20 ? 'text-success-400' : 'text-gray-400'
+                                }`}>
+                                  {result.operating_margin ? `${result.operating_margin.toFixed(1)}%` : '-'}
+                                </span>
+                              </td>
+                              {/* EPS */}
+                              <td class="px-3 py-3 text-right">
+                                <span class={`text-xs font-mono tabular-nums ${
+                                  result.eps && result.eps > 0 ? 'text-success-400' : 
+                                  result.eps && result.eps < 0 ? 'text-danger-400' : 'text-gray-400'
+                                }`}>
+                                  {result.eps ? `$${result.eps.toFixed(2)}` : '-'}
+                                </span>
+                              </td>
+                            </Show>
+
+                            <Show when={activeTab() === 'technical'}>
+                              {/* Price */}
+                              <td class="px-3 py-3 text-right">
+                                <span class="text-sm text-white font-mono tabular-nums">
+                                  ${result.price?.toFixed(2) || '0.00'}
+                                </span>
+                              </td>
+                              {/* RSI */}
+                              <td class="px-3 py-3 text-right">
+                                {(() => {
+                                  const tech = technicalData()[result.symbol];
+                                  const rsi = tech?.rsi_14;
+                                  return (
+                                    <span class={`text-xs font-mono tabular-nums ${
+                                      rsi && rsi > 70 ? 'text-danger-400' :
+                                      rsi && rsi < 30 ? 'text-success-400' : 'text-gray-400'
+                                    }`}>
+                                      {rsi ? rsi.toFixed(1) : loadingTechnical() ? '...' : '-'}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              {/* SMA 20 */}
+                              <td class="px-3 py-3 text-right">
+                                {(() => {
+                                  const tech = technicalData()[result.symbol];
+                                  return (
+                                    <span class="text-xs font-mono tabular-nums text-gray-400">
+                                      {tech?.sma_20 ? `$${tech.sma_20.toFixed(2)}` : loadingTechnical() ? '...' : '-'}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              {/* SMA 50 */}
+                              <td class="px-3 py-3 text-right">
+                                {(() => {
+                                  const tech = technicalData()[result.symbol];
+                                  return (
+                                    <span class="text-xs font-mono tabular-nums text-gray-400">
+                                      {tech?.sma_50 ? `$${tech.sma_50.toFixed(2)}` : loadingTechnical() ? '...' : '-'}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              {/* Above SMA20 */}
+                              <td class="px-3 py-3 text-center">
+                                {(() => {
+                                  const tech = technicalData()[result.symbol];
+                                  const above = tech?.current_price && tech?.sma_20 && tech.current_price > tech.sma_20;
+                                  return loadingTechnical() ? (
+                                    <span class="text-xs text-gray-500">...</span>
+                                  ) : tech ? (
+                                    <span class={`text-xs font-bold ${above ? 'text-success-400' : 'text-danger-400'}`}>
+                                      {above ? '✓' : '✗'}
+                                    </span>
+                                  ) : <span class="text-xs text-gray-600">-</span>;
+                                })()}
+                              </td>
+                              {/* Above SMA50 */}
+                              <td class="px-3 py-3 text-center">
+                                {(() => {
+                                  const tech = technicalData()[result.symbol];
+                                  const above = tech?.current_price && tech?.sma_50 && tech.current_price > tech.sma_50;
+                                  return loadingTechnical() ? (
+                                    <span class="text-xs text-gray-500">...</span>
+                                  ) : tech ? (
+                                    <span class={`text-xs font-bold ${above ? 'text-success-400' : 'text-danger-400'}`}>
+                                      {above ? '✓' : '✗'}
+                                    </span>
+                                  ) : <span class="text-xs text-gray-600">-</span>;
+                                })()}
+                              </td>
+                            </Show>
                           </tr>
                         )}
                       </For>
@@ -1515,6 +2068,287 @@ export default function ScreenerPage() {
               >
                 Save Screen
               </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Scatter Plot Modal */}
+      <Show when={showScatterPlot()}>
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowScatterPlot(false)}>
+          <div class="bg-terminal-900 border border-terminal-750 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <PieChart size={20} class="text-warning-400" />
+                Scatter Plot Analysis
+              </h3>
+              <button onClick={() => setShowScatterPlot(false)} class="text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Axis Selection */}
+            <div class="flex gap-4 mb-4">
+              <div class="flex-1">
+                <label class="text-xs text-gray-400 mb-1 block">X-Axis</label>
+                <select
+                  value={scatterXAxis()}
+                  onChange={(e) => { setScatterXAxis(e.target.value); loadScatterData(); }}
+                  class="w-full bg-terminal-850 border border-terminal-750 text-white px-3 py-2 rounded text-sm"
+                >
+                  <option value="pe_ratio">P/E Ratio</option>
+                  <option value="market_cap">Market Cap</option>
+                  <option value="price_to_book">P/B Ratio</option>
+                  <option value="price_to_sales">P/S Ratio</option>
+                  <option value="dividend_yield">Dividend Yield</option>
+                  <option value="roe">ROE %</option>
+                  <option value="roa">ROA %</option>
+                  <option value="profit_margin">Profit Margin</option>
+                  <option value="eps">EPS</option>
+                </select>
+              </div>
+              <div class="flex-1">
+                <label class="text-xs text-gray-400 mb-1 block">Y-Axis</label>
+                <select
+                  value={scatterYAxis()}
+                  onChange={(e) => { setScatterYAxis(e.target.value); loadScatterData(); }}
+                  class="w-full bg-terminal-850 border border-terminal-750 text-white px-3 py-2 rounded text-sm"
+                >
+                  <option value="roe">ROE %</option>
+                  <option value="market_cap">Market Cap</option>
+                  <option value="pe_ratio">P/E Ratio</option>
+                  <option value="profit_margin">Profit Margin</option>
+                  <option value="price_to_book">P/B Ratio</option>
+                  <option value="dividend_yield">Dividend Yield</option>
+                  <option value="eps">EPS</option>
+                  <option value="change_pct">Day Change %</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Scatter Plot Area */}
+            <div class="bg-terminal-850 rounded-lg p-4 min-h-[400px]">
+              <Show when={loadingScatter()}>
+                <div class="flex items-center justify-center h-[400px]">
+                  <RefreshCw size={32} class="text-accent-500 animate-spin" />
+                </div>
+              </Show>
+              <Show when={!loadingScatter() && scatterData().length > 0}>
+                <div class="relative h-[400px]">
+                  {/* Simple scatter visualization - Grid Background */}
+                  <div class="absolute inset-0 grid grid-cols-10 grid-rows-10 opacity-20">
+                    <For each={Array(100).fill(0)}>
+                      {() => <div class="border border-terminal-700" />}
+                    </For>
+                  </div>
+                  
+                  {/* Data Points */}
+                  <For each={scatterData()}>
+                    {(point) => {
+                      // Normalize positions (0-100%)
+                      const allX = scatterData().map(p => p.x).filter((v): v is number => v !== null);
+                      const allY = scatterData().map(p => p.y).filter((v): v is number => v !== null);
+                      const minX = Math.min(...allX);
+                      const maxX = Math.max(...allX);
+                      const minY = Math.min(...allY);
+                      const maxY = Math.max(...allY);
+                      
+                      const x = point.x !== null ? ((point.x - minX) / (maxX - minX || 1)) * 90 + 5 : 50;
+                      const y = point.y !== null ? 95 - ((point.y - minY) / (maxY - minY || 1)) * 90 : 50;
+                      
+                      return (
+                        <div
+                          class="absolute w-3 h-3 rounded-full bg-accent-500 hover:bg-accent-400 cursor-pointer transform -translate-x-1/2 -translate-y-1/2 transition-all hover:scale-150 z-10"
+                          style={{ left: `${x}%`, top: `${y}%` }}
+                          title={`${point.symbol}: ${scatterXAxis()}=${point.x?.toFixed(2)}, ${scatterYAxis()}=${point.y?.toFixed(2)}`}
+                          onClick={() => navigate(`/charts?symbol=${point.symbol}`)}
+                        >
+                          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 hover:opacity-100 bg-terminal-900 px-2 py-1 rounded text-xs whitespace-nowrap">
+                            {point.symbol}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  </For>
+                  
+                  {/* Axis Labels */}
+                  <div class="absolute bottom-0 left-1/2 -translate-x-1/2 text-xs text-gray-400">
+                    {scatterXAxis().replace(/_/g, ' ').toUpperCase()}
+                  </div>
+                  <div class="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 text-xs text-gray-400">
+                    {scatterYAxis().replace(/_/g, ' ').toUpperCase()}
+                  </div>
+                </div>
+                <div class="mt-2 text-xs text-gray-500 text-center">
+                  {scatterData().length} data points • Click on a point to view chart
+                </div>
+              </Show>
+              <Show when={!loadingScatter() && scatterData().length === 0}>
+                <div class="flex items-center justify-center h-[400px] text-gray-500">
+                  No data available for selected axes
+                </div>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Alerts Panel */}
+      <Show when={showAlertsPanel()}>
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowAlertsPanel(false)}>
+          <div class="bg-terminal-900 border border-terminal-750 rounded-lg p-6 w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <Zap size={20} class="text-danger-400" />
+                Screener Alerts
+              </h3>
+              <button onClick={() => setShowAlertsPanel(false)} class="text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Create New Alert */}
+            <div class="bg-terminal-850 rounded-lg p-4 mb-4">
+              <h4 class="text-sm font-medium text-white mb-3">Create Alert from Current Filters</h4>
+              <input
+                type="text"
+                value={newAlertName()}
+                onInput={(e) => setNewAlertName(e.target.value)}
+                placeholder="Alert name..."
+                class="w-full bg-terminal-900 border border-terminal-750 text-white px-3 py-2 rounded text-sm mb-3"
+              />
+              <button
+                onClick={createAlert}
+                disabled={!newAlertName().trim()}
+                class="w-full px-4 py-2 bg-danger-600 hover:bg-danger-700 disabled:opacity-50 text-white font-medium rounded transition-colors text-sm"
+              >
+                Create Alert
+              </button>
+              <p class="text-xs text-gray-500 mt-2">
+                You'll receive notifications when stocks match your current filter criteria.
+              </p>
+            </div>
+
+            {/* Existing Alerts */}
+            <div class="space-y-2 max-h-[300px] overflow-auto">
+              <h4 class="text-sm font-medium text-gray-400 mb-2">Your Alerts</h4>
+              <Show when={alerts().length === 0}>
+                <p class="text-xs text-gray-500 text-center py-4">No alerts created yet</p>
+              </Show>
+              <For each={alerts()}>
+                {(alert) => (
+                  <div class="bg-terminal-850 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <div class="text-sm font-medium text-white">{alert.name}</div>
+                      <div class="text-xs text-gray-500">
+                        {alert.matched_symbols?.length || 0} matches • Created {new Date(alert.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => deleteAlert(alert.id)}
+                      class="text-gray-500 hover:text-danger-400 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* Backtest Panel */}
+      <Show when={showBacktestPanel()}>
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowBacktestPanel(false)}>
+          <div class="bg-terminal-900 border border-terminal-750 rounded-lg p-6 w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <BarChart3 size={20} class="text-success-400" />
+                Backtest Screener
+              </h3>
+              <button onClick={() => setShowBacktestPanel(false)} class="text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Create New Backtest */}
+            <div class="bg-terminal-850 rounded-lg p-4 mb-4">
+              <h4 class="text-sm font-medium text-white mb-3">Run Backtest with Current Filters</h4>
+              <input
+                type="text"
+                value={newBacktestName()}
+                onInput={(e) => setNewBacktestName(e.target.value)}
+                placeholder="Backtest name..."
+                class="w-full bg-terminal-900 border border-terminal-750 text-white px-3 py-2 rounded text-sm mb-3"
+              />
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label class="text-xs text-gray-400 mb-1 block">Start Date</label>
+                  <input
+                    type="date"
+                    value={backtestStartDate()}
+                    onInput={(e) => setBacktestStartDate(e.target.value)}
+                    class="w-full bg-terminal-900 border border-terminal-750 text-white px-3 py-2 rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 mb-1 block">End Date</label>
+                  <input
+                    type="date"
+                    value={backtestEndDate()}
+                    onInput={(e) => setBacktestEndDate(e.target.value)}
+                    class="w-full bg-terminal-900 border border-terminal-750 text-white px-3 py-2 rounded text-sm"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={createBacktest}
+                disabled={!newBacktestName().trim() || !backtestStartDate() || !backtestEndDate()}
+                class="w-full px-4 py-2 bg-success-600 hover:bg-success-700 disabled:opacity-50 text-white font-medium rounded transition-colors text-sm"
+              >
+                Run Backtest
+              </button>
+              <p class="text-xs text-gray-500 mt-2">
+                Test how your screening criteria would have performed historically.
+              </p>
+            </div>
+
+            {/* Existing Backtests */}
+            <div class="space-y-2 max-h-[250px] overflow-auto">
+              <h4 class="text-sm font-medium text-gray-400 mb-2">Your Backtests</h4>
+              <Show when={backtests().length === 0}>
+                <p class="text-xs text-gray-500 text-center py-4">No backtests run yet</p>
+              </Show>
+              <For each={backtests()}>
+                {(bt) => (
+                  <div class="bg-terminal-850 rounded-lg p-3">
+                    <div class="flex items-center justify-between">
+                      <div class="text-sm font-medium text-white">{bt.name}</div>
+                      <span class={`text-xs px-2 py-0.5 rounded ${
+                        bt.status === 'completed' ? 'bg-success-900/30 text-success-400' :
+                        bt.status === 'running' ? 'bg-warning-900/30 text-warning-400' :
+                        'bg-danger-900/30 text-danger-400'
+                      }`}>
+                        {bt.status}
+                      </span>
+                    </div>
+                    <Show when={bt.status === 'completed' && bt.total_return !== null}>
+                      <div class="mt-2 flex items-center gap-4 text-xs">
+                        <span class={`font-bold ${bt.total_return! >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
+                          Return: {bt.total_return! >= 0 ? '+' : ''}{bt.total_return?.toFixed(2)}%
+                        </span>
+                        <Show when={bt.max_drawdown !== null}>
+                          <span class="text-danger-400">Max DD: {bt.max_drawdown?.toFixed(2)}%</span>
+                        </Show>
+                      </div>
+                    </Show>
+                    <div class="text-xs text-gray-500 mt-1">
+                      Created {new Date(bt.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                )}
+              </For>
             </div>
           </div>
         </div>

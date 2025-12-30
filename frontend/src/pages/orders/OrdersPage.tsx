@@ -350,13 +350,13 @@ export default function OrdersPage() {
         <span 
           class={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full flex items-center justify-center gap-1 w-24 ${
             order.status === 'filled' ? 'bg-success-500/10 text-success-400 border border-success-500/20' :
-            order.status === 'open' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/20 animate-pulse-slow' :
+            order.status === 'open' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/20' :
             order.status === 'cancelled' ? 'bg-gray-700/30 text-gray-400 border border-gray-600/30' :
             'bg-gray-800 text-gray-400'
           }`}
         >
           <Show when={order.status === 'open'}>
-            <div class="w-1.5 h-1.5 rounded-full bg-accent-400 animate-ping" />
+            <div class="w-1.5 h-1.5 rounded-full bg-accent-400" />
           </Show>
           {order.status.toUpperCase()}
         </span>

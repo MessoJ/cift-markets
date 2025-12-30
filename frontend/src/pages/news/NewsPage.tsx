@@ -274,12 +274,12 @@ export default function NewsPage() {
           </span>
         </div>
         
-        {/* Scrolling ticker */}
+        {/* Scrolling ticker - Optimized to reduce DOM nodes */}
         <div class="flex items-center animate-scroll-left px-16 gap-6">
-          <For each={[...marketTicker(), ...marketTicker(), ...marketTicker()]}>
+          <For each={[...marketTicker(), ...marketTicker()]}>
             {(item) => (
               <div 
-                class="flex items-center gap-2 text-[11px] font-mono cursor-pointer hover:bg-white/5 px-2 py-0.5 rounded transition-colors"
+                class="flex items-center gap-2 text-[11px] font-mono cursor-pointer hover:bg-white/5 px-2 py-0.5 rounded transition-colors shrink-0"
                 onClick={() => navigate(`/symbol/${item.symbol}`)}
               >
                 <span class="font-bold text-white">{item.symbol}</span>
