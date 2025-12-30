@@ -66,7 +66,7 @@ class Settings(BaseSettings):
         default=6379,
         validation_alias=AliasChoices("dragonfly_port", "redis_port", "REDIS_PORT"),
     )
-    dragonfly_password: str | None = Field(
+    dragonfly_password: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices(
             "dragonfly_password",
