@@ -5,7 +5,7 @@ Centralized configuration using Pydantic Settings for type safety and validation
 """
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
