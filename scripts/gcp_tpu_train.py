@@ -40,7 +40,7 @@ N_HEADS = 8                # Attention heads
 N_LAYERS = 4               # Transformer layers
 DROPOUT = 0.1              # Dropout rate
 
-DATA_DIR = "/tmp/data"
+DATA_DIR = "gs://cift-data-united-option-388113/processed"
 CHECKPOINT_DIR = "/tmp/checkpoints"
 
 # =============================================================================
@@ -102,7 +102,18 @@ def get_datasets(val_split=VAL_SPLIT):
     
     # Recursively find all parquet files
     files = []
-    if os.path.exists(DATA_DIR):
+    if DATA_DIR.startswith('gs://'):
+        try:
+            import gcsfs
+            fs = gcsfs.GCSFileSystem()
+            # List all parquet files recursively
+            # glob pattern: bucket/path/**/*.parquet
+            # strip gs:// for gcsfs
+            gcs_path = DATA_DIR.replace('gs://', '')
+            files = ['gs://' + f for f in fs.glob(f"{gcs_path}/**/*.parquet")]
+        except ImportError:
+            print("gcsfs not installed, cannot read from GCS")
+    elif os.path.exists(DATA_DIR):
         for f in Path(DATA_DIR).rglob('*.parquet'):
             files.append(str(f))
     
