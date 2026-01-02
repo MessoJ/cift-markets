@@ -224,21 +224,31 @@ async def lifespan(app: FastAPI):
                 logger.success(f"✅ Pre-fetched bars for {len(popular)} popular symbols")
             
             asyncio.create_task(prefetch_popular_bars())
+        elif settings.finnhub_api_key or settings.alphavantage_api_key:
+            # If Polygon is missing but we have Finnhub or AlphaVantage, 
+            # we rely on those (Finnhub is already started above).
+            # We DO NOT start the simulator in production.
+            logger.info("ℹ️ Using Finnhub/AlphaVantage as primary market data source (Polygon key missing)")
         else:
-            # FALLBACK TO SIMULATOR
-            from cift.core.market_simulator import simulator
+            # FALLBACK TO SIMULATOR (Only if NO real data sources are available)
+            # In production, we might prefer to just log a warning rather than fake data,
+            # but for now we'll keep it as a last resort if absolutely nothing is configured.
+            if settings.app_env == "production":
+                logger.warning("⚠️ NO MARKET DATA KEYS CONFIGURED. System running in degraded mode (no prices).")
+            else:
+                from cift.core.market_simulator import simulator
 
-            async def broadcast_tick(tick_data):
-                """Broadcast simulated tick to WebSocket subscribers."""
-                await publish_price_update(
-                    symbol=tick_data["symbol"],
-                    price=tick_data["price"],
-                    bid=tick_data.get("bid"),
-                    ask=tick_data.get("ask"),
-                )
+                async def broadcast_tick(tick_data):
+                    """Broadcast simulated tick to WebSocket subscribers."""
+                    await publish_price_update(
+                        symbol=tick_data["symbol"],
+                        price=tick_data["price"],
+                        bid=tick_data.get("bid"),
+                        ask=tick_data.get("ask"),
+                    )
 
-            market_data_task = asyncio.create_task(simulator.generate_updates(broadcast_tick))
-            logger.warning("⚠️ Market data SIMULATOR started (no Polygon API key - using fake data)")
+                market_data_task = asyncio.create_task(simulator.generate_updates(broadcast_tick))
+                logger.warning("⚠️ Market data SIMULATOR started (no API keys configured)")
     except Exception as e:
         logger.warning(f"⚠️ Market simulator failed to start: {e}")
 
@@ -508,6 +518,14 @@ try:
     logger.info("ML Inference routes loaded")
 except ImportError as e:
     logger.warning(f"ML Inference routes not available: {e}")
+
+# ML Signal Service routes (Advanced ML-powered trading signals)
+try:
+    from cift.api.routes import ml_signals
+    app.include_router(ml_signals.router, prefix="/api/v1")
+    logger.info("ML Signal Service routes loaded")
+except ImportError as e:
+    logger.warning(f"ML Signal routes not available: {e}")
 
 # TODO: Add remaining routers (Future phases):
 # - Backtests (/api/v1/backtests) - Backtesting engine

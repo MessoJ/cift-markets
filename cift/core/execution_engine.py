@@ -104,12 +104,60 @@ class ExecutionEngine:
         side = order_data["side"]
         order_type = order_data["order_type"]
         quantity = float(order_data["quantity"])
+        strategy_type = order_data.get("strategy")
 
-        logger.info(f"Executing order {order_id}: {side} {quantity} {symbol}")
+        logger.info(f"Executing order {order_id}: {side} {quantity} {symbol} (Strategy: {strategy_type})")
 
         try:
             # Update order status to 'accepted'
             await self._update_order_status(order_id, "accepted")
+
+            # ----------------------------------------------------------------
+            # STRATEGY DELEGATION
+            # ----------------------------------------------------------------
+            if strategy_type and strategy_type != "direct":
+                logger.info(f"Delegating order {order_id} to strategy: {strategy_type}")
+                try:
+                    # Lazy import to avoid circular dependencies
+                    from cift.core.execution_strategies import (
+                        AdaptiveTWAPStrategy,
+                        IcebergStrategy,
+                        ImbalanceStrategy,
+                    )
+                    from cift.core.ml_execution_strategy import MLExecutionStrategy
+
+                    strategy = None
+                    if strategy_type == "iceberg":
+                        strategy = IcebergStrategy(self, order_data)
+                    elif strategy_type == "twap":
+                        strategy = AdaptiveTWAPStrategy(self, order_data)
+                    elif strategy_type == "imbalance":
+                        strategy = ImbalanceStrategy(self, order_data)
+                    elif strategy_type == "ml" or strategy_type == "smart":
+                        # Advanced ML-driven execution
+                        urgency = float(order_data.get("urgency", 0.5))
+                        duration = int(order_data.get("duration_minutes", 15))
+                        strategy = MLExecutionStrategy(
+                            self, order_data,
+                            urgency=urgency,
+                            duration_minutes=duration
+                        )
+                    else:
+                        logger.warning(f"Unknown strategy {strategy_type}, falling back to direct execution")
+
+                    if strategy:
+                        # Run strategy in background task so we don't block the queue processor
+                        asyncio.create_task(strategy.execute())
+                        return
+
+                except Exception as e:
+                    logger.error(f"Strategy execution failed: {e}", exc_info=True)
+                    await self._update_order_status(order_id, "rejected", rejected_reason=f"Strategy error: {str(e)}")
+                    return
+
+            # ----------------------------------------------------------------
+            # DIRECT EXECUTION (Alpaca / Sim)
+            # ----------------------------------------------------------------
 
             # Check if Alpaca is configured for real execution
             from cift.integrations.alpaca import alpaca_client

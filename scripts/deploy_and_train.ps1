@@ -14,7 +14,7 @@ foreach ($ip in $ips) {
 # 2. Install Dependencies on ALL workers (Parallel would be better, but sequential is safer for now)
 # Note: We need to install dependencies. We also ensure we are in the right directory if there's a requirements file, 
 # but here we install specific packages manually as before.
-$install_cmd = "sudo apt-get update && sudo apt-get install -y libopenblas-base && pip install numpy pandas pyarrow gcsfs torch~=2.2.0 torch_xla[tpu]~=2.2.0 -f https://storage.googleapis.com/libtpu-releases/index.html"
+$install_cmd = "sudo apt-get update && sudo apt-get install -y libopenblas-base && sudo python3 -m pip install 'numpy<2' pandas pyarrow gcsfs torch~=2.2.0 torch_xla[tpu]~=2.2.0 -f https://storage.googleapis.com/libtpu-releases/index.html"
 
 foreach ($ip in $ips) {
     Write-Host "Installing dependencies on $ip..."
@@ -29,7 +29,7 @@ foreach ($ip in $ips) {
     $job = Start-Job -ScriptBlock {
         param($ip, $key, $user)
         # Note the path change: scripts/gcp_tpu_train.py -> cift-markets/scripts/gcp_tpu_train.py
-        ssh -i $key -o StrictHostKeyChecking=no $user@$ip "python3 cift-markets/scripts/gcp_tpu_train.py"
+        ssh -i $key -o StrictHostKeyChecking=no $user@$ip "nohup sudo python3 cift-markets/scripts/gcp_tpu_train.py > tpu_train.log 2>&1 &"
     } -ArgumentList $ip, $key, $user
     $jobs += $job
 }

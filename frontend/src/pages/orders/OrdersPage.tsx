@@ -164,7 +164,7 @@ export default function OrdersPage() {
     const interval = setInterval(() => {
       // Background refresh - don't show loading
       fetchOrders(false);
-    }, 30000);
+    }, 3000); // Poll every 3 seconds instead of 30
     onCleanup(() => clearInterval(interval));
   });
 

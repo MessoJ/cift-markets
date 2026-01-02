@@ -125,3 +125,5 @@ temp/
 *.tmp
 *.bak
 *.swp
+
+create_full_admin.py

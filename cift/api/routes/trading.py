@@ -49,6 +49,9 @@ class OrderRequest(BaseModel):
     price: float | None = Field(None, gt=0, description="Limit price (required for limit/stop_limit orders)")
     stop_price: float | None = Field(None, gt=0, description="Stop price (required for stop/stop_limit orders)")
     time_in_force: str = Field("day", description="Time in force (day/gtc/ioc/fok)")
+    strategy: str | None = Field(None, description="Execution strategy (iceberg/twap/imbalance/ml/smart)")
+    urgency: float | None = Field(None, ge=0, le=1, description="Urgency level for ML strategy (0=patient, 1=urgent)")
+    duration_minutes: int | None = Field(None, ge=1, le=480, description="Execution duration in minutes for ML strategy")
 
     @validator("side")
     def validate_side(cls, v):
@@ -67,6 +70,12 @@ class OrderRequest(BaseModel):
         if v.lower() not in ["day", "gtc", "ioc", "fok"]:
             raise ValueError("Invalid time_in_force")
         return v.lower()
+
+    @validator("strategy")
+    def validate_strategy(cls, v):
+        if v and v.lower() not in ["iceberg", "twap", "imbalance", "ml", "smart", "direct"]:
+            raise ValueError("Invalid strategy")
+        return v.lower() if v else None
 
     @validator("price", always=True)
     def validate_limit_price(cls, v, values):

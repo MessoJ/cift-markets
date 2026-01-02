@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 
 # Configuration
 $ResourceGroup = "cift-resources"
-$Location = "switzerlandnorth" # Allowed region for your subscription
+$Location = "spaincentral" # Changed to spaincentral as per user request
 $VmName = "cift-production"
 $Image = "Ubuntu2204"
 $Size = "Standard_B2s_v2" # 2 vCPUs, 8 GiB RAM - available in Switzerland North
@@ -39,6 +39,7 @@ $VmJson = az vm create `
     --image $Image `
     --size $Size `
     --admin-username $AdminUser `
+    --os-disk-size-gb 512 `
     --generate-ssh-keys `
     --public-ip-sku Standard `
     --output json | ConvertFrom-Json

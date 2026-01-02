@@ -95,6 +95,22 @@ class TaskScheduler:
             description="Monitor and process price alerts"
         )
 
+        # ML Signal Service - Generate trading signals (every 5 minutes)
+        self.register_task(
+            name="ml_signal_generation",
+            func=self.generate_ml_signals,
+            interval_seconds=300,
+            description="Generate ML-powered trading signals and alerts"
+        )
+
+        # Paper Trading Loop - Continuous predictions (every 5 minutes)
+        self.register_task(
+            name="paper_trading_loop",
+            func=self.run_paper_trading_loop,
+            interval_seconds=300,
+            description="Run paper trading predictions and track performance"
+        )
+
     async def sync_alpaca_data(self):
         """Sync data with Alpaca"""
         try:
@@ -102,6 +118,70 @@ class TaskScheduler:
             await alpaca_sync_service.sync_all_accounts()
         except Exception as e:
             logger.error(f"Alpaca sync failed: {e}")
+
+    async def generate_ml_signals(self):
+        """Generate ML-powered trading signals for watched symbols."""
+        try:
+            from cift.services.ml_signal_service import MLSignalService
+            
+            ml_service = MLSignalService()
+            
+            # Get top traded symbols from watchlists (crypto focus)
+            default_symbols = [
+                "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
+                "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT"
+            ]
+            
+            for symbol in default_symbols:
+                try:
+                    signal = await ml_service.generate_signal(symbol, user_id="system")
+                    if signal and signal.confidence >= 0.70:
+                        logger.info(f"🧠 ML Signal: {symbol} -> {signal.signal.value} ({signal.confidence:.0%})")
+                except Exception as e:
+                    logger.warning(f"ML signal generation failed for {symbol}: {e}")
+                    
+            logger.debug(f"ML signal generation completed for {len(default_symbols)} symbols")
+        except Exception as e:
+            logger.error(f"ML signal generation task failed: {e}")
+
+    async def run_paper_trading_loop(self):
+        """Run paper trading predictions and track performance."""
+        try:
+            from cift.services.ml_signal_service import MLSignalService
+            
+            ml_service = MLSignalService()
+            
+            # Track paper trades for crypto pairs
+            paper_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+            
+            for symbol in paper_symbols:
+                try:
+                    signal = await ml_service.generate_signal(symbol, user_id="paper_trader")
+                    
+                    if signal and signal.signal.value in ["strong_buy", "strong_sell"]:
+                        # Execute paper trade
+                        trade = await ml_service.execute_paper_trade(
+                            symbol=symbol,
+                            signal=signal,
+                            position_size=1000.0  # $1000 paper position
+                        )
+                        if trade:
+                            logger.info(f"📝 Paper Trade: {trade.side.upper()} {symbol} @ ${trade.entry_price:.2f}")
+                except Exception as e:
+                    logger.warning(f"Paper trading failed for {symbol}: {e}")
+            
+            # Calculate and log current Sharpe ratio
+            try:
+                stats = await ml_service.get_paper_trading_stats()
+                if stats and stats.get("total_trades", 0) > 0:
+                    sharpe = stats.get("sharpe_ratio", 0)
+                    win_rate = stats.get("win_rate", 0)
+                    logger.info(f"📊 Paper Trading: {stats['total_trades']} trades, {win_rate:.1%} win rate, Sharpe: {sharpe:.2f}")
+            except Exception as e:
+                logger.debug(f"Paper trading stats unavailable: {e}")
+                
+        except Exception as e:
+            logger.error(f"Paper trading loop failed: {e}")
 
     async def process_kyc_verifications(self):
         """Process pending KYC verifications."""

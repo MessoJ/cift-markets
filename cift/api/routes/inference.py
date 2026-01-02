@@ -428,10 +428,134 @@ async def stop_pipeline(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# ============================================================================
+# ORDER FLOW TRANSFORMER ENDPOINT
+# ============================================================================
+
+# Import order flow predictor
+try:
+    from cift.ml.order_flow_predictor import OrderFlowPredictor
+    _order_flow_predictor: OrderFlowPredictor | None = None
+except ImportError:
+    _order_flow_predictor = None
+    logger.warning("OrderFlowPredictor not available")
+
+
+class OrderFlowRequest(BaseModel):
+    """Request for order flow prediction."""
+    prices: list[float] = Field(..., description="Array of at least 84 close prices")
+    volumes: list[float] = Field(..., description="Array of at least 84 volumes")
+    timestamp: float = Field(0.0, description="Current timestamp")
+
+
+class OrderFlowResponse(BaseModel):
+    """Response from order flow transformer."""
+    timestamp: float
+    direction: str  # "up", "down", "neutral"
+    direction_probs: dict[str, float]
+    confidence: float
+    signal_strength: float
+    model_loaded: bool
+
+
+def get_order_flow_predictor() -> OrderFlowPredictor | None:
+    """Get or initialize order flow predictor."""
+    global _order_flow_predictor
+    
+    if _order_flow_predictor is None:
+        import os
+        model_path = os.environ.get(
+            "ORDER_FLOW_MODEL_PATH",
+            "models/transformer_v8_best.pt"
+        )
+        if os.path.exists(model_path):
+            _order_flow_predictor = OrderFlowPredictor(model_path=model_path)
+            logger.info(f"Loaded order flow model from {model_path}")
+        else:
+            logger.warning(f"Order flow model not found at {model_path}")
+    
+    return _order_flow_predictor
+
+
+@router.post("/orderflow/predict", response_model=OrderFlowResponse)
+async def predict_orderflow(request: OrderFlowRequest):
+    """
+    Make a prediction using the Order Flow Transformer.
+    
+    Requires at least 84 price and volume data points.
+    Returns direction prediction with confidence.
+    """
+    import numpy as np
+    
+    predictor = get_order_flow_predictor()
+    
+    if predictor is None or predictor.model is None:
+        return OrderFlowResponse(
+            timestamp=request.timestamp,
+            direction="neutral",
+            direction_probs={"down": 0.33, "neutral": 0.34, "up": 0.33},
+            confidence=0.34,
+            signal_strength=0.0,
+            model_loaded=False,
+        )
+    
+    try:
+        prices = np.array(request.prices)
+        volumes = np.array(request.volumes)
+        
+        if len(prices) < 84 or len(volumes) < 84:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Need at least 84 data points, got prices={len(prices)}, volumes={len(volumes)}"
+            )
+        
+        prediction = predictor.predict_from_ohlcv(prices, volumes, request.timestamp)
+        
+        return OrderFlowResponse(
+            timestamp=prediction.timestamp,
+            direction=prediction.direction,
+            direction_probs=prediction.direction_probs,
+            confidence=prediction.confidence,
+            signal_strength=prediction.signal_strength,
+            model_loaded=True,
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"Order flow prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/orderflow/status")
+async def orderflow_status():
+    """Get status of the order flow transformer model."""
+    predictor = get_order_flow_predictor()
+    
+    if predictor is None or predictor.model is None:
+        return {
+            "status": "not_loaded",
+            "model_path": None,
+            "parameters": 0,
+            "device": None,
+        }
+    
+    return {
+        "status": "loaded",
+        "model_path": "models/transformer_v8_best.pt",
+        "parameters": sum(p.numel() for p in predictor.model.parameters()),
+        "device": str(predictor.device),
+        "seq_len": predictor.model.seq_len,
+        "n_features": predictor.model.n_features,
+    }
+
+
 __all__ = [
     "router",
     "PredictionRequest",
     "PredictionResponse",
     "SystemStatus",
     "ModelStatus",
+    "OrderFlowRequest",
+    "OrderFlowResponse",
 ]

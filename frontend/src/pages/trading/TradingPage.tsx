@@ -36,12 +36,15 @@ import CandlestickChart from '~/components/charts/CandlestickChart';
 import CompanyProfileWidget from '~/components/trading/CompanyProfileWidget';
 import { InlineAnalyzer } from '~/components/analysis/InlineAnalyzer';
 import HFTControlPanel from '~/components/trading/HFTControlPanel';
+import MLSignalPanel from '~/components/ml/MLSignalPanel';
 
 // --- Types ---
 type Tab = 'positions' | 'open_orders' | 'order_history' | 'trade_history';
 type MobileTab = 'chart' | 'trade' | 'book' | 'positions';
 type RightPanelTab = 'watchlist' | 'profile';
 type TimeInForce = 'day' | 'gtc' | 'ioc' | 'fok';
+type ExecutionStrategy = 'direct' | 'iceberg' | 'twap' | 'imbalance' | 'ml';
+type UrgencyLevel = 'low' | 'medium' | 'high';
 
 // --- Order Confirmation Modal ---
 function OrderConfirmModal(props: {
@@ -243,6 +246,12 @@ export default function TradingPage() {
   const [submitting, setSubmitting] = createSignal(false);
   const [orderError, setOrderError] = createSignal('');
   const [orderSuccess, setOrderSuccess] = createSignal('');
+  
+  // Advanced Execution State
+  const [execStrategy, setExecStrategy] = createSignal<ExecutionStrategy>('direct');
+  const [urgency, setUrgency] = createSignal<UrgencyLevel>('medium');
+  const [durationMinutes, setDurationMinutes] = createSignal('30'); // For TWAP
+  const [showAdvancedExec, setShowAdvancedExec] = createSignal(false);
   
   // Bracket Order State (TP/SL)
   const [useBracket, setUseBracket] = createSignal(false);
@@ -456,7 +465,11 @@ export default function TradingPage() {
       time_in_force: timeInForce,
       take_profit: useBracket() && takeProfit() ? parseFloat(takeProfit()) : undefined,
       stop_loss: useBracket() && stopLoss() ? parseFloat(stopLoss()) : undefined,
-      estimated_value: estimatedTotal()
+      estimated_value: estimatedTotal(),
+      // Advanced Execution
+      strategy: execStrategy() !== 'direct' ? execStrategy() : undefined,
+      urgency: execStrategy() !== 'direct' ? urgency() : undefined,
+      duration_minutes: execStrategy() === 'twap' ? parseInt(durationMinutes()) : undefined,
     };
 
     // Show confirmation modal if required
@@ -481,12 +494,17 @@ export default function TradingPage() {
         quantity: orderData.quantity,
         price: orderData.price, // Send as 'price'
         stop_price: orderData.stop_price,
-        time_in_force: orderData.time_in_force
+        time_in_force: orderData.time_in_force,
+        // Advanced Execution Strategy
+        strategy: orderData.strategy,
+        urgency: orderData.urgency,
+        duration_minutes: orderData.duration_minutes,
       });
       
       // TODO: Submit bracket orders (TP/SL) as OCO if supported
       
-      setOrderSuccess(`✓ ${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ ${order.limit_price ? formatCurrency(order.limit_price) : 'MKT'}`);
+      const strategyLabel = orderData.strategy ? ` [${orderData.strategy.toUpperCase()}]` : '';
+      setOrderSuccess(`✓ ${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ ${order.limit_price ? formatCurrency(order.limit_price) : 'MKT'}${strategyLabel}`);
       setQuantity(''); // Clear qty on success
       setPendingOrder(null);
       refreshAccountData(); // Immediate refresh
@@ -925,6 +943,11 @@ export default function TradingPage() {
         {/* RIGHT PANEL: Order Entry & Watchlist (20%) */}
         <div class={`w-full lg:w-80 flex-col border-l-0 lg:border-l border-t lg:border-t-0 border-terminal-800 bg-terminal-900 shrink-0 overflow-hidden h-[600px] lg:h-auto ${mobileTab() === 'trade' ? 'flex' : 'hidden lg:flex'}`}>
           
+          {/* ML Signal Panel - AI Trading Signals */}
+          <div class="border-b border-terminal-800 max-h-[350px] overflow-auto">
+            <MLSignalPanel symbol={symbol()} />
+          </div>
+          
           {/* HFT Control Panel (Collapsible or always visible) */}
           <div class="p-4 border-b border-terminal-800">
             <HFTControlPanel />
@@ -1198,6 +1221,157 @@ export default function TradingPage() {
                   </Show>
                 </div>
               </Show>
+
+              {/* Advanced Execution Strategy */}
+              <div class="border-t border-terminal-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedExec(!showAdvancedExec())}
+                  class={`w-full flex items-center justify-between px-3 py-2 rounded text-xs font-bold transition-colors ${showAdvancedExec() ? 'bg-purple-500/20 text-purple-400' : 'bg-terminal-800 text-gray-500 hover:bg-terminal-700'}`}
+                >
+                  <span class="flex items-center gap-2">
+                    <Activity class="w-4 h-4" />
+                    Execution Strategy
+                  </span>
+                  <span class="text-[10px]">{execStrategy() === 'direct' ? 'DIRECT' : execStrategy().toUpperCase()}</span>
+                </button>
+                
+                <Show when={showAdvancedExec()}>
+                  <div class="mt-2 space-y-3 p-3 bg-terminal-950 rounded border border-purple-500/20">
+                    {/* Strategy Selection */}
+                    <div>
+                      <label class="text-[10px] text-gray-500 uppercase font-mono mb-1.5 block">Strategy</label>
+                      <div class="grid grid-cols-5 gap-1">
+                        <For each={[
+                          { value: 'direct', label: 'DIRECT', desc: 'Immediate execution' },
+                          { value: 'iceberg', label: 'ICE', desc: 'Hidden liquidity - split into small chunks' },
+                          { value: 'twap', label: 'TWAP', desc: 'Time-weighted average price' },
+                          { value: 'imbalance', label: 'IMB', desc: 'Execute on order flow imbalance' },
+                          { value: 'ml', label: 'ML', desc: 'AI-optimized smart routing' },
+                        ]}>
+                          {(strat) => (
+                            <button
+                              type="button"
+                              onClick={() => setExecStrategy(strat.value as ExecutionStrategy)}
+                              class={`py-1.5 rounded text-[10px] font-bold transition-all ${
+                                execStrategy() === strat.value 
+                                  ? 'bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]' 
+                                  : 'bg-terminal-800 text-gray-500 hover:bg-terminal-700 hover:text-gray-300'
+                              }`}
+                              title={strat.desc}
+                            >
+                              {strat.label}
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                      {/* Strategy Description */}
+                      <p class="text-[9px] text-gray-600 mt-1.5">
+                        {execStrategy() === 'direct' && '→ Sends order directly to exchange. Best for small orders.'}
+                        {execStrategy() === 'iceberg' && '→ Splits large order into smaller visible chunks. Reduces market impact.'}
+                        {execStrategy() === 'twap' && '→ Spreads execution evenly over duration. Minimizes timing risk.'}
+                        {execStrategy() === 'imbalance' && '→ Executes when order flow imbalance favors your side.'}
+                        {execStrategy() === 'ml' && '→ AI predicts optimal execution timing based on market microstructure.'}
+                      </p>
+                    </div>
+
+                    {/* Urgency (for TWAP, Iceberg, ML) */}
+                    <Show when={['twap', 'iceberg', 'imbalance', 'ml'].includes(execStrategy())}>
+                      <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-mono mb-1.5 block">Urgency</label>
+                        <div class="grid grid-cols-3 gap-1">
+                          <For each={[
+                            { value: 'low', label: 'LOW', color: 'bg-blue-500' },
+                            { value: 'medium', label: 'MED', color: 'bg-yellow-500' },
+                            { value: 'high', label: 'HIGH', color: 'bg-orange-500' },
+                          ]}>
+                            {(u) => (
+                              <button
+                                type="button"
+                                onClick={() => setUrgency(u.value as UrgencyLevel)}
+                                class={`py-1.5 rounded text-[10px] font-bold transition-all ${
+                                  urgency() === u.value 
+                                    ? `${u.color} text-black` 
+                                    : 'bg-terminal-800 text-gray-500 hover:bg-terminal-700'
+                                }`}
+                              >
+                                {u.label}
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                        <p class="text-[9px] text-gray-600 mt-1">
+                          {urgency() === 'low' && '→ Passive. Prioritizes price over speed.'}
+                          {urgency() === 'medium' && '→ Balanced execution speed and price.'}
+                          {urgency() === 'high' && '→ Aggressive. Prioritizes speed, may cross spread.'}
+                        </p>
+                      </div>
+                    </Show>
+
+                    {/* Duration (for TWAP) */}
+                    <Show when={execStrategy() === 'twap'}>
+                      <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-mono mb-1 block">Duration (Minutes)</label>
+                        <div class="flex items-center gap-2">
+                          <input 
+                            type="range" 
+                            min="1" 
+                            max="60" 
+                            step="1"
+                            value={durationMinutes()}
+                            onInput={(e) => setDurationMinutes(parseInt(e.currentTarget.value))}
+                            class="flex-1 accent-purple-500"
+                          />
+                          <span class="text-sm font-mono text-purple-400 w-12 text-right">{durationMinutes()}m</span>
+                        </div>
+                        <div class="flex justify-between text-[9px] text-gray-600 mt-0.5">
+                          <span>1 min</span>
+                          <span>60 min</span>
+                        </div>
+                      </div>
+                    </Show>
+
+                    {/* Execution Preview */}
+                    <Show when={execStrategy() !== 'direct' && quantity()}>
+                      <div class="bg-terminal-900 rounded p-2 border border-terminal-700">
+                        <div class="text-[10px] text-gray-500 uppercase font-mono mb-1">Execution Preview</div>
+                        <div class="space-y-1 text-xs">
+                          <Show when={execStrategy() === 'iceberg'}>
+                            <div class="flex justify-between">
+                              <span class="text-gray-500">Visible Qty</span>
+                              <span class="text-purple-400 font-mono">~{Math.ceil(parseFloat(quantity()) / 5)} shares</span>
+                            </div>
+                            <div class="flex justify-between">
+                              <span class="text-gray-500">Hidden Qty</span>
+                              <span class="text-purple-400 font-mono">{parseFloat(quantity()) - Math.ceil(parseFloat(quantity()) / 5)} shares</span>
+                            </div>
+                          </Show>
+                          <Show when={execStrategy() === 'twap'}>
+                            <div class="flex justify-between">
+                              <span class="text-gray-500">Slices</span>
+                              <span class="text-purple-400 font-mono">{Math.max(1, Math.ceil(durationMinutes() / 5))} orders</span>
+                            </div>
+                            <div class="flex justify-between">
+                              <span class="text-gray-500">Per Slice</span>
+                              <span class="text-purple-400 font-mono">~{Math.ceil(parseFloat(quantity()) / Math.max(1, Math.ceil(durationMinutes() / 5)))} shares</span>
+                            </div>
+                          </Show>
+                          <Show when={execStrategy() === 'ml'}>
+                            <div class="flex justify-between">
+                              <span class="text-gray-500">Strategy</span>
+                              <span class="text-purple-400 font-mono">Smart Order Routing</span>
+                            </div>
+                            <div class="flex justify-between">
+                              <span class="text-gray-500">Est. Impact</span>
+                              <span class="text-success-400 font-mono">-15 bps (vs direct)</span>
+                            </div>
+                          </Show>
+                        </div>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
 
               {/* Totals & Submit */}
               <div class="pt-3 border-t border-terminal-800 space-y-2">

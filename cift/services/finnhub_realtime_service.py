@@ -176,6 +176,15 @@ class FinnhubRealtimeService:
         if not self._available:
             return None
 
+        # Check cache first (Aggressive caching for Free Tier)
+        cache_key = f"finnhub:quote:{symbol}"
+        cached = await redis_manager.get(cache_key)
+        if cached:
+            try:
+                return json.loads(cached)
+            except Exception:
+                pass
+
         await self.initialize()
 
         url = f"{self.REST_URL}/quote"
@@ -186,7 +195,7 @@ class FinnhubRealtimeService:
                 if response.status == 200:
                     data = await response.json()
                     current_price = data.get("c", 0)
-                    return {
+                    result = {
                         "symbol": symbol,
                         "price": current_price,  # Current price
                         "open": data.get("o", 0),
@@ -199,6 +208,9 @@ class FinnhubRealtimeService:
                         "change_percent": data.get("dp", 0),
                         "timestamp": data.get("t", 0),
                     }
+                    # Cache for 60 seconds to respect rate limits
+                    await redis_manager.set(cache_key, json.dumps(result), expire=60)
+                    return result
                 else:
                     logger.warning(f"Finnhub quote error: {response.status}")
                     return None
@@ -268,6 +280,17 @@ class FinnhubRealtimeService:
         """Get stock candles (Historical Data)."""
         if not self._available:
             return None
+            
+        # Check cache first (Aggressive caching for Free Tier)
+        # Cache key includes resolution and time range (rounded to hour)
+        cache_key = f"finnhub:candles:{symbol}:{resolution}:{from_ts}:{to_ts}"
+        cached = await redis_manager.get(cache_key)
+        if cached:
+            try:
+                return json.loads(cached)
+            except Exception:
+                pass
+                
         await self.initialize()
         url = f"{self.REST_URL}/stock/candle"
         params = {
@@ -280,7 +303,10 @@ class FinnhubRealtimeService:
         try:
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
-                    return await response.json()
+                    data = await response.json()
+                    # Cache for 1 hour
+                    await redis_manager.set(cache_key, json.dumps(data), expire=3600)
+                    return data
                 return None
         except Exception as e:
             logger.error(f"Finnhub candles failed: {e}")

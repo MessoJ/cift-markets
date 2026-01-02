@@ -5,9 +5,16 @@
  * Professional trading essential for price action analysis.
  * 
  * Design System: Bloomberg Terminal / IBKR style
+ * 
+ * Features:
+ * - Real-time depth bars with cumulative visualization
+ * - Order imbalance indicator (bid vs ask pressure)
+ * - Large order highlighting (whale detection)
+ * - Click-to-trade integration
+ * - Animated price updates
  */
 
-import { For, Show } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import { formatCurrency } from '~/lib/utils/format';
 
 export interface OrderBookLevel {
@@ -31,6 +38,9 @@ interface OrderBookProps {
   maxLevels?: number;
   showDepthBars?: boolean;
   showOrders?: boolean;
+  showImbalance?: boolean;
+  highlightLargeOrders?: boolean;
+  largeOrderThreshold?: number; // In shares - orders above this highlighted
   precision?: number;
   sizePrecision?: number;
   onPriceClick?: (price: number, side: 'bid' | 'ask') => void;
@@ -41,6 +51,7 @@ export function OrderBook(props: OrderBookProps) {
   const maxLevels = () => props.maxLevels || 10;
   const precision = () => props.precision || 2;
   const sizePrecision = () => props.sizePrecision || 0;
+  const largeOrderThreshold = () => props.largeOrderThreshold || 10000;
   
   // Calculate max size for depth bars
   const maxBidSize = () => {
@@ -55,11 +66,34 @@ export function OrderBook(props: OrderBookProps) {
   
   const maxSize = () => Math.max(maxBidSize(), maxAskSize());
   
+  // Calculate total cumulative size for each side
+  const totalBidSize = createMemo(() => {
+    return (props.data?.bids || []).slice(0, maxLevels()).reduce((sum, b) => sum + b.size, 0);
+  });
+  
+  const totalAskSize = createMemo(() => {
+    return (props.data?.asks || []).slice(0, maxLevels()).reduce((sum, a) => sum + a.size, 0);
+  });
+  
+  // Order imbalance: positive = more buying pressure, negative = more selling pressure
+  const imbalance = createMemo(() => {
+    const bidTotal = totalBidSize();
+    const askTotal = totalAskSize();
+    const total = bidTotal + askTotal;
+    if (total === 0) return 0;
+    return ((bidTotal - askTotal) / total) * 100; // Returns -100 to +100
+  });
+  
   // Format size with abbreviation
   const formatSize = (size: number) => {
     if (size >= 1000000) return `${(size / 1000000).toFixed(1)}M`;
     if (size >= 1000) return `${(size / 1000).toFixed(1)}K`;
     return size.toFixed(sizePrecision());
+  };
+  
+  // Check if order is large (whale)
+  const isLargeOrder = (size: number) => {
+    return props.highlightLargeOrders !== false && size >= largeOrderThreshold();
   };
 
   return (
@@ -80,8 +114,31 @@ export function OrderBook(props: OrderBookProps) {
         </Show>
       </div>
       
+      {/* Order Imbalance Indicator */}
+      <Show when={props.showImbalance !== false && props.data}>
+        <div class="px-3 py-1.5 border-b border-terminal-750 bg-terminal-900">
+          <div class="flex items-center justify-between text-[10px] font-mono mb-1">
+            <span class="text-success-500">BID {totalBidSize().toLocaleString()}</span>
+            <span class={`font-bold ${imbalance() > 10 ? 'text-success-400' : imbalance() < -10 ? 'text-danger-400' : 'text-gray-400'}`}>
+              {imbalance() > 0 ? '+' : ''}{imbalance().toFixed(1)}%
+            </span>
+            <span class="text-danger-500">ASK {totalAskSize().toLocaleString()}</span>
+          </div>
+          {/* Imbalance bar */}
+          <div class="h-1.5 bg-terminal-800 rounded-full overflow-hidden flex">
+            <div 
+              class="bg-success-500 transition-all duration-300"
+              style={{ width: `${50 + imbalance() / 2}%` }}
+            />
+            <div 
+              class="bg-danger-500 transition-all duration-300 flex-1"
+            />
+          </div>
+        </div>
+      </Show>
+      
       {/* Column Headers */}
-      <div class="grid grid-cols-4 px-3 py-1.5 text-[10px] font-mono text-gray-500 uppercase border-b border-terminal-800">
+      <div class={`grid px-3 py-1.5 text-[10px] font-mono text-gray-500 uppercase border-b border-terminal-800 ${props.showOrders ? 'grid-cols-4' : 'grid-cols-3'}`}>
         <span class="text-left">Price</span>
         <span class="text-right">Size</span>
         <span class="text-right">Total</span>
@@ -95,7 +152,11 @@ export function OrderBook(props: OrderBookProps) {
         <For each={(props.data?.asks || []).slice(0, maxLevels())}>
           {(level) => (
             <div
-              class="relative grid grid-cols-4 px-3 py-1 text-xs font-mono hover:bg-terminal-850 cursor-pointer transition-colors"
+              class={`relative grid px-3 py-1 text-xs font-mono cursor-pointer transition-all group ${
+                isLargeOrder(level.size) 
+                  ? 'bg-danger-900/30 hover:bg-danger-900/50 border-l-2 border-danger-500' 
+                  : 'hover:bg-terminal-850'
+              } ${props.showOrders ? 'grid-cols-4' : 'grid-cols-3'}`}
               onClick={() => props.onPriceClick?.(level.price, 'ask')}
             >
               {/* Depth bar background */}
@@ -106,10 +167,14 @@ export function OrderBook(props: OrderBookProps) {
                 />
               </Show>
               
-              <span class="relative z-10 text-danger-400 tabular-nums">
+              <span class={`relative z-10 tabular-nums transition-colors ${isLargeOrder(level.size) ? 'text-danger-300 font-bold' : 'text-danger-400'}`}>
                 {level.price.toFixed(precision())}
+                {/* Large order indicator */}
+                <Show when={isLargeOrder(level.size)}>
+                  <span class="ml-1 text-[8px] text-danger-300 animate-pulse">●</span>
+                </Show>
               </span>
-              <span class="relative z-10 text-right text-gray-300 tabular-nums">
+              <span class={`relative z-10 text-right tabular-nums ${isLargeOrder(level.size) ? 'text-white font-bold' : 'text-gray-300'}`}>
                 {formatSize(level.size)}
               </span>
               <span class="relative z-10 text-right text-gray-500 tabular-nums">
@@ -120,6 +185,13 @@ export function OrderBook(props: OrderBookProps) {
                   {level.orders || 1}
                 </span>
               </Show>
+              
+              {/* Hover tooltip */}
+              <div class="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity">
+                <div class="bg-terminal-950 border border-terminal-600 rounded px-2 py-1 text-[10px] font-mono whitespace-nowrap shadow-xl">
+                  <span class="text-danger-400">Click to SELL @ {formatCurrency(level.price)}</span>
+                </div>
+              </div>
             </div>
           )}
         </For>
@@ -145,7 +217,11 @@ export function OrderBook(props: OrderBookProps) {
         <For each={(props.data?.bids || []).slice(0, maxLevels())}>
           {(level) => (
             <div
-              class="relative grid grid-cols-4 px-3 py-1 text-xs font-mono hover:bg-terminal-850 cursor-pointer transition-colors"
+              class={`relative grid px-3 py-1 text-xs font-mono cursor-pointer transition-all group ${
+                isLargeOrder(level.size) 
+                  ? 'bg-success-900/30 hover:bg-success-900/50 border-l-2 border-success-500' 
+                  : 'hover:bg-terminal-850'
+              } ${props.showOrders ? 'grid-cols-4' : 'grid-cols-3'}`}
               onClick={() => props.onPriceClick?.(level.price, 'bid')}
             >
               {/* Depth bar background */}
@@ -156,10 +232,14 @@ export function OrderBook(props: OrderBookProps) {
                 />
               </Show>
               
-              <span class="relative z-10 text-success-400 tabular-nums">
+              <span class={`relative z-10 tabular-nums transition-colors ${isLargeOrder(level.size) ? 'text-success-300 font-bold' : 'text-success-400'}`}>
                 {level.price.toFixed(precision())}
+                {/* Large order indicator */}
+                <Show when={isLargeOrder(level.size)}>
+                  <span class="ml-1 text-[8px] text-success-300 animate-pulse">●</span>
+                </Show>
               </span>
-              <span class="relative z-10 text-right text-gray-300 tabular-nums">
+              <span class={`relative z-10 text-right tabular-nums ${isLargeOrder(level.size) ? 'text-white font-bold' : 'text-gray-300'}`}>
                 {formatSize(level.size)}
               </span>
               <span class="relative z-10 text-right text-gray-500 tabular-nums">
@@ -170,6 +250,13 @@ export function OrderBook(props: OrderBookProps) {
                   {level.orders || 1}
                 </span>
               </Show>
+              
+              {/* Hover tooltip */}
+              <div class="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity">
+                <div class="bg-terminal-950 border border-terminal-600 rounded px-2 py-1 text-[10px] font-mono whitespace-nowrap shadow-xl">
+                  <span class="text-success-400">Click to BUY @ {formatCurrency(level.price)}</span>
+                </div>
+              </div>
             </div>
           )}
         </For>

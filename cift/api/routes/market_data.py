@@ -587,16 +587,25 @@ async def get_time_and_sales(
         logger.debug(f"Error fetching bars/quote for simulated data: {e}")
 
     if not bars and not quote:
-        raise HTTPException(status_code=404, detail=f"No data for {symbol}")
+        # In production, we prefer 404 over fake data if no real data is available
+        raise HTTPException(status_code=404, detail=f"No real-time data available for {symbol}")
 
-    current_price = float(quote["price"]) if quote else float(bars[0]["close"]) if bars else 100.0
+    current_price = float(quote["price"]) if quote else float(bars[0]["close"]) if bars else 0.0
 
-    # Generate realistic time & sales
-    import random
-    from datetime import timedelta
+    # If we have price but no trades, return empty list instead of generating fake ones
+    return {
+        "symbol": symbol,
+        "trades": [],
+        "count": 0,
+        "last_price": current_price,
+        "_source": "snapshot_only",
+        "_simulated": False,
+    }
 
-    trades = []
-    base_time = datetime.utcnow()
+    # REMOVED: Simulation logic
+    # import random
+    # from datetime import timedelta
+    # ...
 
     for i in range(limit):
         # Time decreases as we go back
